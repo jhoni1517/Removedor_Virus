@@ -1,0 +1,21 @@
+# Apps legítimos que usam acessibilidade, ficam sem ícone etc.
+# Só valem se instalados por uma loja oficial (evita app falso com o mesmo nome).
+# Adicione os seus em ~/.celscan/permitidos.txt
+com.x8bit.bitwarden
+com.lastpass.lpandroid
+com.agilebits.onepassword
+com.dashlane
+keepass2android.keepass2android
+com.kunzisoft.keepass.free
+com.nordpass.android.app
+net.dinglisch.android.taskerm
+com.llamalab.automate
+com.arlosoft.macrodroid
+com.touchtype.swiftkey
+com.teslacoilsw.launcher
+com.microsoft.launcher
+com.google.android.apps.accessibility.voiceaccess
+com.google.android.marvin.talkback
+com.google.android.apps.authenticator2
+com.microsoft.appmanager
+com.samsung.android.app.routines

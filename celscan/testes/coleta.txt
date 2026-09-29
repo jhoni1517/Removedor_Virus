@@ -1,0 +1,81 @@
+@@SEC props
+[ro.product.manufacturer]: [motorola]
+[ro.product.model]: [moto g54 5G]
+[ro.build.version.release]: [14]
+[ro.build.version.sdk]: [34]
+[ro.build.version.security_patch]: [2024-03-01]
+[ro.boot.verifiedbootstate]: [green]
+@@SEC pkgs
+package:/data/app/~~X==/com.whatsapp-Y==/base.apk=com.whatsapp  installer=com.android.vending
+package:/data/app/~~X==/com.systemservice-Y==/base.apk=com.systemservice  installer=com.google.android.packageinstaller
+package:/data/app/~~X==/com.x8bit.bitwarden-Y==/base.apk=com.x8bit.bitwarden  installer=com.android.vending
+package:/data/app/~~X==/com.exemplo.jogo-Y==/base.apk=com.exemplo.jogo  installer=com.google.android.feedback
+@@SEC desativados
+@@SEC acess
+com.systemservice/com.systemservice.Acc:com.x8bit.bitwarden/com.x8bit.bitwarden.Acc
+@@SEC notif
+com.systemservice/com.systemservice.Notif
+@@SEC sms
+com.google.android.apps.messaging
+@@SEC proxy
+null
+@@SEC owners
+no owners
+@@SEC admins
+Current Device Policy Manager state:
+  Enabled Device Admins (User 0, provisioningState: 0):
+    com.systemservice/com.systemservice.AdminRcv:
+      uid=10250
+      testOnly=false
+
+@@SEC launcher
+3 activities found:
+  Activity #0:
+    priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true
+    com.whatsapp/.Main
+  Activity #1:
+    com.x8bit.bitwarden/.MainActivity
+  Activity #2:
+    com.exemplo.jogo/.Main
+@@SEC idle
+system-excidle,com.android.phone,1001
+user,com.systemservice,10250
+@@SEC su
+@@SEC pkgdump
+Packages:
+  Package [com.whatsapp] (a1):
+    versionName=2.24.1
+    firstInstallTime=2023-01-01 10:00:00
+    install permissions:
+      android.permission.INTERNET: granted=true
+    User 0: ceDataInode=1 installed=true
+      runtime permissions:
+        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET ]
+        android.permission.CAMERA: granted=true, flags=[ USER_SET ]
+        android.permission.READ_CONTACTS: granted=true
+  Package [com.systemservice] (b2):
+    versionName=1.0
+    firstInstallTime=2026-09-27 10:00:00
+    User 0: ceDataInode=2 installed=true
+      runtime permissions:
+        android.permission.READ_SMS: granted=true
+        android.permission.RECEIVE_SMS: granted=true
+        android.permission.RECORD_AUDIO: granted=true
+        android.permission.ACCESS_BACKGROUND_LOCATION: granted=true
+  Package [com.x8bit.bitwarden] (c3):
+    versionName=2024.1
+    firstInstallTime=2024-01-01 10:00:00
+  Package [com.exemplo.jogo] (d4):
+    versionName=3.0
+    firstInstallTime=2020-01-01 10:00:00
+@@SEC appops
+@@PKG com.whatsapp
+No operations.
+@@PKG com.systemservice
+SYSTEM_ALERT_WINDOW: allow; time=+1d
+REQUEST_INSTALL_PACKAGES: allow
+@@PKG com.x8bit.bitwarden
+SYSTEM_ALERT_WINDOW: allow
+@@PKG com.exemplo.jogo
+No operations.
+@@SEC fim

@@ -1,0 +1,29 @@
+@@SEC bateria
+Current Battery Service state:
+  AC powered: false
+  USB powered: true
+  status: 2
+  health: 2
+  present: true
+  level: 78
+  voltage: 4102
+  temperature: 312
+  Charge counter: 3500000
+@@SEC df
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/block/dm-5 115343360 90000000 25343360 78% /data
+@@SEC pastas
+8388608	/sdcard/DCIM
+3145728	/sdcard/Android/media/com.whatsapp/WhatsApp/Media
+524288	/sdcard/Download
+@@SEC anim
+1.0
+1.0
+1.0
+@@SEC mem
+MemTotal:        7864320 kB
+MemFree:          300000 kB
+MemAvailable:    2621440 kB
+@@SEC uptime
+864000.50 1200000.10
+@@SEC fim

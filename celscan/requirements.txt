@@ -1,0 +1,5 @@
+rich>=13.0
+requests>=2.31
+PyYAML>=6.0
+# Apenas para iPhone:
+# mvt>=2.5   (e libimobiledevice: idevice_id, idevicebackup2, idevicediagnostics)
