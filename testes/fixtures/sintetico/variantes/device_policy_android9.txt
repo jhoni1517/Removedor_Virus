@@ -1,0 +1,10 @@
+Current Device Policy Manager state:
+  Device Owner:
+    admin=ComponentInfo{com.empresa.mdm/com.empresa.mdm.AdminReceiver}
+    name=MDM
+  Enabled Device Admins (User 0, provisioningState: 0):
+    com.google.android.gms/com.google.android.gms.mdm.receivers.MdmDeviceAdminReceiver:
+      uid=10036
+      testOnly=false
+      policies:
+        wipe-data

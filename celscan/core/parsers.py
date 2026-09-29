@@ -1,12 +1,30 @@
 """Leitores das saídas do Android (getprop, pm, dumpsys, settings...).
 
-Só transformam texto em dados; não decidem nada sobre risco.
+Só transformam texto em dados; não decidem nada sobre risco. São tolerantes às diferenças
+entre Android 8-15 e entre fabricantes: quando não reconhecem nada, devolvem vazio/None e
+quem chama (core/coleta.py) registra um aviso visível com `indisponivel()`.
 """
 
 from __future__ import annotations
 
 import re
 from datetime import datetime
+
+# Mensagens que indicam que o comando não existe ou foi bloqueado neste aparelho.
+_ERROS = re.compile(
+    r"^\s*(Error:|Exception|java\.lang\.|Unknown command|.*: not found|.*inaccessible or not found|"
+    r"Permission Denial|Security exception|Can't find service|cmd: Can't find|/system/bin/sh: )",
+    re.I | re.M,
+)
+
+
+def indisponivel(txt: str | None) -> bool:
+    """True se a saída está vazia ou é só mensagem de erro."""
+    texto = (txt or "").strip()
+    if not texto:
+        return True
+    linhas = [linha for linha in texto.splitlines() if linha.strip()]
+    return all(_ERROS.match(linha) for linha in linhas)
 
 
 def secoes(texto: str) -> dict[str, str]:
@@ -38,14 +56,27 @@ def props(txt: str) -> dict[str, str]:
 
 
 def pacotes(txt: str) -> dict[str, tuple[str, str | None]]:
-    """`pm list packages -f -i` -> {pacote: (caminho_apk, instalador)}."""
-    rx = re.compile(r"^package:(.+\.apk)=([\w.]+)(?:\s+installer=(\S+))?")
+    """`pm list packages [-f] [-i] [-U]` -> {pacote: (caminho_apk ou "", instalador)}.
+
+    Aceita caminho com '=' (Android 11+: /data/app/~~abc==/pkg-xyz==/base.apk=pkg),
+    linhas sem -f e campos extras como uid:.
+    """
     res: dict[str, tuple[str, str | None]] = {}
     for linha in txt.splitlines():
-        m = rx.match(linha.strip())
+        linha = linha.strip()
+        if not linha.startswith("package:"):
+            continue
+        corpo = linha[len("package:"):]
+        inst = None
+        m = re.search(r"\s+installer=(\S+)", corpo)
         if m:
-            caminho, pkg, inst = m.groups()
-            res[pkg] = (caminho, None if inst in (None, "null") else inst)
+            inst = m.group(1)
+            corpo = corpo[:m.start()] + corpo[m.end():]
+        corpo = re.sub(r"\s+uid:\S+", "", corpo).strip()
+        caminho, _, pkg = corpo.rpartition("=")
+        if not re.fullmatch(r"[\w.]+", pkg):
+            continue
+        res[pkg] = (caminho, None if inst in (None, "null") else inst)
     return res
 
 
@@ -54,16 +85,20 @@ def pkgdump(txt: str) -> dict[str, dict]:
     pkgs: dict[str, dict] = {}
     cur: dict | None = None
     for linha in txt.splitlines():
-        m = re.match(r"^\s{2}Package \[([\w.]+)\] \(", linha)
+        m = re.match(r"^\s{1,4}Package \[([\w.]+)\] \(", linha)
         if m:
+            # A primeira ocorrência vale (a seção "Hidden system packages" repete nomes).
             cur = pkgs.setdefault(m.group(1), {"perms": set(), "versao": None, "instalado": None})
+            continue
+        if re.match(r"^\S", linha):  # nova seção de primeiro nível (ex.: "Hidden system packages:")
+            cur = None
             continue
         if cur is None:
             continue
         s = linha.strip()
-        if s.startswith("versionName="):
+        if s.startswith("versionName=") and not cur["versao"]:
             cur["versao"] = s.split("=", 1)[1]
-        elif s.startswith("firstInstallTime="):
+        elif s.startswith("firstInstallTime=") and not cur["instalado"]:
             cur["instalado"] = data(s.split("=", 1)[1])
         else:
             m = re.match(r"(android\.permission\.[A-Z0-9_]+): granted=true", s)
@@ -105,12 +140,22 @@ def componentes(valor: str | None) -> set[str]:
 
 
 def owners(txt: str) -> set[str]:
-    return set(re.findall(r"admin=([\w.]+)/", txt))
+    """`dpm list-owners` ("admin=pkg/.Classe,DeviceOwner") ou trecho "Device Owner" do device_policy."""
+    res = set(re.findall(r"admin=([\w.]+)/", txt))
+    res |= set(re.findall(r"admin=ComponentInfo\{([\w.]+)/", txt))
+    return res
 
 
 def launcher(txt: str) -> set[str] | None:
-    """Apps com ícone na tela inicial; None se a consulta não funcionou."""
-    return set(re.findall(r"^\s*([\w.]+)/", txt, re.M)) or None
+    """Apps com ícone na tela inicial; None se a consulta não funcionou.
+
+    Aceita --brief ("  pkg/.Classe") e o formato completo ("packageName=pkg").
+    """
+    if indisponivel(txt):
+        return None
+    res = set(re.findall(r"^\s*([\w.]+)/[\w.$]+\s*$", txt, re.M))
+    res |= set(re.findall(r"packageName=([\w.]+)", txt))
+    return res or None
 
 
 def sempre_ativo(txt: str) -> set[str]:
@@ -129,10 +174,26 @@ def appops(txt: str, interesse: set[str]) -> dict[str, set[str]]:
         if linha.startswith("@@PKG "):
             atual = res.setdefault(linha[6:].strip(), set())
         elif atual is not None:
-            m = re.match(r"^\s*(\w+): allow", linha)
+            # "OP: allow; time=..." (8-15), "Uid mode: OP: allow" (alguns Samsung/Xiaomi)
+            m = re.match(r"^\s*(?:Uid mode:\s*)?(\w+):\s*allow\b", linha)
             if m and m.group(1) in interesse:
                 atual.add(m.group(1))
     return res
+
+
+def appops_indisponivel(txt: str) -> bool:
+    """True se nenhum app devolveu saída reconhecível de appops."""
+    corpos: list[str] = []
+    for linha in txt.splitlines():
+        if linha.startswith("@@PKG "):
+            corpos.append("")
+        elif corpos:
+            corpos[-1] += linha + "\n"
+    if not corpos:
+        return True
+    reconhecido = re.compile(r"^\s*((?:Uid mode:\s*)?[A-Z_]+:\s*(allow|ignore|deny|default|foreground|errored)\b"
+                             r"|No operations\.)", re.M)
+    return not any(reconhecido.search(c) for c in corpos)
 
 
 def linhas_nao_vazias(txt: str) -> list[str]:
@@ -141,3 +202,65 @@ def linhas_nao_vazias(txt: str) -> list[str]:
 
 def chave_valor(txt: str) -> dict[str, str]:
     return {k.strip().lower(): v.strip() for k, v in re.findall(r"^\s*([^:\n]+):\s*(.+)$", txt, re.M)}
+
+
+# ---------------------------------------------------------------- diagnóstico (otimização)
+
+SAUDE_BATERIA = {"1": "desconhecida", "2": "boa", "3": "superaquecida", "4": "morta",
+                 "5": "sobretensão", "6": "falha", "7": "fria"}
+
+
+def bateria(txt: str) -> dict[str, str | None] | None:
+    """`dumpsys battery` -> nível, saúde, temperatura, tensão, ciclos (quando o fabricante informa)."""
+    b = chave_valor(txt)
+    if "level" not in b:
+        return None
+    temp, volt = b.get("temperature", ""), b.get("voltage", "")
+    return {
+        "nivel": b.get("level"),
+        "saude": SAUDE_BATERIA.get(b.get("health", ""), b.get("health")),
+        "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdigit() else None,
+        "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdigit() else None,
+        "ciclos": b.get("cycle count") or b.get("battery cycle count") or b.get("mbatterycyclecount"),
+    }
+
+
+def df(txt: str) -> dict[str, float] | None:
+    """`df -k /data` -> total/livre em GB (aceita linha quebrada em duas)."""
+    numeros = re.findall(r"(\d+)\s+(\d+)\s+(\d+)\s+\d+%", txt)
+    if not numeros:
+        return None
+    total, _usado, livre = (int(x) for x in numeros[-1])
+    return {"total_gb": total / 1048576, "livre_gb": livre / 1048576}
+
+
+def livre_kb(txt: str) -> int | None:
+    numeros = re.findall(r"(\d+)\s+(\d+)\s+(\d+)\s+\d+%", txt)
+    return int(numeros[-1][2]) if numeros else None
+
+
+def meminfo(txt: str) -> dict[str, float] | None:
+    m = chave_valor(txt)
+    try:
+        total = int(m["memtotal"].split()[0])
+        disp = int((m.get("memavailable") or m["memfree"]).split()[0])
+    except (KeyError, ValueError, IndexError):
+        return None
+    return {"total_gb": total / 1048576, "disponivel_gb": disp / 1048576}
+
+
+def uptime_dias(txt: str) -> float | None:
+    try:
+        return float(txt.split()[0]) / 86400
+    except (ValueError, IndexError):
+        return None
+
+
+def tamanhos_pastas(txt: str) -> dict[str, int]:
+    """Saída de `du -sk` -> {pasta: kB}."""
+    res = {}
+    for linha in txt.splitlines():
+        m = re.match(r"^(\d+)\s+(.+)$", linha.strip())
+        if m:
+            res[m.group(2)] = int(m.group(1))
+    return res

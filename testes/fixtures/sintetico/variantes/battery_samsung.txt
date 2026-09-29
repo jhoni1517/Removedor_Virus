@@ -1,0 +1,9 @@
+Current Battery Service state:
+  AC powered: false
+  USB powered: true
+  status: 2
+  health: 2
+  level: 64
+  voltage: 3987
+  temperature: 298
+  mBatteryCycleCount: 312

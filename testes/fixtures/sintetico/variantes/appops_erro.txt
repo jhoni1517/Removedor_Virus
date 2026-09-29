@@ -1,0 +1,4 @@
+@@PKG com.a
+Error: Unknown operation string: SYSTEM_ALERT_WINDOW
+@@PKG com.b
+Error: Unknown operation string: SYSTEM_ALERT_WINDOW

@@ -59,7 +59,8 @@ def escolher_aparelho(serial=None):
     try:
         devs = adb.dispositivos()
     except adb.AdbAusente:
-        if not Confirm.ask("[yellow]ADB não encontrado.[/] Baixar o Android Platform Tools oficial agora?", default=True):
+        if not Confirm.ask("[yellow]ADB não encontrado.[/] Baixar o Android Platform Tools oficial agora?",
+                           default=True):
             sys.exit(1)
         with con.status("Baixando platform-tools..."):
             adb.instalar_platform_tools()
@@ -145,7 +146,8 @@ def cmd_android(a):
         alvo = sc.candidatos(todos=a.vt_todos)
         sem_cache = sum(1 for x in alvo if sc.apps[x].sha256 and vt.em_cache(sc.apps[x].sha256) is None)
         if sem_cache:
-            con.print(f"[dim]VirusTotal: {sem_cache} consulta(s) novas (~{sem_cache * 16 // 60 + 1} min no plano grátis).[/]")
+            minutos = sem_cache * 16 // 60 + 1
+            con.print(f"[dim]VirusTotal: {sem_cache} consulta(s) novas (~{minutos} min no plano grátis).[/]")
         with barra() as p, log.etapa("virustotal"):
             t = p.add_task("Consultando VirusTotal", total=len(alvo))
             for pkg in alvo:
@@ -189,7 +191,7 @@ def cmd_android(a):
                 if ok:
                     acoes.append(f"{r['pacote']}: {msg}")
 
-    arq = relatorio.gerar(a.saida, info, n, rot, achados, res, loja=a.loja, acoes=acoes)
+    arq = relatorio.gerar(a.saida, info, n, rot, achados, res, loja=a.loja, acoes=acoes, avisos=sc.avisos)
     con.print(f"Laudo salvo em [bold]{arq}[/] (+ .json)")
     if not a.nao_abrir:
         webbrowser.open(arq.resolve().as_uri())
@@ -205,18 +207,23 @@ def cmd_otimizar(a):
         d = ot.diagnostico(ap)
     b, arm, ram = d["bateria"], d["armazenamento"], d["ram"]
     t = Table.grid(padding=(0, 2))
-    t.add_row("Bateria", f"{b['nivel']}% · saúde {b['saude']} · {b['temperatura'] or '?'}"
-              + (f" · {b['ciclos']} ciclos" if b.get("ciclos") else ""))
+    if b:
+        t.add_row("Bateria", f"{b['nivel']}% · saúde {b['saude']} · {b['temperatura'] or '?'}"
+                  + (f" · {b['ciclos']} ciclos" if b.get("ciclos") else ""))
     if arm:
         pct = arm["livre_gb"] / arm["total_gb"] * 100
-        t.add_row("Armazenamento", f"[{'red' if pct < 10 else 'green'}]{arm['livre_gb']:.1f} GB livres[/] de {arm['total_gb']:.0f} GB")
+        cor_livre = "red" if pct < 10 else "green"
+        t.add_row("Armazenamento", f"[{cor_livre}]{arm['livre_gb']:.1f} GB livres[/] de {arm['total_gb']:.0f} GB")
     if ram:
         t.add_row("RAM", f"{ram['disponivel_gb']:.1f} GB disponíveis de {ram['total_gb']:.1f} GB")
     if d["ligado_dias"] is not None:
-        t.add_row("Ligado há", f"{d['ligado_dias']:.1f} dias" + (" [yellow](reiniciar ajuda)[/]" if d["ligado_dias"] > 7 else ""))
+        dica = " [yellow](reiniciar ajuda)[/]" if d["ligado_dias"] > 7 else ""
+        t.add_row("Ligado há", f"{d['ligado_dias']:.1f} dias{dica}")
     for p in d["pastas"][:5]:
         t.add_row(f"  {p['pasta']}", f"{p['gb']:.1f} GB")
     con.print(Panel(t, title="Diagnóstico", border_style="cyan"))
+    for av in d.get("avisos", []):
+        con.print(f"[yellow]Aviso:[/] {av}")
 
     tudo = a.tudo
     feitos = []

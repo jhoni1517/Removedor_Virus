@@ -1,0 +1,3 @@
+package:com.whatsapp  installer=com.android.vending
+package:com.exemplo.sem.instalador  installer=null
+package:com.exemplo.antigo

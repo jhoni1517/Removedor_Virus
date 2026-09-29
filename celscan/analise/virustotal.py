@@ -31,7 +31,7 @@ class VirusTotal:
         cache = self.em_cache(sha)
         if cache is not None:
             return cache
-        for tentativa in range(3):
+        for _tentativa in range(3):
             espera = self.intervalo - (time.time() - self._ultima)
             if espera > 0:
                 time.sleep(espera)

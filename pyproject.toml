@@ -1,0 +1,23 @@
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["removedor_virus", "tests", "instalador"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B904"]
+
+[tool.ruff.lint.per-file-ignores]
+# CSS do laudo e script shell embutidos: linhas longas de propósito
+"celscan/relatorio/html.py" = ["E501"]
+"celscan/core/coleta.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["celscan", "conftest"]
+
+[tool.pytest.ini_options]
+testpaths = ["testes"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["celscan"]

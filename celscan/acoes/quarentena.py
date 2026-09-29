@@ -24,7 +24,7 @@ def criar(ap, pacote, dados=None, copiar_apk=True):
     pasta.mkdir(parents=True, exist_ok=True)
     arquivos = []
     if copiar_apk:
-        caminhos = [l[8:] for l in ap.sh(f"pm path {pacote}").splitlines() if l.startswith("package:")]
+        caminhos = [linha[8:] for linha in ap.sh(f"pm path {pacote}").splitlines() if linha.startswith("package:")]
         for i, c in enumerate(caminhos):
             destino = pasta / f"{i:02d}_{Path(c).name}.quarentena"
             ap.adb("pull", c, str(destino), timeout=900)

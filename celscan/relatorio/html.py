@@ -38,14 +38,15 @@ def _e(x):
     return html.escape(str(x if x is not None else "—"))
 
 
-def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, acoes=None):
+def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, acoes=None, avisos=None):
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
     agora = datetime.now()
     base = pasta / f"laudo_{info['modelo'].replace(' ', '_')}_{agora:%Y%m%d_%H%M%S}"
     base.with_suffix(".json").write_text(json.dumps(
         {"data": agora.isoformat(timespec="seconds"), "aparelho": info, "nota": nota, "veredito": rotulo,
-         "achados_aparelho": achados, "apps": resultados, "diagnostico": diag, "acoes": acoes},
+         "achados_aparelho": achados, "apps": resultados, "diagnostico": diag, "acoes": acoes,
+         "avisos": avisos or []},
         ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
     cor = VEREDITO[rotulo]
@@ -95,10 +96,13 @@ def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, 
         linhas += [(_e(p["pasta"]), f"{p['gb']:.1f} GB") for p in diag.get("pastas", [])[:5]]
         partes += [f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in linhas]
         partes.append("</table>")
+    if avisos:
+        partes.append("<h2>Verificações não disponíveis neste aparelho</h2><ul>"
+                      + "".join(f"<li>{_e(a)}</li>" for a in avisos) + "</ul>")
     if acoes:
         partes.append("<h2>Ações realizadas</h2><ul>" + "".join(f"<li>{_e(a)}</li>" for a in acoes) + "</ul>")
 
-    partes.append(f"""<div class="rodape">Gerado pelo CelScan. A análise combina indicadores públicos de ameaças
+    partes.append("""<div class="rodape">Gerado pelo CelScan. A análise combina indicadores públicos de ameaças
 (Amnesty/MVT, Echap), VirusTotal e heurística de permissões. Nenhuma ferramenta garante 100% de detecção.</div></div></html>""")
     arq = base.with_suffix(".html")
     arq.write_text("\n".join(partes), encoding="utf-8")

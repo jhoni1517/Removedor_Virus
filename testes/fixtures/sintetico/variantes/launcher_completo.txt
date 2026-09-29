@@ -1,0 +1,9 @@
+2 activities found:
+  Activity #0:
+    ActivityInfo:
+      name=com.whatsapp.Main
+      packageName=com.whatsapp
+  Activity #1:
+    ActivityInfo:
+      name=.MainActivity
+      packageName=com.nu.production

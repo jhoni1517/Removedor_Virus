@@ -1,0 +1,2 @@
+package:/data/app/~~aB1c==/com.nubank-Zx9==/base.apk=com.nu.production uid:10301 installer=com.android.vending
+package:/data/app/~~q==/com.falso.banco-w==/base.apk=com.falso.banco uid:10302 installer=com.google.android.packageinstaller

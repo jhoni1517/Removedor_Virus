@@ -39,6 +39,47 @@ done
 sec fim
 """.replace("OPS", " ".join(APPOPS_COLETADOS))
 
+# Seção do script -> o que o usuário deixa de ver se ela falhar.
+VERIFICACOES = {
+    "props": "informações do aparelho",
+    "launcher": "apps escondidos (sem ícone)",
+    "admins": "administradores do aparelho",
+    "owners": "gerenciamento do aparelho (device owner)",
+    "pkgdump": "permissões e data de instalação dos apps",
+    "idle": "apps liberados da economia de bateria",
+    "acess": "acessibilidade",
+    "notif": "leitores de notificação",
+    "sms": "app de SMS padrão",
+    "proxy": "proxy global",
+}
+
+# Seções em que vazio/"null" significa "nenhum configurado" (não é erro).
+OPCIONAIS = {"acess", "notif", "sms", "proxy"}
+
+
+def avisos_da_coleta(s: dict[str, str], dados: DadosAparelho, dump: dict) -> list[str]:
+    """Lista, em linguagem simples, as verificações que não funcionaram neste aparelho."""
+    falhas: list[str] = []
+    for secao, nome in VERIFICACOES.items():
+        txt = s.get(secao)
+        if txt is None:
+            falhou = True
+        elif secao in OPCIONAIS:
+            valor = txt.strip()
+            falhou = valor not in ("", "null") and parsers.indisponivel(valor)
+        else:
+            falhou = parsers.indisponivel(txt)
+        if secao == "launcher" and dados.icones is None:
+            falhou = True
+        if secao == "pkgdump" and not falhou and not any(dump.get(p) for p in dados.apps):
+            falhou = True
+        if falhou:
+            falhas.append(nome)
+    if parsers.appops_indisponivel(s.get("appops", "")):
+        falhas.append("sobreposição de tela e instalação de apps")
+    return [f"Verificação de {nome} não disponível neste aparelho." for nome in falhas]
+
+
 HASHES = ("pm list packages -f {F} | sed 's/^package://; s/=[^=]*$//' | while read f; do "
           "printf '@@H\\t%s\\t%s\\t%s\\n' \"$(stat -c %s \"$f\" 2>/dev/null)\" "
           "\"$(sha256sum \"$f\" 2>/dev/null | cut -d' ' -f1)\" \"$f\"; done")
@@ -121,10 +162,7 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         sempre_ativo=parsers.sempre_ativo(s.get("idle", "")),
         icones=parsers.launcher(s.get("launcher", "")),
     )
-    if dados.icones is None:
-        dados.avisos.append("Não foi possível listar ícones (Android antigo): critério ignorado.")
-    if not s.get("admins"):
-        dados.avisos.append("Lista de administradores vazia/indisponível.")
+    dados.avisos = avisos_da_coleta(s, dados, dump)
     return dados
 
 

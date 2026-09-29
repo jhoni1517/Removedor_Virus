@@ -7,11 +7,10 @@ import requests
 
 from celscan.acoes import quarentena
 from celscan.config import DIR
+from celscan.core import parsers
 
 UAD = ("https://raw.githubusercontent.com/Universal-Debloater-Alliance/"
        "universal-android-debloater-next-generation/main/resources/assets/uad_lists.json")
-SAUDE = {"1": "desconhecida", "2": "boa", "3": "superaquecida", "4": "morta",
-         "5": "sobretensão", "6": "falha", "7": "fria"}
 PASTAS = {
     "/sdcard/DCIM": "Fotos e vídeos da câmera",
     "/sdcard/Pictures": "Imagens",
@@ -35,53 +34,31 @@ sec fim
 """
 
 
-def _kv(txt):
-    return {k.strip().lower(): v.strip() for k, v in re.findall(r"^\s*([^:\n]+):\s*(.+)$", txt, re.M)}
-
-
 def livre_kb(ap):
-    linhas = ap.sh("df -k /data").splitlines()
-    try:
-        return int(linhas[-1].split()[3])
-    except (IndexError, ValueError):
-        return None
+    return parsers.livre_kb(ap.sh("df -k /data"))
 
 
 def diagnostico(ap):
     script = DIAG.replace("PASTAS", " ".join(f'"{p}"' for p in PASTAS)).replace("ANIM", " ".join(ANIM))
-    s = ap.script(script, timeout=300)
-    b = _kv(s.get("bateria", ""))
-    bateria = {
-        "nivel": b.get("level"), "saude": SAUDE.get(b.get("health", ""), b.get("health")),
-        "temperatura": f"{int(b['temperature']) / 10:.1f} °C" if b.get("temperature", "").isdigit() else None,
-        "tensao": f"{int(b['voltage']) / 1000:.2f} V" if b.get("voltage", "").isdigit() else None,
-        "ciclos": b.get("cycle count") or b.get("battery cycle count"),
-    }
-    armaz = None
-    try:
-        p = s["df"].splitlines()[-1].split()
-        armaz = {"total_gb": int(p[1]) / 1048576, "livre_gb": int(p[3]) / 1048576}
-    except (KeyError, IndexError, ValueError):
-        pass
-    pastas = []
-    for linha in s.get("pastas", "").splitlines():
-        m = re.match(r"^(\d+)\s+(.+)$", linha.strip())
-        if m and int(m.group(1)) > 0:
-            pastas.append({"pasta": PASTAS.get(m.group(2), m.group(2)), "gb": int(m.group(1)) / 1048576})
-    mem = _kv(s.get("mem", ""))
-    ram = None
-    try:
-        ram = {"total_gb": int(mem["memtotal"].split()[0]) / 1048576,
-               "disponivel_gb": int(mem["memavailable"].split()[0]) / 1048576}
-    except (KeyError, ValueError):
-        pass
-    try:
-        dias = float(s.get("uptime", "0").split()[0]) / 86400
-    except (ValueError, IndexError):
-        dias = None
-    anim = [l.strip() for l in s.get("anim", "").splitlines()]
-    return {"bateria": bateria, "armazenamento": armaz, "pastas": sorted(pastas, key=lambda x: -x["gb"]),
-            "ram": ram, "ligado_dias": dias, "animacoes": anim}
+    return montar_diagnostico(ap.script(script, timeout=300))
+
+
+def montar_diagnostico(s):
+    """Seções brutas -> diagnóstico. Itens que não puderam ser lidos viram avisos visíveis."""
+    avisos = []
+    bateria = parsers.bateria(s.get("bateria", ""))
+    armaz = parsers.df(s.get("df", ""))
+    ram = parsers.meminfo(s.get("mem", ""))
+    dias = parsers.uptime_dias(s.get("uptime", ""))
+    for valor, nome in ((bateria, "bateria"), (armaz, "armazenamento"), (ram, "memória RAM"),
+                        (dias, "tempo ligado")):
+        if valor is None:
+            avisos.append(f"Verificação de {nome} não disponível neste aparelho.")
+    pastas = [{"pasta": PASTAS.get(p, p), "gb": kb / 1048576}
+              for p, kb in parsers.tamanhos_pastas(s.get("pastas", "")).items() if kb > 0]
+    anim = [linha.strip() for linha in s.get("anim", "").splitlines()]
+    return {"bateria": bateria or {}, "armazenamento": armaz, "pastas": sorted(pastas, key=lambda x: -x["gb"]),
+            "ram": ram, "ligado_dias": dias, "animacoes": anim, "avisos": avisos}
 
 
 def limpar_cache(ap):

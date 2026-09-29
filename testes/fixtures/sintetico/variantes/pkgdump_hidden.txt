@@ -1,0 +1,13 @@
+Packages:
+  Package [com.exemplo] (abc):
+    versionName=2.0
+    firstInstallTime=2025-01-10 08:00:00
+    User 0: ceDataInode=1 installed=true
+      runtime permissions:
+        android.permission.READ_SMS: granted=true, flags=[ USER_SET ]
+        android.permission.CAMERA: granted=false, flags=[ USER_SET ]
+
+Hidden system packages:
+  Package [com.exemplo] (def):
+    versionName=1.0
+    firstInstallTime=2020-01-01 00:00:00

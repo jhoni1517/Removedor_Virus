@@ -1,0 +1,7 @@
+@@PKG com.samsung.exemplo
+Uid mode: SYSTEM_ALERT_WINDOW: allow
+@@PKG com.xiaomi.exemplo
+SYSTEM_ALERT_WINDOW: allow; time=+2h13m ago; duration=+1s
+REQUEST_INSTALL_PACKAGES: default
+@@PKG com.limpo
+No operations.
