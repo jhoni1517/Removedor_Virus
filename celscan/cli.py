@@ -382,6 +382,20 @@ def cmd_historico(a):
         con.print(t)
 
 
+def cmd_fixtures(a):
+    from celscan.core import fixtures
+
+    ap = escolher_aparelho(a.serial)
+    con.print(Panel("Vou gravar a saída de cada comando adb deste aparelho para os testes do CelScan.\n"
+                    "Serial, IMEI, e-mails, MACs, redes Wi-Fi e IPs são anonimizados.\n"
+                    "[bold]A lista de apps instalados não é anonimizada[/]: revise antes de publicar.",
+                    title="Fixtures reais", border_style="cyan"))
+    with con.status("Gravando...") as st:
+        pasta = fixtures.gravar(ap, Path(a.pasta), progresso=lambda m: st.update(f"Gravando {m}"))
+    con.print(f"[green]✔[/] Gravado em [bold]{pasta}[/]")
+    con.print(f"[dim]Para testar com ele: CELSCAN_FIXTURE={pasta.name} (com o testes/fake_adb.py)[/]")
+
+
 def cmd_bases(a):
     if a.atualizar:
         for b in bases.todas():
@@ -460,6 +474,11 @@ def main():
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
     s.set_defaults(func=cmd_historico)
+
+    s = sub.add_parser("fixtures", help="Grava as saídas reais do aparelho para os testes")
+    s.add_argument("--serial")
+    s.add_argument("--pasta", default="testes/fixtures")
+    s.set_defaults(func=cmd_fixtures)
 
     s = sub.add_parser("bases", help="Situação das bases (indicadores, UAD, certificados)")
     s.add_argument("--atualizar", action="store_true", help="Baixa todas agora")
