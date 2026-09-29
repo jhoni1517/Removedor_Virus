@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""CelScan 2.0 — segurança e otimização de celulares via USB."""
+"""CelScan — linha de comando (segurança e otimização de celulares via USB)."""
 import argparse
 import getpass
 import os
@@ -13,8 +12,8 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from rich.prompt import Confirm, InvalidResponse, Prompt
 from rich.table import Table
 
-import adb
-from config import VERSAO
+from celscan.config import VERSAO
+from celscan.core import adb
 
 con = Console()
 
@@ -90,10 +89,11 @@ def tabela_apps(resultados, todos=False):
 
 # ---------------------------------------------------------------- android
 def cmd_android(a):
-    from android import AndroidScanner, nota
-    import iocs as iocmod
-    import relatorio
-    from virustotal import VirusTotal
+    from celscan import relatorio
+    from celscan.analise import iocs as iocmod
+    from celscan.analise.pontuacao import nota
+    from celscan.analise.virustotal import VirusTotal
+    from celscan.varredura import Varredura
 
     ap = escolher_aparelho(a.serial)
     iocs = None
@@ -105,7 +105,7 @@ def cmd_android(a):
     chave = os.getenv("VT_API_KEY")
     vt = VirusTotal(chave) if chave else None
 
-    sc = AndroidScanner(ap, vt, iocs, sistema=a.sistema)
+    sc = Varredura(ap, vt, iocs, sistema=a.sistema)
     with con.status("Coletando dados do aparelho (uma única leitura)..."):
         sc.coletar()
     info = sc.info()
@@ -127,7 +127,7 @@ def cmd_android(a):
 
     if vt:
         alvo = sc.candidatos(todos=a.vt_todos)
-        sem_cache = sum(1 for x in alvo if sc.apps[x]["sha256"] and vt.em_cache(sc.apps[x]["sha256"]) is None)
+        sem_cache = sum(1 for x in alvo if sc.apps[x].sha256 and vt.em_cache(sc.apps[x].sha256) is None)
         if sem_cache:
             con.print(f"[dim]VirusTotal: {sem_cache} consulta(s) novas (~{sem_cache * 16 // 60 + 1} min no plano grátis).[/]")
         with barra() as p:
@@ -175,7 +175,7 @@ def cmd_android(a):
 
 # ---------------------------------------------------------------- otimizar
 def cmd_otimizar(a):
-    import otimizar as ot
+    from celscan.acoes import otimizacao as ot
 
     ap = escolher_aparelho(a.serial)
     with con.status("Lendo bateria, armazenamento e memória..."):
@@ -238,7 +238,7 @@ def cmd_otimizar(a):
 
 # ---------------------------------------------------------------- quarentena
 def cmd_quarentena(a):
-    import quarentena
+    from celscan.acoes import quarentena
     if a.acao == "listar":
         itens = quarentena.listar()
         if not itens:
@@ -259,7 +259,7 @@ def cmd_quarentena(a):
 
 # ---------------------------------------------------------------- ios
 def cmd_ios(a):
-    import ios
+    from celscan.ios import mvt as ios
     if a.listar_backups:
         bs = ios.pastas_backup()
         if not bs:
@@ -312,7 +312,7 @@ def cmd_parear(a):
 
 
 def cmd_iocs(a):
-    import iocs as iocmod
+    from celscan.analise import iocs as iocmod
     with con.status("Baixando indicadores..."):
         i = iocmod.carregar(forcar=True, avisar=con.print)
     con.print(f"{len(i) if i else 0} indicadores ({len(i.pacotes)} pacotes, {len(i.certs)} certificados, "

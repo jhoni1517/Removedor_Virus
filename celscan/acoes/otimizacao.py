@@ -5,8 +5,8 @@ import time
 
 import requests
 
-import quarentena
-from config import DIR
+from celscan.acoes import quarentena
+from celscan.config import DIR
 
 UAD = ("https://raw.githubusercontent.com/Universal-Debloater-Alliance/"
        "universal-android-debloater-next-generation/main/resources/assets/uad_lists.json")

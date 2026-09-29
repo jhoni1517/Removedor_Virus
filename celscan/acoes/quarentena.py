@@ -5,7 +5,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from config import DIR
+from celscan.config import DIR
 
 DIRQ = DIR / "quarentena"
 

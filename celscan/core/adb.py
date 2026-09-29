@@ -1,4 +1,7 @@
 """Camada de acesso ao ADB: localização, download, execução e coleta em lote."""
+
+from __future__ import annotations
+
 import io
 import os
 import platform
@@ -8,13 +11,20 @@ import stat
 import subprocess
 import tempfile
 import zipfile
+from collections.abc import Iterator
 
-from config import BASE, DIR
+from celscan.config import DIR, recursos
+from celscan.core.parsers import secoes
 
 URL_PT = "https://dl.google.com/android/repository/platform-tools-latest-{}.zip"
 SO = {"Windows": "windows", "Darwin": "darwin", "Linux": "linux"}
 EXE = "adb.exe" if os.name == "nt" else "adb"
-_ADB = None
+# No Windows, não abre uma janela preta de console a cada comando.
+SEM_JANELA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_ADB: str | None = None
+
+__all__ = ["AdbAusente", "AdbErro", "Aparelho", "binario", "conectar", "dispositivos", "instalar_platform_tools",
+           "localizar", "parear", "run", "secoes"]
 
 
 class AdbErro(Exception):
@@ -25,18 +35,19 @@ class AdbAusente(AdbErro):
     pass
 
 
-def localizar():
+def localizar() -> str | None:
     cands = [os.getenv("CELSCAN_ADB"), shutil.which("adb"),
-             BASE / "platform-tools" / EXE, DIR / "platform-tools" / EXE]
+             recursos() / "platform-tools" / EXE, DIR / "platform-tools" / EXE]
     for c in cands:
         if c and os.path.isfile(c):
             return str(c)
     return None
 
 
-def instalar_platform_tools():
+def instalar_platform_tools() -> str:
     """Baixa o Android Platform Tools oficial para ~/.celscan."""
     import requests
+
     url = URL_PT.format(SO.get(platform.system(), "linux"))
     r = requests.get(url, timeout=300)
     r.raise_for_status()
@@ -49,7 +60,7 @@ def instalar_platform_tools():
     return _ADB
 
 
-def binario():
+def binario() -> str:
     global _ADB
     if not _ADB:
         _ADB = localizar()
@@ -58,15 +69,15 @@ def binario():
     return _ADB
 
 
-def run(args, timeout=120, entrada=None):
+def run(args: list[str], timeout: int = 120, entrada: str | None = None) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run([binario(), *args], capture_output=True, encoding="utf-8",
-                              errors="replace", timeout=timeout, input=entrada)
-    except subprocess.TimeoutExpired:
-        raise AdbErro(f"'adb {' '.join(map(str, args[:4]))}' excedeu {timeout}s")
+        return subprocess.run([binario(), *args], capture_output=True, encoding="utf-8", errors="replace",
+                              timeout=timeout, input=entrada, creationflags=SEM_JANELA)
+    except subprocess.TimeoutExpired as e:
+        raise AdbErro(f"'adb {' '.join(map(str, args[:4]))}' excedeu {timeout}s") from e
 
 
-def dispositivos():
+def dispositivos() -> list[tuple[str, str]]:
     run(["start-server"], timeout=30)
     res = []
     for linha in run(["devices"]).stdout.splitlines():
@@ -77,49 +88,34 @@ def dispositivos():
     return res
 
 
-def parear(endereco, codigo):
+def parear(endereco: str, codigo: str) -> str:
     return (run(["pair", endereco, codigo], timeout=60).stdout or "").strip()
 
 
-def conectar(endereco):
+def conectar(endereco: str) -> str:
     return (run(["connect", endereco], timeout=30).stdout or "").strip()
 
 
-def secoes(texto):
-    """Divide a saída de um script em seções marcadas com '@@SEC nome'."""
-    sec, nome, buf = {}, None, []
-    for linha in texto.replace("\r\n", "\n").split("\n"):
-        if linha.startswith("@@SEC "):
-            if nome:
-                sec[nome] = "\n".join(buf).strip()
-            nome, buf = linha[6:].strip(), []
-        else:
-            buf.append(linha)
-    if nome:
-        sec[nome] = "\n".join(buf).strip()
-    return sec
-
-
 class Aparelho:
-    def __init__(self, serial):
+    def __init__(self, serial: str):
         self.serial = serial
 
-    def adb(self, *args, timeout=120, erro=False):
+    def adb(self, *args: str, timeout: int = 120, erro: bool = False) -> str:
         r = run(["-s", self.serial, *args], timeout=timeout)
         return ((r.stdout or "") + ((r.stderr or "") if erro else "")).strip()
 
-    def sh(self, comando, timeout=120, erro=False):
+    def sh(self, comando: str, timeout: int = 120, erro: bool = False) -> str:
         return self.adb("shell", comando, timeout=timeout, erro=erro)
 
-    def bytes(self, comando, timeout=60):
+    def bytes(self, comando: str, timeout: int = 60) -> bytes:
         """Saída binária sem conversão de quebra de linha (exec-out)."""
         try:
             return subprocess.run([binario(), "-s", self.serial, "exec-out", comando],
-                                  capture_output=True, timeout=timeout).stdout
-        except subprocess.TimeoutExpired:
-            raise AdbErro(f"leitura binária excedeu {timeout}s")
+                                  capture_output=True, timeout=timeout, creationflags=SEM_JANELA).stdout
+        except subprocess.TimeoutExpired as e:
+            raise AdbErro(f"leitura binária excedeu {timeout}s") from e
 
-    def script(self, texto, timeout=600):
+    def script(self, texto: str, timeout: int = 600) -> dict[str, str]:
         """Envia um script shell, executa numa única chamada e devolve as seções."""
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False,
                                          encoding="utf-8", newline="\n") as f:
@@ -136,11 +132,12 @@ class Aparelho:
             os.unlink(local)
         return secoes(saida)
 
-    def linhas(self, comando):
+    def linhas(self, comando: str) -> Iterator[str]:
         """Executa e entrega a saída linha a linha (para barra de progresso)."""
         p = subprocess.Popen([binario(), "-s", self.serial, "shell", comando],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                             encoding="utf-8", errors="replace")
+                             encoding="utf-8", errors="replace", creationflags=SEM_JANELA)
+        assert p.stdout is not None
         try:
             for linha in p.stdout:
                 yield linha.rstrip("\r\n")

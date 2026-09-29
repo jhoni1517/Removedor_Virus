@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import yaml
 
-from config import DIR
+from celscan.config import DIR
 
 ECHAP = "https://raw.githubusercontent.com/AssoEchap/stalkerware-indicators/master/ioc.yaml"
 MVT = "https://raw.githubusercontent.com/mvt-project/mvt-indicators/main/indicators.yaml"

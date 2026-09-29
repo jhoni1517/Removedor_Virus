@@ -1,11 +1,26 @@
-"""Configurações e listas fixas do CelScan."""
+"""Configurações, pastas e listas fixas do CelScan."""
+
+from __future__ import annotations
+
 import os
+import sys
 from pathlib import Path
 
-VERSAO = "2.0"
-BASE = Path(__file__).resolve().parent
+from celscan import __version__
+
+VERSAO = __version__
+PACOTE = Path(__file__).resolve().parent
+DADOS = PACOTE / "dados"
 DIR = Path(os.getenv("CELSCAN_HOME") or Path.home() / ".celscan")
 DIR.mkdir(parents=True, exist_ok=True)
+# Modo offline: nunca acessa a internet; usa só as cópias locais das bases.
+OFFLINE = os.getenv("CELSCAN_OFFLINE", "").lower() in ("1", "sim", "true")
+
+
+def recursos() -> Path:
+    """Pasta dos arquivos que vão junto com o programa (ex.: adb embutido no .exe)."""
+    return Path(getattr(sys, "_MEIPASS", PACOTE.parent))
+
 
 LOJAS = {
     "com.android.vending": "Google Play",
@@ -31,10 +46,10 @@ SMS_CONHECIDOS = {
 PASTAS_SISTEMA = ("/system/", "/product/", "/vendor/", "/system_ext/", "/apex/", "/odm/")
 
 
-def permitidos():
-    """Apps confiáveis: permitidos.txt do programa + ~/.celscan/permitidos.txt do usuário."""
-    pacotes = set()
-    for arq in (BASE / "permitidos.txt", DIR / "permitidos.txt"):
+def permitidos() -> set[str]:
+    """Apps confiáveis: dados/permitidos.txt do programa + ~/.celscan/permitidos.txt do usuário."""
+    pacotes: set[str] = set()
+    for arq in (DADOS / "permitidos.txt", DIR / "permitidos.txt"):
         if arq.exists():
             for linha in arq.read_text(encoding="utf-8").splitlines():
                 linha = linha.split("#")[0].strip()

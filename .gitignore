@@ -5,3 +5,7 @@ quarentena/
 relatorios/
 build/
 dist/
+testes/.estado/
+.pytest_cache/
+.coverage
+.ruff_cache/

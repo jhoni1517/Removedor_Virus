@@ -5,7 +5,7 @@ import time
 
 import requests
 
-from config import DIR
+from celscan.config import DIR
 
 URL = "https://www.virustotal.com/api/v3/files/{}"
 VALIDADE = 7 * 86400
