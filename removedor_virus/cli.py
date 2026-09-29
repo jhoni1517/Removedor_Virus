@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import re
+from pathlib import Path
 
 from . import __version__
 from .acoes import Removedor, dns_antianuncios
 from .adb import ADB, ErroADB, baixar_adb, localizar_adb
+from .caminhos import ler_config, salvar_config
 from .heuristicas import App, Assinaturas, carregar_assinaturas
 from .relatorio import cor, imprimir_apps, resumo, salvar_relatorio
 from .scanner import Scanner
@@ -82,6 +84,8 @@ def conectar(serial: str | None, interativo: bool) -> tuple[ADB, dict]:
     adb.serial = escolhido.serial
     info = adb.info_dispositivo()
     print(cor(f"Conectado: {info['fabricante']} {info['modelo']} - Android {info['android']} ({adb.serial})", "92"))
+    if info.get("patch_seguranca"):
+        print(f"Patch de segurança: {info['patch_seguranca']}")
     return adb, info
 
 
@@ -97,13 +101,18 @@ def conectar_interativo(serial: str | None) -> tuple[ADB, dict]:
 
 # --- operações ---
 
-def _progresso(atual: int, total: int, pacote: str) -> None:
-    print(f"\rAnalisando {atual}/{total}: {pacote[:45]:<45}", end="", flush=True)
+def _progresso(atual: int, total: int, texto: str) -> None:
+    print(f"\r[{atual}/{total}] {texto[:55]:<55}", end="", flush=True)
 
 
-def escanear(adb: ADB, info: dict, assinaturas: Assinaturas, mostrar_limpos: bool = False) -> tuple[list[App], list[App]]:
+def escanear(
+    adb: ADB, info: dict, assinaturas: Assinaturas, mostrar_limpos: bool = False, vt_todos: bool = False
+) -> tuple[list[App], list[App]]:
     print("Coletando informações do celular...")
-    apps = Scanner(adb, assinaturas).escanear(progresso=_progresso)
+    chave_vt = ler_config().get("chave_virustotal") or None
+    if chave_vt:
+        print("VirusTotal ativado (consultas lentas: 4 por minuto no plano gratuito).")
+    apps = Scanner(adb, assinaturas).escanear(progresso=_progresso, chave_vt=chave_vt, vt_todos=vt_todos)
     print("\r" + " " * 70 + "\r", end="")
     visiveis = imprimir_apps(apps, mostrar_limpos)
     print("\n" + resumo(apps))
@@ -210,16 +219,20 @@ def criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="removedor_virus",
         description="Detecta e remove vírus e adware de celulares Android via USB. "
-        "Sem comando, abre o menu interativo.",
+        "Sem comando, abre a janela do programa.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("-s", "--serial", help="serial do celular (quando houver mais de um)")
     parser.add_argument("--assinaturas", help="arquivo JSON de assinaturas alternativo")
     sub = parser.add_subparsers(dest="comando")
 
+    sub.add_parser("menu", help="menu interativo no terminal")
     sub.add_parser("dispositivos", help="lista celulares conectados")
     p = sub.add_parser("escanear", help="analisa os apps e gera relatório")
     p.add_argument("--todos", action="store_true", help="mostra também os apps limpos")
+    p.add_argument("--vt-todos", action="store_true", help="consulta todos os apps no VirusTotal (lento)")
+    p = sub.add_parser("virustotal", help="salva a chave gratuita da API do VirusTotal")
+    p.add_argument("chave", help="chave da API (vazio para remover)")
     p = sub.add_parser("limpar", help="remove apps suspeitos automaticamente")
     p.add_argument("--nivel", choices=["alto", "medio"], default="alto", help="nível mínimo (padrão: alto)")
     p.add_argument("--sim", action="store_true", help="não pede confirmação")
@@ -231,7 +244,8 @@ def criar_parser() -> argparse.ArgumentParser:
     sub.add_parser("restaurar", help="reinstala apps da quarentena")
     p = sub.add_parser("dns", help="DNS privado que bloqueia anúncios (Android 9+)")
     p.add_argument("acao", choices=["ativar", "desativar"])
-    sub.add_parser("baixar-adb", help="baixa o ADB oficial do Google")
+    p = sub.add_parser("baixar-adb", help="baixa o ADB oficial do Google")
+    p.add_argument("--destino", help="pasta onde salvar (padrão: pasta de dados do usuário)")
     return parser
 
 
@@ -239,10 +253,14 @@ def main(argv: list[str] | None = None) -> int:
     args = criar_parser().parse_args(argv)
     try:
         assinaturas = carregar_assinaturas(args.assinaturas)
-        if args.comando is None:
+        if args.comando in (None, "menu"):
             return menu(args, assinaturas)
+        if args.comando == "virustotal":
+            salvar_config(chave_virustotal=args.chave.strip())
+            print("Chave do VirusTotal salva." if args.chave.strip() else "Chave removida.")
+            return 0
         if args.comando == "baixar-adb":
-            print("ADB instalado em", baixar_adb())
+            print("ADB instalado em", baixar_adb(Path(args.destino) if args.destino else None))
             return 0
         if args.comando == "dispositivos":
             dispositivos = obter_adb(False).dispositivos()
@@ -254,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
 
         adb, info = conectar(args.serial, interativo=False)
         if args.comando == "escanear":
-            escanear(adb, info, assinaturas, mostrar_limpos=args.todos)
+            escanear(adb, info, assinaturas, mostrar_limpos=args.todos, vt_todos=args.vt_todos)
         elif args.comando == "limpar":
             apps, _ = escanear(adb, info, assinaturas)
             alvos = alvos_por_nivel(apps, args.nivel)

@@ -8,10 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 from .adb import ADB, ErroADB, nome_seguro
+from .caminhos import pasta_quarentena
 from .heuristicas import App
 from .scanner import parse_acessibilidade
 
-PASTA_QUARENTENA = Path("quarentena")
 DNS_ANTIANUNCIOS = "dns.adguard-dns.com"
 
 
@@ -30,9 +30,9 @@ def _falhou(saida: str) -> bool:
 
 
 class Removedor:
-    def __init__(self, adb: ADB, pasta_quarentena: Path = PASTA_QUARENTENA):
+    def __init__(self, adb: ADB, pasta: Path | None = None):
         self.adb = adb
-        self.pasta_quarentena = Path(pasta_quarentena)
+        self.pasta_quarentena = Path(pasta) if pasta else pasta_quarentena()
 
     # --- neutralização (tira os "poderes" do app antes de remover) ---
 

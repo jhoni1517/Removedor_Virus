@@ -1,0 +1,62 @@
+name: Instalador Windows
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Testes
+        run: python -m unittest discover -s tests -v
+
+      - name: Baixar ADB oficial (embutido no instalador)
+        run: python -m removedor_virus baixar-adb --destino .
+
+      - name: Ler versão
+        id: versao
+        shell: bash
+        run: echo "versao=$(python -c 'import removedor_virus as r; print(r.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Gerar executável
+        run: pyinstaller --noconfirm --clean instalador/RemovedorVirus.spec
+
+      - name: Gerar instalador
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ steps.versao.outputs.versao }}" instalador\RemovedorVirus.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Compress-Archive -Path dist\RemovedorVirus -DestinationPath "dist\RemovedorVirus-Portatil-${{ steps.versao.outputs.versao }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemovedorVirus-${{ steps.versao.outputs.versao }}
+          path: |
+            dist/RemovedorVirus-Setup-*.exe
+            dist/RemovedorVirus-Portatil-*.zip
+
+      - name: Publicar na página de Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/RemovedorVirus-Setup-*.exe
+            dist/RemovedorVirus-Portatil-*.zip

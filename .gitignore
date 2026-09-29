@@ -3,3 +3,5 @@ __pycache__/
 platform-tools/
 quarentena/
 relatorios/
+build/
+dist/

@@ -14,8 +14,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-RAIZ_PROJETO = Path(__file__).resolve().parent.parent
-PASTA_PLATFORM_TOOLS = RAIZ_PROJETO / "platform-tools"
+from .caminhos import pasta_dados, pasta_recursos
+
 NOME_ADB = "adb.exe" if os.name == "nt" else "adb"
 
 URL_PLATFORM_TOOLS = {
@@ -40,25 +40,31 @@ class Dispositivo:
         return self.estado == "device"
 
 
+# No Windows, evita abrir uma janela preta de console a cada comando.
+SEM_JANELA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 def localizar_adb() -> str | None:
-    """Procura o adb em ADB_PATH, na pasta platform-tools do projeto e no PATH."""
+    """Procura o adb: ADB_PATH, embutido no programa, baixado pelo usuário, PATH."""
     env = os.environ.get("ADB_PATH")
     if env and Path(env).is_file():
         return env
-    local = PASTA_PLATFORM_TOOLS / NOME_ADB
-    if local.is_file():
-        return str(local)
+    for pasta in (pasta_recursos(), pasta_dados()):
+        local = pasta / "platform-tools" / NOME_ADB
+        if local.is_file():
+            return str(local)
     return shutil.which("adb")
 
 
-def baixar_adb() -> str:
-    """Baixa o platform-tools oficial do Google para a pasta do projeto."""
+def baixar_adb(destino: Path | None = None) -> str:
+    """Baixa o platform-tools oficial do Google (padrão: pasta de dados do usuário)."""
+    destino = Path(destino or pasta_dados())
     url = URL_PLATFORM_TOOLS.get(sys.platform, URL_PLATFORM_TOOLS["linux"])
     with urllib.request.urlopen(url, timeout=180) as resposta:
         dados = resposta.read()
     with zipfile.ZipFile(io.BytesIO(dados)) as arquivo_zip:
-        arquivo_zip.extractall(RAIZ_PROJETO)
-    adb = PASTA_PLATFORM_TOOLS / NOME_ADB
+        arquivo_zip.extractall(destino)
+    adb = destino / "platform-tools" / NOME_ADB
     if os.name != "nt":
         adb.chmod(0o755)
     return str(adb)
@@ -104,6 +110,7 @@ class ADB:
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
+                creationflags=SEM_JANELA,
             )
         except subprocess.TimeoutExpired as erro:
             raise ErroADB(f"Tempo esgotado: adb {' '.join(args)}") from erro
@@ -118,6 +125,13 @@ class ADB:
         comando = " ".join(shlex.quote(a) for a in args)
         return self.executar("shell", comando, timeout=timeout, checar=False)
 
+    def encerrar_servidor(self) -> None:
+        """Encerra o servidor ADB (libera o adb.exe para atualizar/desinstalar)."""
+        try:
+            self.executar("kill-server", timeout=10, checar=False)
+        except ErroADB:
+            pass
+
     def dispositivos(self) -> list[Dispositivo]:
         return parse_dispositivos(self.executar("devices", "-l"))
 
@@ -131,4 +145,5 @@ class ADB:
             "modelo": self.propriedade("ro.product.model"),
             "android": self.propriedade("ro.build.version.release"),
             "sdk": self.propriedade("ro.build.version.sdk"),
+            "patch_seguranca": self.propriedade("ro.build.version.security_patch"),
         }

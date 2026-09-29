@@ -7,11 +7,16 @@ from typing import Callable
 
 from .adb import ADB
 from .heuristicas import App, Assinaturas, avaliar, carregar_assinaturas
+from .virustotal import ErroVirusTotal, consultar_hash
 
 RE_COMPONENTE = re.compile(r"ComponentInfo\{([\w.]+)/([\w.$]+)\}")
 RE_PACOTE = re.compile(r"^[A-Za-z][\w]*(\.[\w]+)+$")
 RE_LAUNCHER = re.compile(r"packageName=([\w.]+)|^\s*([\w.]+)/[\w.$]+\s*$")
 RE_PERMISSAO = re.compile(r"^([\w.]+\.[\w.]+)(:.*)?$")
+RE_CONCEDIDA = re.compile(r"([\w.]+\.permission\.[\w]+): granted=true")
+RE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+Progresso = Callable[[int, int, str], None]
 
 
 def parse_lista_pacotes(saida: str) -> dict[str, tuple[str, str | None]]:
@@ -38,6 +43,11 @@ def parse_componentes(saida: str) -> list[str]:
     return vistos
 
 
+def parse_sha256(saida: str) -> str:
+    partes = saida.split()
+    return partes[0] if partes and RE_SHA256.match(partes[0]) else ""
+
+
 def parse_acessibilidade(saida: str) -> list[str]:
     valor = saida.strip()
     if not valor or valor == "null":
@@ -61,7 +71,7 @@ def parse_launchers(saida: str) -> set[str]:
 
 def parse_dumpsys_pacote(saida: str) -> dict:
     """Extrai versão, data de instalação e permissões de `dumpsys package <pacote>`."""
-    info = {"versao": "", "instalado_em": "", "permissoes": set()}
+    info = {"versao": "", "instalado_em": "", "permissoes": set(), "concedidas": set(RE_CONCEDIDA.findall(saida))}
     na_secao = False
     for linha in saida.splitlines():
         texto = linha.strip()
@@ -87,10 +97,15 @@ class Scanner:
 
     def escanear(
         self,
-        progresso: Callable[[int, int, str], None] | None = None,
+        progresso: Progresso | None = None,
         somente: set[str] | None = None,
+        chave_vt: str | None = None,
+        vt_todos: bool = False,
     ) -> list[App]:
-        """Analisa os apps instalados pelo usuário (apps do sistema não são tocados)."""
+        """Analisa os apps instalados pelo usuário (apps do sistema não são tocados).
+
+        Com `chave_vt`, consulta no VirusTotal os apps suspeitos (ou todos, se `vt_todos`).
+        """
         adb = self.adb
         pacotes = parse_lista_pacotes(adb.shell("pm", "list", "packages", "-3", "-f", "-i"))
         if somente is not None:
@@ -98,6 +113,9 @@ class Scanner:
         admins = parse_componentes(adb.shell("dumpsys", "device_policy"))
         acessibilidade = parse_acessibilidade(
             adb.shell("settings", "get", "secure", "enabled_accessibility_services")
+        )
+        notificacoes = parse_acessibilidade(
+            adb.shell("settings", "get", "secure", "enabled_notification_listeners")
         )
         sobreposicao = parse_lista_simples(
             adb.shell("appops", "query-op", "--user", "0", "SYSTEM_ALERT_WINDOW", "allow")
@@ -109,10 +127,13 @@ class Scanner:
             )
         )
 
+        def do_pacote(componentes: list[str], pacote: str) -> list[str]:
+            return [c for c in componentes if c.startswith(pacote + "/")]
+
         apps = []
         for indice, (pacote, (caminho, instalador)) in enumerate(sorted(pacotes.items()), 1):
             if progresso:
-                progresso(indice, len(pacotes), pacote)
+                progresso(indice, len(pacotes), f"Analisando {pacote}")
             detalhes = parse_dumpsys_pacote(adb.shell("dumpsys", "package", pacote))
             app = App(
                 pacote=pacote,
@@ -121,13 +142,37 @@ class Scanner:
                 versao=detalhes["versao"],
                 instalado_em=detalhes["instalado_em"],
                 permissoes=detalhes["permissoes"],
-                admins=[c for c in admins if c.startswith(pacote + "/")],
-                acessibilidade=[c for c in acessibilidade if c.startswith(pacote + "/")],
+                concedidas=detalhes["concedidas"],
+                admins=do_pacote(admins, pacote),
+                acessibilidade=do_pacote(acessibilidade, pacote),
+                notificacoes=do_pacote(notificacoes, pacote),
                 sobreposicao=pacote in sobreposicao,
                 # Se a consulta de launchers falhou (lista vazia), não acusa ninguém.
                 icone_oculto=bool(launchers) and pacote not in launchers,
             )
             apps.append(avaliar(app, self.assinaturas))
 
+        if chave_vt:
+            self.consultar_virustotal(apps, chave_vt, vt_todos, progresso)
+
         apps.sort(key=lambda a: a.pontuacao, reverse=True)
         return apps
+
+    def consultar_virustotal(
+        self, apps: list[App], chave: str, todos: bool = False, progresso: Progresso | None = None
+    ) -> None:
+        alvos = [a for a in apps if todos or a.pontuacao > 0]
+        for indice, app in enumerate(alvos, 1):
+            if progresso:
+                progresso(indice, len(alvos), f"VirusTotal: {app.pacote}")
+            if not app.sha256 and app.caminho_apk:
+                app.sha256 = parse_sha256(self.adb.shell("sha256sum", app.caminho_apk))
+            if not app.sha256:
+                continue
+            try:
+                app.virustotal = consultar_hash(app.sha256, chave)
+            except ErroVirusTotal as erro:
+                app.virustotal = {"erro": str(erro)}
+                if "inválida" in str(erro):
+                    break
+            avaliar(app, self.assinaturas)

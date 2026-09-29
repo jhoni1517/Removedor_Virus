@@ -15,6 +15,7 @@ from removedor_virus.scanner import (
     parse_launchers,
     parse_lista_pacotes,
     parse_lista_simples,
+    parse_sha256,
 )
 
 LISTA_PACOTES = """package:/data/app/~~aB1==/com.limpa.booster-xY2==/base.apk=com.limpa.booster installer=null
@@ -48,6 +49,9 @@ DUMPSYS_BOOSTER = """Packages:
       android.permission.REQUEST_INSTALL_PACKAGES: restricted=true
     install permissions:
       android.permission.INTERNET: granted=true
+    runtime permissions:
+      android.permission.READ_SMS: granted=true, flags=[ USER_SET ]
+      android.permission.CAMERA: granted=false
 """
 
 
@@ -121,6 +125,13 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(info["instalado_em"], "2026-09-27 10:00:00")
         self.assertEqual(len(info["permissoes"]), 3)
         self.assertNotIn("android.permission.INTERNET", info["permissoes"])
+        self.assertIn("android.permission.READ_SMS", info["concedidas"])
+        self.assertNotIn("android.permission.CAMERA", info["concedidas"])
+
+    def test_sha256(self):
+        h = "a" * 64
+        self.assertEqual(parse_sha256(f"{h}  /data/app/x/base.apk"), h)
+        self.assertEqual(parse_sha256("sha256sum: not found"), "")
 
     def test_dispositivos(self):
         saida = "List of devices attached\nR58M device usb:1 product:a10 model:SM_A105M transport_id:1\nXYZ unauthorized\n"
@@ -150,6 +161,33 @@ class TestHeuristicas(unittest.TestCase):
         assinaturas = Assinaturas(pacotes_maliciosos={"com.mal.app"})
         app = avaliar(App("com.mal.app", instalador="com.android.vending"), assinaturas)
         self.assertEqual(app.nivel, "ALTO")
+
+    def test_virustotal_confirmado_vence_lista_confiavel(self):
+        app = App("com.whatsapp", instalador="com.android.vending",
+                  virustotal={"conhecido": True, "malicioso": 12, "rotulo": "trojan.joker"})
+        avaliar(app, self.assinaturas)
+        self.assertEqual(app.nivel, "ALTO")
+        self.assertIn("trojan.joker", app.motivos[0])
+
+    def test_virustotal_poucas_deteccoes_e_desconhecido(self):
+        poucos = avaliar(App("com.x.y", instalador="com.android.vending",
+                             virustotal={"conhecido": True, "malicioso": 1}), self.assinaturas)
+        self.assertEqual(poucos.pontuacao, 30)
+        desconhecido = avaliar(App("com.x.y", virustotal={"conhecido": False}), self.assinaturas)
+        self.assertIn("APK desconhecido no VirusTotal", desconhecido.motivos)
+
+    def test_espionagem_so_conta_se_concedida(self):
+        pedida = avaliar(App("com.x.y", instalador="com.android.vending",
+                             permissoes={"android.permission.READ_SMS"}), self.assinaturas)
+        concedida = avaliar(App("com.x.y", instalador="com.android.vending",
+                                concedidas={"android.permission.READ_SMS"}), self.assinaturas)
+        self.assertEqual(pedida.pontuacao, 0)
+        self.assertEqual(concedida.pontuacao, 15)
+
+    def test_leitor_de_notificacoes(self):
+        app = avaliar(App("com.x.y", instalador="com.android.vending", notificacoes=["com.x.y/.N"]),
+                      self.assinaturas)
+        self.assertEqual(app.pontuacao, 20)
 
     def test_app_recente(self):
         app = App("com.x.y", instalador="com.android.vending", instalado_em="2026-09-27 10:00:00")
@@ -204,6 +242,26 @@ class TestScannerERemocao(unittest.TestCase):
         resultado = Removedor(adb, Path(tempfile.gettempdir())).remover(App("com.a.b"))
         self.assertFalse(resultado.sucesso)
         self.assertFalse(any(c.startswith("pm uninstall") for c in adb.chamadas))
+
+    def test_virustotal_consulta_apenas_suspeitos(self):
+        import removedor_virus.scanner as scanner_mod
+
+        consultados = []
+
+        def falso_consultar(sha, chave):
+            consultados.append(sha)
+            return {"conhecido": True, "malicioso": 20, "rotulo": "adware.hiddad"}
+
+        adb = celular_infectado()
+        adb.respostas["sha256sum"] = "b" * 64 + "  /data/app/x/base.apk"
+        original = scanner_mod.consultar_hash
+        scanner_mod.consultar_hash = falso_consultar
+        try:
+            apps = Scanner(adb).escanear(chave_vt="chave")
+        finally:
+            scanner_mod.consultar_hash = original
+        self.assertEqual(len(consultados), 1)  # só o booster tinha pontos
+        self.assertIn("adware.hiddad", " ".join(apps[0].motivos))
 
     def test_dns(self):
         adb = FakeADB({"settings get global private_dns_mode": "hostname\n"})

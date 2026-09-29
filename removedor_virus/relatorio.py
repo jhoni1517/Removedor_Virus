@@ -10,14 +10,13 @@ from pathlib import Path
 
 from . import __version__
 from .adb import nome_seguro
+from .caminhos import pasta_relatorios
 from .heuristicas import App
 
-PASTA_RELATORIOS = Path("relatorios")
-
-if os.name == "nt":
+# No programa com janela (sem console) sys.stdout é None.
+_CORES = bool(sys.stdout) and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+if _CORES and os.name == "nt":
     os.system("")  # ativa cores ANSI no terminal do Windows 10+
-
-_CORES = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 CORES_NIVEL = {"ALTO": "91", "MEDIO": "93", "BAIXO": "96", "LIMPO": "92"}
 
 
@@ -45,7 +44,8 @@ def resumo(apps: list[App]) -> str:
     return f"{len(apps)} apps analisados | " + " | ".join(partes)
 
 
-def salvar_relatorio(apps: list[App], dispositivo: dict, pasta: Path = PASTA_RELATORIOS) -> Path:
+def salvar_relatorio(apps: list[App], dispositivo: dict, pasta: Path | None = None) -> Path:
+    pasta = Path(pasta) if pasta else pasta_relatorios()
     pasta.mkdir(parents=True, exist_ok=True)
     agora = datetime.now()
     caminho = pasta / f"relatorio_{nome_seguro(dispositivo.get('serial', ''))}_{agora:%Y%m%d-%H%M%S}.json"
