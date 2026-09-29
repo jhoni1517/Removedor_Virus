@@ -71,11 +71,11 @@ python -m unittest discover -s tests      # testes
 
 ### Gerar o instalador
 
-Cada push gera o instalador pelo GitHub Actions (`.github/workflows/windows.yml`); ele aparece em **Actions > artefatos**. Para publicar uma versão na página de Releases:
+Cada push gera o instalador pelo GitHub Actions (`.github/workflows/windows.yml`); ele aparece em **Actions > artefatos**. Para publicar na página de Releases, use um destes caminhos:
+- no GitHub: **Actions > Instalador Windows > Run workflow** (cria a tag `v<versão>` automaticamente);
+- ou envie uma tag: `git tag v0.2.0 && git push origin v0.2.0`.
 
-```
-git tag v0.2.0 && git push origin v0.2.0
-```
+Antes de publicar uma versão nova, atualize `__version__` em `removedor_virus/__init__.py`.
 
 Para gerar manualmente no Windows (Python 3.9+, PyInstaller e [Inno Setup 6](https://jrsoftware.org/isdl.php)):
 

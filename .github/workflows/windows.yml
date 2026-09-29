@@ -53,10 +53,22 @@ jobs:
             dist/RemovedorVirus-Setup-*.exe
             dist/RemovedorVirus-Portatil-*.zip
 
+      # Publica ao enviar uma tag v* ou ao rodar manualmente (Actions > Run workflow).
+      # Na execução manual, a tag v<versão> é criada automaticamente.
       - name: Publicar na página de Releases
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.versao.outputs.versao }}
+          target_commitish: ${{ github.sha }}
+          name: Removedor de Vírus Android ${{ steps.versao.outputs.versao }}
+          body: |
+            Baixe **RemovedorVirus-Setup-${{ steps.versao.outputs.versao }}.exe**, execute e siga o instalador.
+            Não precisa instalar Python nem ADB.
+
+            Versão portátil (sem instalar): **RemovedorVirus-Portatil-${{ steps.versao.outputs.versao }}.zip**.
+
+            Se o Windows avisar "editor desconhecido", clique em *Mais informações > Executar assim mesmo*.
           files: |
             dist/RemovedorVirus-Setup-*.exe
             dist/RemovedorVirus-Portatil-*.zip
