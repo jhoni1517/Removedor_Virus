@@ -157,8 +157,10 @@ def cmd_android(a):
 
     if achados:
         con.print("\n[bold]Configurações do aparelho[/]")
-        for nv, txt in achados:
-            con.print(f"  [{COR[nv]}]{nv:<6}[/] {txt}")
+        for ach in achados:
+            nv = ach["nivel"]
+            con.print(f"  [{COR[nv]}]{nv:<6}[/] [bold]{ach['titulo']}[/]")
+            con.print(f"         [dim]{ach['significa']}[/]\n         → {ach['fazer']}")
     con.print()
     risco = [r for r in res if r["nivel"] in ("ALTO", "MÉDIO")]
     if risco or a.todos:
@@ -171,7 +173,9 @@ def cmd_android(a):
     alvos = [r for r in res if r["score"] >= a.limite and r["nivel"] != "PERMITIDO"]
     if alvos and (a.remover or Confirm.ask(f"Revisar a remoção de {len(alvos)} app(s) de risco agora?", default=False)):
         for r in alvos:
-            con.print(Panel("\n".join(f"• {m}" for m in r["motivos"]), title=f"{r['pacote']} (risco {r['score']})",
+            texto = "\n".join(f"• [bold]{x['titulo']}[/]\n  [dim]{x['significa']}[/]\n  → {x['fazer']}"
+                              for x in r["achados"])
+            con.print(Panel(texto, title=f"{r['pacote']} (risco {r['score']})",
                             border_style="red" if r["score"] >= 60 else "yellow"))
             if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60):
                 with con.status("Removendo..."):

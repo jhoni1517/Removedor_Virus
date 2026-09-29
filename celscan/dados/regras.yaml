@@ -1,0 +1,195 @@
+# Regras de pontuação do CelScan.
+# Ajuste pesos e textos aqui sem mexer no código. Para personalizar só no seu computador,
+# copie as regras que quiser mudar para ~/.celscan/regras.yaml (elas substituem estas).
+#
+# Cada regra de app:      peso (pontos), titulo, significa, fazer
+# Cada regra de aparelho: nivel (ALTO/MÉDIO/BAIXO), titulo, significa, fazer
+# {detalhe} no título é trocado pela informação específica (nome, meses, origem...).
+
+versao: 1
+
+limites:
+  alto: 60          # pontos para risco ALTO
+  medio: 30         # pontos para risco MÉDIO
+  maximo: 100
+  permitido_teto: 10  # app da lista de permitidos (vindo de loja oficial) fica no máximo com isto
+
+parametros:
+  patch_medio_meses: 12
+  patch_alto_meses: 24
+  recente_dias: 7
+
+nota:               # nota do aparelho (0-100): começa em 100 e desconta
+  aparelho_alto: 25
+  aparelho_outro: 10
+  app_alto: 30
+  app_medio: 8
+  teto_com_ameaca: 20
+  rotulos:          # nota mínima -> rótulo (do maior para o menor)
+    - [90, Excelente]
+    - [70, Bom]
+    - [50, Atenção]
+    - [0, Crítico]
+
+apps:
+  ameaca_conhecida:
+    peso: 100
+    titulo: "Ameaça conhecida: {detalhe}"
+    significa: "Este app aparece em listas públicas de spyware ou stalkerware (programas usados para espionar pessoas)."
+    fazer: "Remova o app. Depois troque as senhas importantes (e-mail, banco, redes sociais) usando outro aparelho."
+  acessibilidade:
+    peso: 40
+    titulo: "Controla a tela (acessibilidade ativa)"
+    significa: "O app consegue ler tudo o que aparece na tela e tocar sozinho. Golpes bancários usam isso para ver senhas e fazer Pix."
+    fazer: "Se não for um leitor de tela, gerenciador de senhas ou automação que você instalou de propósito, remova."
+  administrador:
+    peso: 30
+    titulo: "É administrador do aparelho"
+    significa: "O app ganhou poder de administrador, o que dificulta a desinstalação e pode bloquear a tela."
+    fazer: "Tire o app de Configurações > Segurança > Apps de administrador e depois remova."
+  device_owner:
+    peso: 30
+    titulo: "Controla o aparelho (device owner)"
+    significa: "O app gerencia o celular inteiro. É normal em celular de empresa; fora disso, é muito suspeito."
+    fazer: "Se o celular não é da empresa, procure uma assistência para restaurar o aparelho."
+  leitor_notificacoes:
+    peso: 20
+    titulo: "Lê todas as notificações"
+    significa: "O app vê o conteúdo de todas as notificações, inclusive códigos de SMS e mensagens."
+    fazer: "Se você não reconhece o motivo, desative em Configurações > Notificações > Acesso às notificações."
+  sem_icone:
+    peso: 20
+    titulo: "Escondido (sem ícone na tela inicial)"
+    significa: "O app não aparece na lista de apps. Vírus fazem isso para você não conseguir encontrá-los."
+    fazer: "Se você não sabe o que é, remova. Teclados, widgets e plugins às vezes também não têm ícone."
+  fora_da_loja:
+    peso: 15
+    titulo: "Instalado fora da loja oficial ({detalhe})"
+    significa: "O app veio de um arquivo baixado da internet ou de outro app, sem a verificação da loja."
+    fazer: "Prefira sempre a Play Store. Se não lembra de ter instalado, remova."
+  sms_padrao:
+    peso: 20
+    titulo: "Definido como app de SMS padrão"
+    significa: "O app recebe todos os SMS, inclusive códigos de banco e de recuperação de conta."
+    fazer: "Volte o app de mensagens original como padrão em Configurações > Apps > Apps padrão."
+  certificado_debug:
+    peso: 25
+    titulo: "Assinado com certificado de teste"
+    significa: "Apps sérios publicados em loja não usam certificado de teste. É comum em apps modificados ou maliciosos."
+    fazer: "Remova, a não ser que seja um app que você mesmo está desenvolvendo."
+  virustotal_detectado:
+    peso: 60
+    titulo: "VirusTotal: {detalhe}"
+    significa: "Antivírus de várias empresas identificaram este arquivo como perigoso."
+    fazer: "Remova o app."
+  virustotal_desconhecido:
+    peso: 10
+    titulo: "Arquivo nunca visto pelo VirusTotal"
+    significa: "Ninguém enviou este app para análise antes. Não quer dizer que é vírus, mas é incomum para apps populares."
+    fazer: "Se não reconhece o app, remova."
+  sempre_ativo:
+    peso: 5
+    titulo: "Roda sempre (sem economia de bateria)"
+    significa: "O app pediu para funcionar o tempo todo, mesmo com a tela desligada."
+    fazer: "Normal para mensageiros e despertadores. Nos outros, tire a exceção em Configurações > Bateria."
+  instalado_recente:
+    peso: 5
+    titulo: "Instalado há {detalhe} dia(s)"
+    significa: "Apps instalados logo antes de começarem os problemas merecem atenção."
+    fazer: "Se os anúncios ou problemas começaram depois deste app, remova."
+
+permissoes:
+  android.permission.READ_SMS:
+    peso: 20
+    titulo: "Lê SMS"
+    significa: "Pode ler códigos de confirmação do banco e de recuperação de contas."
+    fazer: "Só apps de mensagens precisam disso. Revogue em Configurações > Apps > Permissões."
+  android.permission.RECEIVE_SMS:
+    peso: 15
+    titulo: "Intercepta SMS"
+    significa: "Recebe os SMS assim que chegam, antes de você ver."
+    fazer: "Revogue se o app não for de mensagens."
+  android.permission.SEND_SMS:
+    peso: 15
+    titulo: "Envia SMS"
+    significa: "Pode mandar SMS pagos ou assinar serviços sem você saber."
+    fazer: "Revogue se o app não for de mensagens."
+  android.permission.READ_CALL_LOG:
+    peso: 10
+    titulo: "Lê o registro de chamadas"
+    significa: "Sabe para quem você ligou e quem ligou para você."
+    fazer: "Revogue se o app não for de telefone ou bloqueio de chamadas."
+  android.permission.RECORD_AUDIO:
+    peso: 10
+    titulo: "Grava áudio"
+    significa: "Pode usar o microfone."
+    fazer: "Normal em mensageiros e gravadores. Nos outros, revogue."
+  android.permission.ACCESS_BACKGROUND_LOCATION:
+    peso: 10
+    titulo: "Localização em segundo plano"
+    significa: "Sabe onde você está mesmo com o app fechado."
+    fazer: "Troque para 'Permitir só durante o uso' em Configurações > Apps > Permissões."
+  android.permission.CAMERA:
+    peso: 5
+    titulo: "Usa a câmera"
+    significa: "Pode tirar fotos e gravar vídeos."
+    fazer: "Revogue se o app não precisa de câmera."
+  android.permission.READ_CONTACTS:
+    peso: 5
+    titulo: "Lê os contatos"
+    significa: "Tem acesso à sua agenda."
+    fazer: "Revogue se o app não precisa dos contatos."
+  android.permission.ACCESS_FINE_LOCATION:
+    peso: 5
+    titulo: "Localização precisa"
+    significa: "Sabe exatamente onde você está."
+    fazer: "Revogue se o app não precisa de mapa ou entrega."
+
+appops:
+  SYSTEM_ALERT_WINDOW:
+    peso: 15
+    titulo: "Desenha sobre outros apps"
+    significa: "Pode abrir janelas por cima de tudo: anúncios em tela cheia ou telas falsas de banco."
+    fazer: "Desative em Configurações > Apps > Acesso especial > Sobrepor a outros apps."
+  REQUEST_INSTALL_PACKAGES:
+    peso: 15
+    titulo: "Pode instalar outros apps"
+    significa: "Consegue instalar novos apps, inclusive vírus que baixa da internet."
+    fazer: "Desative em Configurações > Apps > Acesso especial > Instalar apps desconhecidos."
+
+aparelho:
+  patch_muito_antigo:
+    nivel: ALTO
+    titulo: "Atualização de segurança de {detalhe} meses atrás"
+    significa: "O celular está sem correções de falhas conhecidas que vírus conseguem explorar."
+    fazer: "Atualize em Configurações > Sistema > Atualização. Se não houver, o aparelho não recebe mais suporte."
+  patch_antigo:
+    nivel: MÉDIO
+    titulo: "Atualização de segurança de {detalhe} meses atrás"
+    significa: "O celular está algumas atualizações atrasado."
+    fazer: "Procure atualizações em Configurações > Sistema > Atualização."
+  proxy_global:
+    nivel: ALTO
+    titulo: "Proxy ativo ({detalhe})"
+    significa: "Toda a internet do celular passa por outro computador, que pode ver e alterar o que você acessa."
+    fazer: "Se você não configurou isso, remova o proxy e procure quem instalou."
+  root:
+    nivel: ALTO
+    titulo: "Celular com root ({detalhe})"
+    significa: "As proteções do Android foram desligadas. Qualquer app pode ganhar controle total."
+    fazer: "Se não foi você quem fez o root, restaure o sistema original."
+  bootloader:
+    nivel: MÉDIO
+    titulo: "Bootloader desbloqueado"
+    significa: "O sistema pode ter sido modificado. Alguém com o celular na mão consegue instalar programas escondidos."
+    fazer: "Se você não desbloqueou, leve a uma assistência de confiança."
+  gerenciado:
+    nivel: MÉDIO
+    titulo: "Aparelho gerenciado por {detalhe}"
+    significa: "Uma empresa ou app controla o celular. É normal em celular corporativo."
+    fazer: "Se o celular é pessoal, descubra quem instalou esse controle."
+  sms_incomum:
+    nivel: MÉDIO
+    titulo: "App de SMS padrão incomum: {detalhe}"
+    significa: "Um app pouco conhecido recebe todos os seus SMS, inclusive códigos de banco."
+    fazer: "Volte o app de mensagens original como padrão."

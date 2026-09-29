@@ -26,6 +26,8 @@ dt{color:var(--fraco);font-size:13px}dd{margin:0;font-weight:600}
 code{font-family:"Cascadia Mono",Consolas,monospace;font-size:14px}
 .nivel{font-weight:700;font-size:13px}.app ul{margin:6px 0 0;padding-left:20px;color:#333}
 .ameaca{color:#b3261e;font-weight:700}
+.sig{color:var(--fraco);font-size:14px;margin:2px 0 0}.fazer{font-size:14px;margin:2px 0 6px}
+.fazer:before{content:"O que fazer: ";font-weight:600}
 table{width:100%;border-collapse:collapse}td{padding:5px 0;border-bottom:1px solid var(--linha)}td:last-child{text-align:right}
 .rodape{margin-top:40px;color:var(--fraco);font-size:13px;border-top:1px solid var(--linha);padding-top:12px}
 @media print{body{background:#fff}.folha{box-shadow:none;margin:0;max-width:none;padding:24px}}
@@ -63,8 +65,10 @@ def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, 
 
     partes.append("<h2>Configurações do aparelho</h2>")
     if achados:
-        partes += [f'<div class="alerta" style="border-color:{COR[n]}"><span class="nivel" style="color:{COR[n]}">'
-                   f'{_e(n)}</span> · {_e(t)}</div>' for n, t in achados]
+        partes += [f'<div class="alerta" style="border-color:{COR[a["nivel"]]}"><span class="nivel" '
+                   f'style="color:{COR[a["nivel"]]}">{_e(a["nivel"])}</span> · <b>{_e(a["titulo"])}</b>'
+                   f'<p class="sig">{_e(a["significa"])}</p><p class="fazer">{_e(a["fazer"])}</p></div>'
+                   for a in achados]
     else:
         partes.append("<p>Nenhum problema encontrado nas configurações.</p>")
 
@@ -74,7 +78,9 @@ def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, 
     for r in risco:
         c = COR[r["nivel"]]
         amea = f'<p class="ameaca">{_e(r["ameaca"])}</p>' if r.get("ameaca") else ""
-        motivos = "".join(f"<li>{_e(m)}</li>" for m in r["motivos"] if not m.startswith("AMEAÇA CONHECIDA"))
+        motivos = "".join(f'<li><b>{_e(x["titulo"])}</b><p class="sig">{_e(x["significa"])}</p>'
+                          f'<p class="fazer">{_e(x["fazer"])}</p></li>'
+                          for x in r.get("achados", []) if x["chave"] != "ameaca_conhecida")
         partes.append(f"""<div class="app" style="border-left-color:{c}"><header><code>{_e(r['pacote'])}</code>
 <span class="nivel" style="color:{c}">{_e(r['nivel'])} · {r['score']}</span></header>{amea}<ul>{motivos}</ul></div>""")
 
