@@ -5,7 +5,7 @@
 ## Onde estamos
 
 A **Fase 0 está concluída**: 10 commits, todos já no GitHub (branch `ccr-b3fdeeb6-jqhbn5`).
-O CI roda **ruff +  testes** no Windows e no Linux, com Python 3.9 e 3.12, e está todo verde.
+O CI roda **ruff + 44 testes** no Windows e no Linux, com Python 3.9 e 3.12, e está todo verde.
 
 | Item da Fase 0 | Situação |
 |---|---|
