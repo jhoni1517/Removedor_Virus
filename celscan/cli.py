@@ -13,8 +13,9 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from rich.prompt import Confirm, InvalidResponse, Prompt
 from rich.table import Table
 
+from celscan import config
 from celscan.config import VERSAO
-from celscan.core import adb, db, log
+from celscan.core import adb, bases, db, log
 
 con = Console()
 
@@ -112,16 +113,12 @@ def cmd_android(a):
     from celscan.varredura import Varredura
 
     ap = escolher_aparelho(a.serial)
-    iocs = None
-    if not a.sem_iocs:
-        with con.status("Carregando indicadores de ameaças (Amnesty/MVT + Echap)..."):
-            iocs = iocmod.carregar(avisar=lambda m: con.print(f"[yellow]{m}[/]"))
-        if iocs:
-            con.print(f"[dim]{len(iocs)} indicadores carregados.[/]")
+    # Atualiza as bases vencidas enquanto o aparelho é lido.
+    atualizacao = None if a.sem_iocs else bases.atualizar_em_segundo_plano(["iocs"])
     chave = os.getenv("VT_API_KEY")
     vt = VirusTotal(chave) if chave else None
 
-    sc = Varredura(ap, vt, iocs, sistema=a.sistema)
+    sc = Varredura(ap, vt, None, sistema=a.sistema)
     inicio = time.perf_counter()
     with con.status("Coletando dados do aparelho (uma única leitura)..."), log.etapa("coleta"):
         sc.coletar()
@@ -129,6 +126,14 @@ def cmd_android(a):
     mostrar_info(info)
     for av in sc.avisos:
         con.print(f"[yellow]Aviso:[/] {av}")
+    if atualizacao is not None:
+        with con.status("Carregando indicadores de ameaças (Amnesty/MVT + Echap)..."):
+            atualizacao.join(timeout=120)
+            sc.iocs = iocmod.carregar(avisar=lambda m: con.print(f"[yellow]{m}[/]"))
+        if sc.iocs:
+            con.print(f"[dim]{len(sc.iocs)} indicadores carregados.[/]")
+        else:
+            con.print("[yellow]Aviso:[/] indicadores de ameaças indisponíveis (sem internet e sem cópia local).")
 
     with barra() as p, log.etapa("hashes"):
         t = p.add_task("Calculando hashes dos apps", total=len(sc.apps))
@@ -377,6 +382,23 @@ def cmd_historico(a):
         con.print(t)
 
 
+def cmd_bases(a):
+    if a.atualizar:
+        for b in bases.todas():
+            with con.status(f"Atualizando {b.descricao}..."):
+                ok, msg = bases.atualizar(b.nome, forcar=True)
+            con.print(f"{'[green]✔' if ok else '[yellow]!'}[/] {b.nome}: {msg}")
+    t = Table(header_style="bold", title="Bases" + (" (modo offline)" if config.OFFLINE else ""))
+    for c in ("Base", "Descrição", "Cópia local", "Idade", "Situação"):
+        t.add_column(c)
+    for s in bases.situacao():
+        idade = "—" if s["idade_h"] is None else f"{s['idade_h']:.0f} h"
+        local = "sim" if s["local"] else ("só a que vem com o programa" if s["embutida"] else "não")
+        t.add_row(str(s["nome"]), str(s["descricao"]), local, idade,
+                  "[yellow]vencida[/]" if s["vencida"] else "[green]ok[/]")
+    con.print(t)
+
+
 def cmd_iocs(a):
     from celscan.analise import iocs as iocmod
     with con.status("Baixando indicadores..."):
@@ -387,6 +409,7 @@ def cmd_iocs(a):
 
 def main():
     p = argparse.ArgumentParser(prog="celscan", description=f"CelScan {VERSAO} — segurança e otimização via USB")
+    p.add_argument("--offline", action="store_true", help="Não acessa a internet (usa só as cópias locais)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("android", help="Varredura de segurança do Android")
@@ -438,10 +461,16 @@ def main():
     s.add_argument("--limite", type=int, default=20)
     s.set_defaults(func=cmd_historico)
 
+    s = sub.add_parser("bases", help="Situação das bases (indicadores, UAD, certificados)")
+    s.add_argument("--atualizar", action="store_true", help="Baixa todas agora")
+    s.set_defaults(func=cmd_bases)
+
     s = sub.add_parser("iocs", help="Atualiza os indicadores de ameaças")
     s.set_defaults(func=cmd_iocs)
 
     a = p.parse_args()
+    if a.offline:
+        config.OFFLINE = True
     arquivo_log = log.configurar()
     log.LOGGER.info("CelScan %s: %s", VERSAO, " ".join(sys.argv[1:]))
     try:

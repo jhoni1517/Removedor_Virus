@@ -13,7 +13,7 @@ PACOTE = Path(__file__).resolve().parent
 DADOS = PACOTE / "dados"
 DIR = Path(os.getenv("CELSCAN_HOME") or Path.home() / ".celscan")
 DIR.mkdir(parents=True, exist_ok=True)
-# Modo offline: nunca acessa a internet; usa só as cópias locais das bases.
+# Modo offline: nunca acessa a internet; usa só as cópias locais das bases (--offline liga em tempo de execução).
 OFFLINE = os.getenv("CELSCAN_OFFLINE", "").lower() in ("1", "sim", "true")
 
 

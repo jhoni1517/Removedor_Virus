@@ -6,8 +6,7 @@ import time
 import requests
 
 from celscan.acoes import quarentena
-from celscan.config import DIR
-from celscan.core import parsers
+from celscan.core import bases, parsers
 
 UAD = ("https://raw.githubusercontent.com/Universal-Debloater-Alliance/"
        "universal-android-debloater-next-generation/main/resources/assets/uad_lists.json")
@@ -83,17 +82,27 @@ def animacoes(ap, valor):
     return pasta.name
 
 
+def _baixar_uad():
+    r = requests.get(UAD, timeout=60)
+    r.raise_for_status()
+    json.loads(r.text)  # valida antes de gravar
+    return r.text
+
+
+BASE_UAD = bases.registrar(bases.Base(
+    nome="uad", descricao="Lista de apps pré-instalados (Universal Android Debloater)", arquivo="uad.json",
+    validade_s=7 * 86400, baixar=_baixar_uad,
+))
+
+
 def lista_uad(forcar=False):
-    cache = DIR / "uad.json"
-    if forcar or not cache.exists() or time.time() - cache.stat().st_mtime > 7 * 86400:
-        try:
-            r = requests.get(UAD, timeout=60)
-            r.raise_for_status()
-            cache.write_text(r.text, encoding="utf-8")
-        except Exception:
-            if not cache.exists():
-                return {}
-    return json.loads(cache.read_text(encoding="utf-8"))
+    if forcar or bases.vencida(BASE_UAD):
+        bases.atualizar("uad", forcar=forcar)
+    texto = bases.ler("uad")
+    try:
+        return json.loads(texto) if texto else {}
+    except ValueError:
+        return {}
 
 
 def sugestoes_debloat(ap):

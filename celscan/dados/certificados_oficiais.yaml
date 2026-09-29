@@ -1,0 +1,14 @@
+# Certificados de assinatura oficiais de apps muito usados no Brasil (bancos, carteiras, gov.br, WhatsApp).
+# Base da "Proteção Pix e bancos" (Fase 3, item 1): um app com o mesmo pacote e certificado
+# diferente é cópia falsificada.
+#
+# ATENÇÃO: só acrescente entradas conferidas em aparelho real, com o app instalado pela Play Store:
+#   python celscan.py android --todos   ->  veja "cert" -> "sha256" no laudo .json
+# Nunca copie valores de sites de terceiros sem conferir.
+#
+# Formato:
+#   - pacote: com.exemplo.banco
+#     nome: Banco Exemplo
+#     sha256: [ "AB12...", ... ]   # certificado(s) SHA-256 em maiúsculas, sem ':'
+versao: 1
+apps: []

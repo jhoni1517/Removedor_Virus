@@ -7,11 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import yaml
 
-from celscan.config import DIR
+from celscan.core import bases
 
 ECHAP = "https://raw.githubusercontent.com/AssoEchap/stalkerware-indicators/master/ioc.yaml"
 MVT = "https://raw.githubusercontent.com/mvt-project/mvt-indicators/main/indicators.yaml"
-CACHE = DIR / "iocs.json"
 VALIDADE = 24 * 3600
 RX = re.compile(r"(app:id|app:cert\.sha1|app:cert\.sha256|file:hashes\.sha256)\s*=\s*'([^']+)'")
 
@@ -74,18 +73,24 @@ def _baixar():
     return {"pacotes": pac, "certs": cer, "hashes": has, "atualizado": time.time()}
 
 
+BASE = bases.registrar(bases.Base(
+    nome="iocs", descricao="Indicadores de spyware/stalkerware (MVT/Amnesty + Echap)", arquivo="iocs.json",
+    validade_s=VALIDADE, baixar=lambda: json.dumps(_baixar()),
+))
+
+
 def carregar(forcar=False, avisar=print):
-    dados = None
-    if CACHE.exists():
-        try:
-            dados = json.loads(CACHE.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            dados = None
-    if forcar or not dados or time.time() - dados["atualizado"] > VALIDADE:
-        try:
-            dados = _baixar()
-            CACHE.write_text(json.dumps(dados), encoding="utf-8")
-        except Exception as e:
-            avisar(f"Não foi possível atualizar os indicadores ({e}). "
-                   + ("Usando cópia local." if dados else "Seguindo sem eles."))
-    return IOCs(dados) if dados else None
+    """Indicadores da cópia local; atualiza antes se estiver vencida (ou se forcar)."""
+    if forcar or bases.vencida(BASE):
+        ok, msg = bases.atualizar("iocs", forcar=forcar)
+        if not ok:
+            avisar(f"Indicadores: {msg}. " + ("Usando cópia local." if BASE.caminho.exists() else "Seguindo sem eles."))
+    texto = bases.ler("iocs")
+    if not texto:
+        return None
+    try:
+        return IOCs(json.loads(texto))
+    except (ValueError, KeyError):
+        avisar("Cópia local dos indicadores corrompida; será baixada de novo na próxima vez.")
+        BASE.caminho.unlink(missing_ok=True)
+        return None
