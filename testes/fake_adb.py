@@ -71,7 +71,7 @@ if a[0] == "shell":
         fim("package:/data/app/~~X==/" + c.split()[-1] + "-Y==/base.apk")
     if c.startswith("settings get secure enabled_accessibility"):
         fim("com.systemservice/com.systemservice.Acc:com.x8bit.bitwarden/com.x8bit.bitwarden.Acc")
-    if c.startswith("settings get global") and "animation" in c:
+    if c.startswith("settings get global") and c.endswith("_scale"):
         fim("1.0")
     if c.startswith("df -k"):
         fim("Filesystem 1K-blocks Used Available Use% Mounted on\n"

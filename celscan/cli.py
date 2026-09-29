@@ -32,6 +32,20 @@ class Confirm(Confirm):  # noqa: F811 — aceita s/n em português
 
     def render_default(self, default):
         return f"({'s' if default else 'n'})"
+
+    def __call__(self, *args, **kwargs):
+        try:
+            return super().__call__(*args, **kwargs)
+        except EOFError:  # sem teclado (script, teste, janela): usa a resposta padrão
+            con.print(f"[dim](sem resposta: usando '{'s' if kwargs.get('default') else 'n'}')[/]")
+            return kwargs.get("default", False)
+
+
+def perguntar(texto, default=""):
+    try:
+        return Prompt.ask(texto, default=default)
+    except EOFError:
+        return default
 COR = {"ALTO": "bold red", "MÉDIO": "yellow", "BAIXO": "grey62", "OK": "green", "PERMITIDO": "green"}
 
 
@@ -209,9 +223,9 @@ def cmd_otimizar(a):
         con.print("[green]✔[/] Apps recompilados")
     if a.animacoes is not None or tudo or Confirm.ask("Deixar animações mais rápidas (0.5x)?", default=False):
         v = a.animacoes if a.animacoes is not None else 0.5
-        ot.animacoes(ap, v)
-        feitos.append(f"Animações em {v}x")
-        con.print(f"[green]✔[/] Animações em {v}x")
+        ident = ot.animacoes(ap, v)
+        feitos.append(f"Animações em {v}x (desfaça com: celscan quarentena restaurar {ident})")
+        con.print(f"[green]✔[/] {feitos[-1]}")
     if a.debloat or Confirm.ask("Procurar apps pré-instalados desnecessários (bloatware)?", default=False):
         with con.status("Consultando lista da comunidade (UAD)..."):
             sug = ot.sugestoes_debloat(ap)
@@ -225,7 +239,7 @@ def cmd_otimizar(a):
             for i, s in enumerate(sug, 1):
                 tb.add_row(str(i), s["pacote"], s["descricao"])
             con.print(tb)
-            esc = Prompt.ask("Desativar quais? (ex: 1,3,5 · 'todos' · Enter = nenhum)", default="")
+            esc = perguntar("Desativar quais? (ex: 1,3,5 · 'todos' · Enter = nenhum)", default="")
             if esc.strip():
                 idx = range(len(sug)) if esc.strip().lower() == "todos" else \
                     [int(x) - 1 for x in esc.replace(" ", "").split(",") if x.isdigit() and 0 < int(x) <= len(sug)]

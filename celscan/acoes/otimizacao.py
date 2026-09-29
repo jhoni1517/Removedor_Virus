@@ -97,8 +97,13 @@ def compilar(ap):
 
 
 def animacoes(ap, valor):
+    """Muda a velocidade das animações guardando os valores atuais (desfaz com quarentena restaurar)."""
+    ajustes = [{"tipo": "settings", "ns": "global", "chave": k, "anterior": quarentena.ler_setting(ap, "global", k)}
+               for k in ANIM]
+    pasta = quarentena.criar_ajuste(ap, "ajuste_animacoes", f"Animações em {valor}x", ajustes)
     for k in ANIM:
         ap.sh(f"settings put global {k} {valor}")
+    return pasta.name
 
 
 def lista_uad(forcar=False):

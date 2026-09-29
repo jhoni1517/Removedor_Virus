@@ -1,5 +1,6 @@
 """Quarentena: guarda o APK antes de remover e permite desfazer qualquer ação."""
 import json
+import shlex
 import shutil
 import tempfile
 from datetime import datetime
@@ -34,8 +35,52 @@ def criar(ap, pacote, dados=None, copiar_apk=True):
         "id": pasta.name, "pacote": pacote, "serial": ap.serial,
         "data": datetime.now().isoformat(timespec="seconds"), "acao": None,
         "arquivos": arquivos, "motivos": d.get("motivos", []), "sha256": d.get("sha256"),
+        "ajustes": [],
     })
     return pasta
+
+
+def criar_ajuste(ap, ident, descricao, ajustes):
+    """Registra mudanças de configuração (sem APK) para poder desfazer depois.
+
+    ident: nome curto sem espaços (vira parte do ID); descricao: texto para o usuário.
+    """
+    pasta = criar(ap, ident, {"motivos": [descricao]}, copiar_apk=False)
+    for a in ajustes:
+        adicionar_ajuste(pasta, a)
+    registrar(pasta, "ajuste")
+    return pasta
+
+
+def adicionar_ajuste(pasta, ajuste):
+    """ajuste: {"tipo": "settings", "ns", "chave", "anterior"} ou {"tipo": "appops", "pacote", "op", "anterior"}."""
+    meta = _ler(pasta)
+    meta.setdefault("ajustes", []).append(ajuste)
+    _gravar(pasta, meta)
+
+
+def ler_setting(ap, ns, chave):
+    valor = ap.sh(f"settings get {ns} {chave}").strip()
+    return None if valor in ("", "null") else valor
+
+
+def _reverter_ajustes(ap, meta):
+    """Desfaz os ajustes na ordem inversa. Devolve (tudo_ok, mensagens)."""
+    ok, msgs = True, []
+    for a in reversed(meta.get("ajustes") or []):
+        if a["tipo"] == "settings":
+            if a.get("anterior") is None:
+                ap.sh(f"settings delete {a['ns']} {a['chave']}")
+            else:
+                ap.sh(f"settings put {a['ns']} {a['chave']} {shlex.quote(a['anterior'])}")
+            atual = ler_setting(ap, a["ns"], a["chave"])
+            certo = atual == a.get("anterior")
+            msgs.append(f"{a['chave']}: {'restaurado' if certo else 'não confirmou'}")
+            ok &= certo
+        elif a["tipo"] == "appops":
+            ap.sh(f"appops set {a['pacote']} {a['op']} {a.get('anterior') or 'default'}")
+            msgs.append(f"{a['op']} de {a['pacote']}: {a.get('anterior') or 'default'}")
+    return ok, msgs
 
 
 def registrar(pasta, acao):
@@ -73,8 +118,14 @@ def restaurar(ap, ident):
         out = ap.adb(cmd, "-r", *apks, timeout=600, erro=True)
         ok = "Success" in out
         shutil.rmtree(tmp, ignore_errors=True)
+    elif acao == "ajuste":
+        ok, msgs = _reverter_ajustes(ap, meta)
+        out = "; ".join(msgs) or "nada a desfazer"
     else:
         return False, f"nada a restaurar (ação: {acao})"
+    if ok and acao != "ajuste" and meta.get("ajustes"):
+        _, msgs = _reverter_ajustes(ap, meta)
+        out = f"{out}\n" + "; ".join(msgs)
     if ok:
         meta["restaurado"] = datetime.now().isoformat(timespec="seconds")
         _gravar(pasta, meta)
