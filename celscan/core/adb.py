@@ -9,6 +9,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -71,10 +72,16 @@ def binario() -> str:
     return _ADB
 
 
+def _cmd() -> list[str]:
+    """Início da linha de comando. Um .py (ADB simulado dos testes) roda pelo Python atual."""
+    b = binario()
+    return [sys.executable, b] if b.endswith(".py") else [b]
+
+
 def run(args: list[str], timeout: int = 120, entrada: str | None = None) -> subprocess.CompletedProcess[str]:
     inicio = time.perf_counter()
     try:
-        r = subprocess.run([binario(), *args], capture_output=True, encoding="utf-8", errors="replace",
+        r = subprocess.run([*_cmd(), *args], capture_output=True, encoding="utf-8", errors="replace",
                            timeout=timeout, input=entrada, creationflags=SEM_JANELA)
     except subprocess.TimeoutExpired as e:
         log.comando(args, None, time.perf_counter() - inicio, 0)
@@ -117,7 +124,7 @@ class Aparelho:
         """Saída binária sem conversão de quebra de linha (exec-out)."""
         inicio = time.perf_counter()
         try:
-            r = subprocess.run([binario(), "-s", self.serial, "exec-out", comando],
+            r = subprocess.run([*_cmd(), "-s", self.serial, "exec-out", comando],
                                capture_output=True, timeout=timeout, creationflags=SEM_JANELA)
         except subprocess.TimeoutExpired as e:
             log.comando(["exec-out", comando], None, time.perf_counter() - inicio, 0)
@@ -147,7 +154,7 @@ class Aparelho:
     def linhas(self, comando: str) -> Iterator[str]:
         """Executa e entrega a saída linha a linha (para barra de progresso)."""
         inicio, n = time.perf_counter(), 0
-        p = subprocess.Popen([binario(), "-s", self.serial, "shell", comando],
+        p = subprocess.Popen([*_cmd(), "-s", self.serial, "shell", comando],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                              encoding="utf-8", errors="replace", creationflags=SEM_JANELA)
         assert p.stdout is not None

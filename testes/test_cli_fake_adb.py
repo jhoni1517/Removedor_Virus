@@ -10,7 +10,7 @@ from conftest import RAIZ
 
 def rodar(env, *args):
     return subprocess.run([sys.executable, str(RAIZ / "celscan.py"), *args], env=env, capture_output=True,
-                          text=True, stdin=subprocess.DEVNULL, timeout=120)
+                          encoding="utf-8", stdin=subprocess.DEVNULL, timeout=120)
 
 
 def test_android_sem_teclado_gera_laudo(ambiente_fake, tmp_path):

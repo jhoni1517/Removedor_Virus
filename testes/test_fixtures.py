@@ -23,7 +23,7 @@ def test_comando_fixtures_com_fake_adb(ambiente_fake, tmp_path):
     from conftest import RAIZ
 
     r = subprocess.run([sys.executable, str(RAIZ / "celscan.py"), "fixtures", "--pasta", str(tmp_path / "fx")],
-                       env=ambiente_fake, capture_output=True, text=True, timeout=120)
+                       env=ambiente_fake, capture_output=True, encoding="utf-8", timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
     pasta = next((tmp_path / "fx").iterdir())
     nomes = {p.name for p in pasta.iterdir()}
