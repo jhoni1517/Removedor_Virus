@@ -35,6 +35,12 @@ def test_android_remover_tira_admin(ambiente_fake, tmp_path):
     assert "uninstall com.systemservice" in log
 
 
+def test_historico_registra_varredura_e_remocao(ambiente_fake, tmp_path):
+    rodar(ambiente_fake, "android", "--nao-abrir", "--sem-iocs", "--remover", "--saida", str(tmp_path / "l"))
+    r = rodar(ambiente_fake, "historico")
+    assert "moto g54 5G" in r.stdout and "remocao" in r.stdout, r.stdout
+
+
 def test_otimizar_e_desfazer(ambiente_fake):
     r = rodar(ambiente_fake, "otimizar", "--animacoes", "0.5")
     assert r.returncode == 0, r.stdout + r.stderr

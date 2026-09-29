@@ -18,6 +18,7 @@ class Varredura:
         self.ap, self.vt, self.iocs, self.sistema = aparelho, vt, iocs, sistema
         self.permitidos = permitidos()
         self.dados: DadosAparelho | None = None
+        self.ultima_quarentena: str | None = None
 
     @property
     def apps(self) -> dict[str, coleta.AppBruto]:
@@ -61,7 +62,9 @@ class Varredura:
         return pontuacao.pontuar(self.dados, self.iocs, self.permitidos, agora)
 
     def remover(self, r: dict) -> tuple[bool, str]:
-        return remocao.remover(self.ap, r)
+        ok, msg = remocao.remover(self.ap, r)
+        self.ultima_quarentena = r.get("quarentena_id")
+        return ok, msg
 
 
 AndroidScanner = Varredura  # nome antigo (v2)

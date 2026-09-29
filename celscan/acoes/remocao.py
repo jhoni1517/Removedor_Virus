@@ -30,8 +30,10 @@ def neutralizar(ap: Aparelho, pkg: str, pasta, admins: list[str]) -> list[str]:
 
 
 def remover(ap: Aparelho, r: dict) -> tuple[bool, str]:
+    """Remove o app. O id da quarentena fica em r["quarentena_id"] (para desfazer)."""
     pkg = r["pacote"]
     pasta = quarentena.criar(ap, pkg, r, copiar_apk=True)
+    r["quarentena_id"] = pasta.name
     avisos = neutralizar(ap, pkg, pasta, r.get("admins") or [])
 
     out = ap.adb("uninstall", pkg, erro=True, timeout=180)

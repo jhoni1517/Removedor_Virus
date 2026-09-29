@@ -14,7 +14,7 @@ from rich.prompt import Confirm, InvalidResponse, Prompt
 from rich.table import Table
 
 from celscan.config import VERSAO
-from celscan.core import adb, log
+from celscan.core import adb, db, log
 
 con = Console()
 
@@ -176,7 +176,7 @@ def cmd_android(a):
                     f" · {duracao:.0f} s",
                     title="Resultado", border_style=cor))
 
-    acoes = []
+    acoes, acoes_db = [], []
     alvos = [r for r in res if r["score"] >= a.limite and r["nivel"] != "PERMITIDO"]
     if alvos and (a.remover or Confirm.ask(f"Revisar a remoção de {len(alvos)} app(s) de risco agora?", default=False)):
         for r in alvos:
@@ -190,7 +190,13 @@ def cmd_android(a):
                 con.print(f"  {'[green]✔' if ok else '[red]✘'}[/] {msg}")
                 if ok:
                     acoes.append(f"{r['pacote']}: {msg}")
+                    acoes_db.append((r, msg, sc.ultima_quarentena))
 
+    con_db = db.conectar()
+    vid = db.salvar_varredura(con_db, info, n, rot, achados, res, sc.avisos, duracao)
+    for r, msg, qid in acoes_db:
+        db.registrar_acao(con_db, info["serial"], "remocao", r["pacote"], msg, qid)
+    log.LOGGER.info("varredura %d salva no banco", vid)
     arq = relatorio.gerar(a.saida, info, n, rot, achados, res, loja=a.loja, acoes=acoes, avisos=sc.avisos)
     con.print(f"Laudo salvo em [bold]{arq}[/] (+ .json)")
     if not a.nao_abrir:
@@ -263,6 +269,9 @@ def cmd_otimizar(a):
                 feitos.append(f"{ok} app(s) pré-instalados desativados")
                 con.print(f"[green]✔[/] {feitos[-1]} (desfaça com: celscan quarentena restaurar ID)")
     if feitos:
+        con_db = db.conectar()
+        for f in feitos:
+            db.registrar_acao(con_db, ap.serial, "otimizacao", None, f)
         con.print(Panel("\n".join(f"• {f}" for f in feitos), title="Feito", border_style="green"))
 
 
@@ -284,6 +293,8 @@ def cmd_quarentena(a):
             sys.exit("Informe o ID (veja: celscan quarentena listar)")
         ap = escolher_aparelho(a.serial)
         ok, out = quarentena.restaurar(ap, a.id)
+        if ok:
+            db.marcar_desfeita(db.conectar(), a.id)
         con.print(("[green]✔ Restaurado[/]" if ok else "[red]✘ Falhou[/]") + f"  {out[-300:]}")
 
 
@@ -341,6 +352,31 @@ def cmd_parear(a):
         con.print(adb.conectar(a.endereco))
 
 
+def cmd_historico(a):
+    con_db = db.conectar()
+    linhas = db.varreduras(con_db, a.serial, a.limite)
+    if not linhas:
+        return con.print("Nenhuma varredura registrada ainda.")
+    t = Table(header_style="bold")
+    for c in ("#", "Data", "Aparelho", "Nota", "Apps", "Com risco", "Duração"):
+        t.add_column(c)
+    for v in linhas:
+        cor = "green" if v["nota"] >= 70 else "yellow" if v["nota"] >= 50 else "red"
+        t.add_row(str(v["id"]), v["data"].replace("T", " "), f"{v['fabricante']} {v['modelo']} ({v['serial']})",
+                  f"[{cor}]{v['nota']} {v['veredito']}[/]", str(v["apps_total"]), str(v["apps_risco"]),
+                  f"{v['duracao_s']:.0f} s" if v["duracao_s"] is not None else "—")
+    con.print(t)
+    acoes_feitas = db.acoes(con_db, a.serial, a.limite)
+    if acoes_feitas:
+        t = Table(header_style="bold", title="Ações")
+        for c in ("Data", "Tipo", "App", "Detalhe", "Desfeita"):
+            t.add_column(c, overflow="fold")
+        for x in acoes_feitas:
+            t.add_row(x["data"].replace("T", " "), x["tipo"], x["pacote"] or "—", x["detalhe"] or "",
+                      (x["desfeita_em"] or "").replace("T", " "))
+        con.print(t)
+
+
 def cmd_iocs(a):
     from celscan.analise import iocs as iocmod
     with con.status("Baixando indicadores..."):
@@ -396,6 +432,11 @@ def main():
     s = sub.add_parser("conectar", help="Conecta via Wi-Fi já pareado")
     s.add_argument("endereco")
     s.set_defaults(func=cmd_parear, codigo=None)
+
+    s = sub.add_parser("historico", help="Varreduras e ações anteriores (banco local)")
+    s.add_argument("--serial")
+    s.add_argument("--limite", type=int, default=20)
+    s.set_defaults(func=cmd_historico)
 
     s = sub.add_parser("iocs", help="Atualiza os indicadores de ameaças")
     s.set_defaults(func=cmd_iocs)

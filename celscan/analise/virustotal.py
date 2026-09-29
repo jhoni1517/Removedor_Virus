@@ -1,11 +1,10 @@
 """Consulta ao VirusTotal (API v3) com cache local e respeito ao limite gratuito."""
 import json
-import sqlite3
 import time
 
 import requests
 
-from celscan.config import DIR
+from celscan.core import db
 
 URL = "https://www.virustotal.com/api/v3/files/{}"
 VALIDADE = 7 * 86400
@@ -16,13 +15,12 @@ class VTErro(Exception):
 
 
 class VirusTotal:
-    def __init__(self, chave, intervalo=15.5):
+    def __init__(self, chave, intervalo=15.5, conexao=None):
         self.chave, self.intervalo, self._ultima = chave, intervalo, 0.0
-        self.db = sqlite3.connect(DIR / "cache.db")
-        self.db.execute("CREATE TABLE IF NOT EXISTS vt (sha TEXT PRIMARY KEY, ts REAL, dados TEXT)")
+        self.db = conexao or db.conectar()
 
     def em_cache(self, sha):
-        row = self.db.execute("SELECT ts, dados FROM vt WHERE sha=?", (sha,)).fetchone()
+        row = self.db.execute("SELECT ts, dados FROM vt_cache WHERE sha=?", (sha,)).fetchone()
         if row and time.time() - row[0] < VALIDADE:
             return json.loads(row[1])
         return None
@@ -57,6 +55,6 @@ class VirusTotal:
             break
         else:
             raise VTErro("limite de consultas do VirusTotal atingido")
-        self.db.execute("INSERT OR REPLACE INTO vt VALUES (?,?,?)", (sha, time.time(), json.dumps(res)))
+        self.db.execute("INSERT OR REPLACE INTO vt_cache VALUES (?,?,?)", (sha, time.time(), json.dumps(res)))
         self.db.commit()
         return res

@@ -66,6 +66,6 @@ def ambiente_fake(tmp_path: Path, apk_debug: Path, monkeypatch: pytest.MonkeyPat
     env.update({
         "CELSCAN_ADB": str(FAKE_ADB), "APK_TESTE": str(apk_debug),
         "CELSCAN_HOME": str(tmp_path / "home"), "CELSCAN_FAKE_ESTADO": str(tmp_path / "estado"),
-        "CELSCAN_OFFLINE": "1", "PYTHONPATH": str(RAIZ),
+        "CELSCAN_OFFLINE": "1", "PYTHONPATH": str(RAIZ), "COLUMNS": "200",
     })
     return env
