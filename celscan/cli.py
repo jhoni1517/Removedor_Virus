@@ -3,6 +3,7 @@ import argparse
 import getpass
 import os
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from rich.prompt import Confirm, InvalidResponse, Prompt
 from rich.table import Table
 
 from celscan.config import VERSAO
-from celscan.core import adb
+from celscan.core import adb, log
 
 con = Console()
 
@@ -120,20 +121,21 @@ def cmd_android(a):
     vt = VirusTotal(chave) if chave else None
 
     sc = Varredura(ap, vt, iocs, sistema=a.sistema)
-    with con.status("Coletando dados do aparelho (uma única leitura)..."):
+    inicio = time.perf_counter()
+    with con.status("Coletando dados do aparelho (uma única leitura)..."), log.etapa("coleta"):
         sc.coletar()
     info = sc.info()
     mostrar_info(info)
     for av in sc.avisos:
         con.print(f"[yellow]Aviso:[/] {av}")
 
-    with barra() as p:
+    with barra() as p, log.etapa("hashes"):
         t = p.add_task("Calculando hashes dos apps", total=len(sc.apps))
         for pkg in sc.calcular_hashes():
             p.update(t, advance=1, description=f"Hash: {pkg[:40]}")
 
     cands = sc.candidatos()
-    with barra() as p:
+    with barra() as p, log.etapa("assinaturas"):
         t = p.add_task("Verificando assinaturas", total=len(cands))
         for pkg in cands:
             sc.ler_certificado(pkg)
@@ -144,7 +146,7 @@ def cmd_android(a):
         sem_cache = sum(1 for x in alvo if sc.apps[x].sha256 and vt.em_cache(sc.apps[x].sha256) is None)
         if sem_cache:
             con.print(f"[dim]VirusTotal: {sem_cache} consulta(s) novas (~{sem_cache * 16 // 60 + 1} min no plano grátis).[/]")
-        with barra() as p:
+        with barra() as p, log.etapa("virustotal"):
             t = p.add_task("Consultando VirusTotal", total=len(alvo))
             for pkg in alvo:
                 sc.consultar_vt(pkg)
@@ -154,6 +156,8 @@ def cmd_android(a):
 
     achados, res = sc.pontuar()
     n, rot = nota(achados, res)
+    duracao = time.perf_counter() - inicio
+    log.LOGGER.info("varredura: %d apps em %.1fs (nota %d)", len(res), duracao, n)
 
     if achados:
         con.print("\n[bold]Configurações do aparelho[/]")
@@ -166,7 +170,8 @@ def cmd_android(a):
     if risco or a.todos:
         con.print(tabela_apps(res, a.todos))
     cor = "green" if n >= 70 else "yellow" if n >= 50 else "red"
-    con.print(Panel(f"[bold {cor}]{n}/100 — {rot}[/]\n{len(res)} apps analisados · {len(risco)} com risco médio/alto",
+    con.print(Panel(f"[bold {cor}]{n}/100 — {rot}[/]\n{len(res)} apps analisados · {len(risco)} com risco médio/alto"
+                    f" · {duracao:.0f} s",
                     title="Resultado", border_style=cor))
 
     acoes = []
@@ -389,10 +394,13 @@ def main():
     s.set_defaults(func=cmd_iocs)
 
     a = p.parse_args()
+    arquivo_log = log.configurar()
+    log.LOGGER.info("CelScan %s: %s", VERSAO, " ".join(sys.argv[1:]))
     try:
         a.func(a)
     except adb.AdbErro as e:
-        con.print(Panel(str(e), title="Erro de conexão", border_style="red"))
+        log.LOGGER.error("erro de conexão: %s", e)
+        con.print(Panel(f"{e}\n\n[dim]Detalhes no log: {arquivo_log}[/]", title="Erro de conexão", border_style="red"))
         sys.exit(1)
     except KeyboardInterrupt:
         con.print("\n[yellow]Interrompido.[/]")

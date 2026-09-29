@@ -10,10 +10,12 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import zipfile
 from collections.abc import Iterator
 
 from celscan.config import DIR, recursos
+from celscan.core import log
 from celscan.core.parsers import secoes
 
 URL_PT = "https://dl.google.com/android/repository/platform-tools-latest-{}.zip"
@@ -70,11 +72,15 @@ def binario() -> str:
 
 
 def run(args: list[str], timeout: int = 120, entrada: str | None = None) -> subprocess.CompletedProcess[str]:
+    inicio = time.perf_counter()
     try:
-        return subprocess.run([binario(), *args], capture_output=True, encoding="utf-8", errors="replace",
-                              timeout=timeout, input=entrada, creationflags=SEM_JANELA)
+        r = subprocess.run([binario(), *args], capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, input=entrada, creationflags=SEM_JANELA)
     except subprocess.TimeoutExpired as e:
+        log.comando(args, None, time.perf_counter() - inicio, 0)
         raise AdbErro(f"'adb {' '.join(map(str, args[:4]))}' excedeu {timeout}s") from e
+    log.comando(args, r.returncode, time.perf_counter() - inicio, len(r.stdout or ""))
+    return r
 
 
 def dispositivos() -> list[tuple[str, str]]:
@@ -109,14 +115,20 @@ class Aparelho:
 
     def bytes(self, comando: str, timeout: int = 60) -> bytes:
         """Saída binária sem conversão de quebra de linha (exec-out)."""
+        inicio = time.perf_counter()
         try:
-            return subprocess.run([binario(), "-s", self.serial, "exec-out", comando],
-                                  capture_output=True, timeout=timeout, creationflags=SEM_JANELA).stdout
+            r = subprocess.run([binario(), "-s", self.serial, "exec-out", comando],
+                               capture_output=True, timeout=timeout, creationflags=SEM_JANELA)
         except subprocess.TimeoutExpired as e:
+            log.comando(["exec-out", comando], None, time.perf_counter() - inicio, 0)
             raise AdbErro(f"leitura binária excedeu {timeout}s") from e
+        log.comando(["exec-out", comando], r.returncode, time.perf_counter() - inicio, len(r.stdout))
+        return r.stdout
 
     def script(self, texto: str, timeout: int = 600) -> dict[str, str]:
         """Envia um script shell, executa numa única chamada e devolve as seções."""
+        primeira = next((linha for linha in texto.splitlines() if linha.startswith("sec ")), "?")
+        log.LOGGER.info("script no aparelho (%d linhas, começa com: %s)", texto.count("\n"), primeira)
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False,
                                          encoding="utf-8", newline="\n") as f:
             f.write(texto)
@@ -134,13 +146,16 @@ class Aparelho:
 
     def linhas(self, comando: str) -> Iterator[str]:
         """Executa e entrega a saída linha a linha (para barra de progresso)."""
+        inicio, n = time.perf_counter(), 0
         p = subprocess.Popen([binario(), "-s", self.serial, "shell", comando],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                              encoding="utf-8", errors="replace", creationflags=SEM_JANELA)
         assert p.stdout is not None
         try:
             for linha in p.stdout:
+                n += len(linha)
                 yield linha.rstrip("\r\n")
         finally:
             p.stdout.close()
             p.wait()
+            log.comando(["shell", comando], p.returncode, time.perf_counter() - inicio, n)
