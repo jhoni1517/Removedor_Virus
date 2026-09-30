@@ -271,6 +271,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def ajuda_conexao() -> dict[str, Any]:
         return MARCAS
 
+    @app.get("/api/conexao/driver")
+    def diagnostico_driver() -> dict[str, Any]:
+        """No Windows, aponta celular com driver USB com problema (causa nº 1 de 'não aparece')."""
+        from celscan.core import drivers
+        return drivers.diagnosticar()
+
     # ---- varreduras
     @app.post("/api/varreduras")
     def varrer(p: PedidoVarredura) -> dict[str, Any]:

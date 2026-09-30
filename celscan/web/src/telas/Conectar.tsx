@@ -134,6 +134,7 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
   const [wifi, setWifi] = useState(false);
   const [baixando, setBaixando] = useState(false);
   const [procurando, setProcurando] = useState(false);
+  const [driver, setDriver] = useState<{ windows: boolean; problemas: { fabricante: string; link: string }[]; link_generico: string } | null>(null);
 
   async function procurarDeNovo() {
     setProcurando(true);
@@ -152,6 +153,13 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
   }, []);
 
   const prontos = dispositivos.filter((d) => d.estado === "device");
+
+  // Quando nada aparece no Windows, checa se é problema de driver do fabricante (causa nº 1).
+  useEffect(() => {
+    if (prontos.length === 0 && !driver) {
+      api<typeof driver>("/conexao/driver").then(setDriver).catch(() => undefined);
+    }
+  }, [prontos.length, driver]);
   const naoAutorizado = dispositivos.some((d) => d.estado === "unauthorized");
 
   async function baixarAdb() {
@@ -209,6 +217,20 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
             {procurando ? "Procurando..." : "Procurar de novo"}
           </Botao>
           <span className="text-xs text-fraco">Já tocou em Permitir e não apareceu? Feche emuladores de Android e clique aqui.</span>
+        </div>
+      )}
+
+      {prontos.length === 0 && driver?.windows && driver.problemas.length > 0 && (
+        <div className="mb-6 rounded-lg border border-atencao/40 bg-atencao-suave p-4 text-sm" role="status">
+          <strong>Parece problema de driver USB.</strong> O Windows não reconheceu o(s) aparelho(s):{" "}
+          {driver.problemas.map((p, i) => (
+            <span key={p.fabricante}>
+              {i > 0 && ", "}
+              <a className="underline" href={p.link} target="_blank" rel="noreferrer">driver {p.fabricante}</a>
+            </span>
+          ))}. Instale o driver, desligue e ligue o cabo, e clique em "Procurar de novo".
+          {" "}Se não resolver, tente o{" "}
+          <a className="underline" href={driver.link_generico} target="_blank" rel="noreferrer">driver genérico do Google</a>.
         </div>
       )}
 
