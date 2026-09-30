@@ -5,5 +5,5 @@
 300|1727600400|/sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/IMG-20260903-WA0001.jpg
 700|1727600500|/sdcard/Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db.crypt14
 1500|1727600600|/sdcard/DCIM/.trashed-1735689600-IMG_apagada.jpg
-64|1727600700|/sdcard/DCIM/.thumbnails/1735689700.jpg
+2100000|1727600700|/sdcard/DCIM/.thumbnails/1735689700.jpg
 200|1727600800|/sdcard/Android/media/com.whatsapp/WhatsApp/Media/.Statuses/STATUS-20260930.jpg

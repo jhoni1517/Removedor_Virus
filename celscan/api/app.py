@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, navegacao, quarentena, recuperacao
+from celscan.acoes import backup, navegacao, otimizacao, quarentena, recuperacao
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -51,6 +51,15 @@ class PedidoVarredura(BaseModel):
     serial: str
     modo: str = "rapido"
     sistema: bool = False
+
+
+class PedidoSerial(BaseModel):
+    serial: str
+
+
+class PedidoLimpeza(BaseModel):
+    serial: str
+    categorias: list[str] = Field(default_factory=lambda: list(otimizacao.LIXO))
 
 
 class PedidoRemocao(BaseModel):
@@ -489,6 +498,41 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         ap = aparelhos.pronto(p.serial)
         try:
             return {"aberto": navegacao.abrir_ajuste(ap, p.ajuste)}
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+
+    # ---- diagnóstico e limpeza segura
+    @app.post("/api/diagnostico")
+    def diagnostico(p: PedidoSerial) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "diagnostico", "descricao": "Lendo bateria, armazenamento, memória e IMEI",
+                       "detalhe": "", "atual": None, "total": None, "estimativa_s": 30})
+            return otimizacao.diagnostico(ap)
+        return nova_tarefa("diagnostico", p.serial, rodar)
+
+    @app.post("/api/limpeza/cache")
+    def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "limpeza", "descricao": "Limpando o cache dos apps", "detalhe": "",
+                       "atual": None, "total": None, "estimativa_s": 40})
+            return {"liberado_mb": otimizacao.limpar_cache(ap)}
+        return nova_tarefa("limpeza_cache", p.serial, rodar)
+
+    @app.post("/api/limpeza/lixo")
+    def medir_lixo(p: PedidoSerial) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        itens = otimizacao.medir_lixo(ap)
+        return {"itens": itens, "total_mb": sum(i["kb"] for i in itens) / 1024}
+
+    @app.post("/api/limpeza/lixo/apagar")
+    def apagar_lixo(p: PedidoLimpeza) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        try:
+            return {"liberado_mb": otimizacao.limpar_lixo(ap, p.categorias)}
         except ValueError as e:
             raise HTTPException(422, str(e))
 

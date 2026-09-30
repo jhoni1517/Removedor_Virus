@@ -227,6 +227,14 @@ def cmd_otimizar(a):
             mb = ot.limpar_cache(ap)
         feitos.append(f"Cache limpo: {mb:.0f} MB liberados" if mb is not None else "Cache limpo")
         con.print(f"[green]✔[/] {feitos[-1]}")
+    lixo = ot.medir_lixo(ap)
+    if lixo and (tudo or a.lixo or Confirm.ask(
+            f"Apagar lixo seguro ({sum(i['kb'] for i in lixo) / 1024:.0f} MB: miniaturas, temporários, cache)?",
+            default=True)):
+        with con.status("Apagando lixo seguro..."):
+            mb = ot.limpar_lixo(ap, [i["chave"] for i in lixo])
+        feitos.append(f"Lixo apagado: {mb:.0f} MB liberados" if mb is not None else "Lixo apagado")
+        con.print(f"[green]✔[/] {feitos[-1]}")
     if tudo or a.compilar or Confirm.ask("Otimizar apps (compilação — pode levar vários minutos)?", default=False):
         with con.status("Compilando apps... não desconecte"):
             ot.compilar(ap)
@@ -569,6 +577,7 @@ def main():
     s.add_argument("--serial")
     s.add_argument("--tudo", action="store_true", help="Cache + compilação + animações sem perguntar")
     s.add_argument("--cache", action="store_true")
+    s.add_argument("--lixo", action="store_true", help="Apaga lixo seguro (miniaturas, temporários, cache do Telegram)")
     s.add_argument("--compilar", action="store_true")
     s.add_argument("--animacoes", type=float, help="Escala das animações (ex: 0.5; 1 = padrão)")
     s.add_argument("--debloat", action="store_true")

@@ -172,6 +172,18 @@ def test_api_recuperacao(fake):
         assert destino.is_dir() and any(destino.rglob("*"))
 
 
+def test_api_limpeza(fake):
+    with TestClient(criar_app(TOKEN, observar=False)) as c:
+        lixo = c.post("/api/limpeza/lixo", json={"serial": "ABC123"}, headers=H).json()
+        chaves = {i["chave"] for i in lixo["itens"]}
+        assert "miniaturas" in chaves and lixo["total_mb"] > 0
+        r = c.post("/api/limpeza/lixo/apagar", json={"serial": "ABC123", "categorias": ["miniaturas"]},
+                   headers=H).json()
+        assert "liberado_mb" in r
+        assert c.post("/api/limpeza/lixo/apagar", json={"serial": "ABC123", "categorias": ["xxx"]},
+                      headers=H).status_code == 422
+
+
 def test_api_espelho_otg_pausa_o_adb(fake):
     with TestClient(criar_app(TOKEN, observar=False)) as c:
         pausa = c.app.state.aparelhos.pausa

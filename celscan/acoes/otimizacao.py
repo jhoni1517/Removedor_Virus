@@ -1,6 +1,7 @@
 """Diagnóstico e otimização real via ADB (sem 'limpador de RAM' de fachada)."""
 import json
 import re
+import shlex
 import time
 
 import requests
@@ -80,6 +81,44 @@ def limpar_cache(ap):
     antes = livre_kb(ap)
     ap.sh("pm trim-caches 999G", timeout=600)
     time.sleep(2)
+    depois = livre_kb(ap)
+    return (depois - antes) / 1024 if antes is not None and depois is not None else None
+
+
+# Lixo seguro: o celular refaz sozinho. NUNCA inclui fotos, vídeos ou documentos do dono (isso é irreversível).
+LIXO: dict[str, tuple[str, tuple[str, ...]]] = {
+    "miniaturas": ("Miniaturas (o celular refaz sozinho)",
+                   ("/sdcard/DCIM/.thumbnails", "/sdcard/Pictures/.thumbnails", "/sdcard/Movies/.thumbnails")),
+    "temporarios": ("Arquivos temporários e de log", ("/sdcard/LOST.DIR", "/sdcard/.temp", "/sdcard/temp")),
+    "cache_telegram": ("Cache do Telegram (as mídias salvas continuam)",
+                       ("/sdcard/Android/data/org.telegram.messenger/cache",)),
+}
+
+
+def medir_lixo(ap):
+    """Mede, sem apagar, quanto cada tipo de lixo seguro ocupa (kB)."""
+    res = []
+    for chave, (nome, pastas) in LIXO.items():
+        kb = 0
+        for p in pastas:
+            q = shlex.quote(p)
+            saida = ap.sh(f"[ -d {q} ] && du -sk {q} 2>/dev/null || true")
+            for tam, _pasta in re.findall(r"^(\d+)\s+(.+)$", saida, re.M):
+                kb += int(tam)
+        if kb > 0:
+            res.append({"chave": chave, "nome": nome, "kb": kb})
+    return res
+
+
+def limpar_lixo(ap, categorias):
+    """Apaga só o lixo seguro escolhido (conteúdo das pastas rebuildáveis). Nunca mídia pessoal."""
+    antes = livre_kb(ap)
+    for chave in categorias:
+        if chave not in LIXO:
+            raise ValueError(f"tipo de lixo desconhecido: {chave}")
+        for p in LIXO[chave][1]:
+            q = shlex.quote(p)
+            ap.sh(f"[ -d {q} ] && rm -rf {q}/* 2>/dev/null || true", timeout=300)
     depois = livre_kb(ap)
     return (depois - antes) / 1024 if antes is not None and depois is not None else None
 

@@ -110,6 +110,16 @@ if a[0] == "shell":
             if arq.startswith(pasta) and manter(arq):
                 print(f"{tam}|{mtime}|{arq}")
         fim()
+    if "du -sk" in c:
+        import shlex as _sh
+        m = re.search(r"du -sk (\S+|'[^']*')", c)
+        alvo = _sh.split(m.group(1))[0].rstrip("/") + "/" if m else ""
+        kb = sum(tam for arq, (tam, _mt) in arquivos_fixture().items() if arq.startswith(alvo)) // 1024
+        if kb > 0:
+            print(f"{kb}\t{alvo.rstrip('/')}")
+        fim()
+    if c.startswith("pm trim-caches") or c.startswith("rm -rf") or "rm -rf" in c:
+        fim()
     if c.startswith("sha256sum "):
         import hashlib
         import shlex
