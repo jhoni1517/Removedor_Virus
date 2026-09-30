@@ -26,12 +26,13 @@ Antes de começar, preciso destas respostas — algumas têm custo:
 
 ## Fases (ordem por impacto × esforço; segue a seção 9 do seu pedido)
 
-### Fase 0 — Fundação de qualidade (rápida, sem quebrar nada)
-- Quarentena em **zip com senha `infected`** + manifesto (dívida 5 — o antivírus para de apagar prova).
-- **Verificar SHA-256** de todo download (platform-tools, scrcpy) (dívida 7).
-- Segredos no **keyring** do sistema (dívida 10).
-- Detecção de **driver USB do fabricante** no Windows + oferta de instalação (dívida 6).
-- **Risco:** baixo. **Entrega:** correções + testes.
+### Fase 0 — Fundação de qualidade (rápida, sem quebrar nada) — ✅ CONCLUÍDA (b5)
+- ✅ Quarentena em **zip com senha `infected`** + Cryptodome (dívida 5 — antivírus para de apagar prova).
+- ✅ **SHA-256 + allowlist de host** em todo download (dívida 7); scrcpy 4.1 com hash fixado.
+- ✅ Segredos no **keyring** do sistema, com migração e fallback (dívida 10).
+- ✅ Detecção de **driver USB do fabricante** no Windows + link do driver na tela Conectar (dívida 6).
+- **Testado:** 90 testes (pytest) + build da interface. 🔬 **Falta confirmar no Windows real** (keyring
+  no Gerenciador de Credenciais, aviso de driver com celular de verdade).
 
 ### Fase 1 — Motor sólido (prioridade 1 do seu pedido)
 - Migrar `core/adb.py` para **adbutils** (conexão persistente) + **asyncio** por aparelho (dívida 1).
