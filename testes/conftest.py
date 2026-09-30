@@ -15,6 +15,7 @@ import pytest
 # Antes de importar o celscan: dados em pasta temporária e nada de internet.
 os.environ["CELSCAN_HOME"] = tempfile.mkdtemp(prefix="celscan_teste_")
 os.environ["CELSCAN_OFFLINE"] = "1"
+os.environ["CELSCAN_SEM_KEYRING"] = "1"  # nos testes, segredos vão para o config.json (sem cofre do SO)
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))

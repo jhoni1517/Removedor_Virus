@@ -28,6 +28,8 @@ ocultos = [
 # A lib websockets usa imports preguiçosos (__getattr__); sem coletar tudo, o WebSocket não sobe no exe
 # e a interface fica presa em "Reconectando...". Coleta explícita resolve.
 ocultos += collect_submodules("websockets")
+# keyring escolhe o backend em tempo de execução; no Windows é o Gerenciador de Credenciais.
+ocultos += ["keyring.backends.Windows", "keyring.backends.null", "keyring.backends.fail"]
 excluir = ["tkinter", "unittest", "pydoc", "numpy", "pytest", "cryptography"]  # PIL fica: o reportlab usa
 
 janela = Analysis([str(raiz / "instalador" / "celscan_app.py")], pathex=[str(raiz)], datas=datas,
