@@ -36,6 +36,11 @@ with open(os.path.join(EST, "comandos.log"), "a", encoding="utf-8") as log:
 
 if a == ["start-server"]:
     fim()
+if a == ["track-devices"]:
+    lista = os.getenv("CELSCAN_FAKE_DISPOSITIVOS", "ABC123\tdevice\n")
+    sys.stdout.write(f"{len(lista):04x}{lista}")
+    sys.stdout.flush()
+    fim()
 if a == ["devices"]:
     fim("* daemon not running; starting now at tcp:5037\nList of devices attached\nABC123\tdevice\nXYZ\tunauthorized\n")
 if a[0] == "-s":

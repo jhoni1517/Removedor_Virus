@@ -1,0 +1,71 @@
+# Passo a passo para ligar a Depuração USB, por marca.
+# Os nomes dos menus mudam entre versões do sistema: confira com aparelhos reais e ajuste aqui.
+# "fabricantes": valores de ro.product.manufacturer (minúsculas) que usam este guia.
+
+comum_final:
+  - titulo: "Conecte o cabo"
+    texto: "Use um cabo USB de dados (alguns cabos só carregam). Se o celular perguntar, escolha \"Transferência de arquivos\"."
+  - titulo: "Autorize este computador"
+    texto: "Desbloqueie a tela. Vai aparecer \"Permitir depuração USB?\": marque \"Sempre permitir neste computador\" e toque em Permitir."
+
+marcas:
+  samsung:
+    nome: Samsung
+    fabricantes: [samsung]
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o telefone > Informações do software > toque 7 vezes em \"Número de compilação\". Digite o PIN se pedir."
+      - titulo: "Ligue a depuração USB"
+        texto: "Volte em Configurações > Opções do desenvolvedor (no fim da lista) > ative \"Depuração USB\"."
+  motorola:
+    nome: Motorola
+    fabricantes: [motorola, lenovo]
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o telefone > toque 7 vezes em \"Número da versão\"."
+      - titulo: "Ligue a depuração USB"
+        texto: "Configurações > Sistema > Opções do desenvolvedor > ative \"Depuração USB\"."
+  xiaomi:
+    nome: Xiaomi / Redmi / POCO
+    fabricantes: [xiaomi, redmi, poco]
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o telefone > toque 7 vezes em \"Versão do SO\" (HyperOS) ou \"Versão da MIUI\"."
+      - titulo: "Ligue a depuração USB"
+        texto: "Configurações > Configurações adicionais > Opções do desenvolvedor > ative \"Depuração USB\"."
+      - titulo: "Permita as correções (Xiaomi)"
+        texto: "Na mesma tela, ative também \"Depuração USB (configurações de segurança)\". Sem isso a Xiaomi bloqueia remover permissões. Pode pedir chip e conta Mi."
+  oppo:
+    nome: OPPO / Realme / OnePlus
+    fabricantes: [oppo, realme, oneplus]
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o dispositivo > Versão > toque 7 vezes em \"Número da versão\". Digite o PIN se pedir."
+      - titulo: "Ligue a depuração USB"
+        texto: "Configurações > Configurações adicionais (ou Sistema) > Opções do desenvolvedor > ative \"Depuração USB\"."
+      - titulo: "Se alguma correção falhar"
+        texto: "Em Opções do desenvolvedor, ative \"Desativar monitoramento de permissões\" (ColorOS) e tente de novo."
+  vivo:
+    nome: vivo / iQOO
+    fabricantes: [vivo, iqoo]
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o telefone > Informações de versão de software > toque 7 vezes em \"Versão do software\"."
+      - titulo: "Ligue a depuração USB"
+        texto: "Configurações > Configurações do sistema > Opções do desenvolvedor > ative \"Depuração USB\"."
+  generico:
+    nome: Outra marca
+    fabricantes: []
+    passos:
+      - titulo: "Libere as opções do desenvolvedor"
+        texto: "Configurações > Sobre o telefone > toque 7 vezes em \"Número da versão\" (ou \"Número de compilação\")."
+      - titulo: "Ligue a depuração USB"
+        texto: "Configurações > Sistema > Opções do desenvolvedor > ative \"Depuração USB\"."
+
+wifi:
+  - titulo: "Mesma rede"
+    texto: "O celular e o computador precisam estar na mesma rede Wi-Fi (Android 11 ou mais novo)."
+  - titulo: "Abra o pareamento"
+    texto: "Opções do desenvolvedor > Depuração por Wi-Fi > ative > \"Parear dispositivo com código QR\"."
+  - titulo: "Leia o código"
+    texto: "Aponte a câmera do celular para o código QR mostrado aqui. A conexão acontece sozinha."

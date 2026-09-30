@@ -11,9 +11,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from celscan.config import DIR, recursos
 from celscan.core import log
@@ -26,8 +27,8 @@ EXE = "adb.exe" if os.name == "nt" else "adb"
 SEM_JANELA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _ADB: str | None = None
 
-__all__ = ["AdbAusente", "AdbErro", "Aparelho", "binario", "conectar", "dispositivos", "instalar_platform_tools",
-           "localizar", "parear", "run", "secoes"]
+__all__ = ["AdbAusente", "AdbErro", "Aparelho", "acompanhar", "binario", "conectar", "dispositivos",
+           "instalar_platform_tools", "localizar", "parear", "parse_lista", "run", "secoes"]
 
 
 class AdbErro(Exception):
@@ -92,13 +93,54 @@ def run(args: list[str], timeout: int = 120, entrada: str | None = None) -> subp
 
 def dispositivos() -> list[tuple[str, str]]:
     run(["start-server"], timeout=30)
+    return parse_lista(run(["devices"]).stdout)
+
+
+ESTADOS = r"device|unauthorized|offline|recovery|sideload|bootloader|authorizing|connecting|no permissions.*"
+
+
+def parse_lista(texto: str) -> list[tuple[str, str]]:
+    """Linhas 'serial<TAB>estado' (saída de `adb devices` ou de um quadro do track-devices)."""
     res = []
-    for linha in run(["devices"]).stdout.splitlines():
-        m = re.match(r"^(\S+)\s+(device|unauthorized|offline|recovery|sideload|"
-                     r"bootloader|no permissions.*)$", linha.strip())
+    for linha in texto.splitlines():
+        m = re.match(rf"^(\S+)\s+({ESTADOS})$", linha.strip())
         if m:
             res.append((m.group(1), m.group(2)))
     return res
+
+
+def acompanhar(callback: Callable[[list[tuple[str, str]]], None], parar: threading.Event,
+               espera_reinicio: float = 2.0) -> None:
+    """Chama `callback(lista)` a cada mudança de aparelhos (adb track-devices). Bloqueia até `parar`.
+
+    O track-devices manda quadros "<4 dígitos hex de tamanho><lista>". Se o processo cair
+    (adb reiniciado, cabo, etc.), recomeça depois de `espera_reinicio` segundos.
+    """
+    while not parar.is_set():
+        try:
+            p = subprocess.Popen([*_cmd(), "track-devices"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 creationflags=SEM_JANELA)
+        except (OSError, AdbErro) as e:
+            log.LOGGER.warning("track-devices indisponível: %s", e)
+            parar.wait(espera_reinicio * 5)
+            continue
+        assert p.stdout is not None
+        vigia = threading.Thread(target=lambda proc=p: (parar.wait(), proc.kill()), daemon=True)
+        vigia.start()
+        try:
+            while not parar.is_set():
+                cabecalho = p.stdout.read(4)
+                if len(cabecalho) < 4:
+                    break
+                try:
+                    tamanho = int(cabecalho, 16)
+                except ValueError:
+                    break
+                callback(parse_lista(p.stdout.read(tamanho).decode("utf-8", "replace")))
+        finally:
+            p.kill()
+            p.wait()
+        parar.wait(espera_reinicio)
 
 
 def parear(endereco: str, codigo: str) -> str:

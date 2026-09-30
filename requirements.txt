@@ -3,3 +3,9 @@ requests>=2.31
 PyYAML>=6.0
 # Apenas para iPhone:
 # mvt>=2.5   (e libimobiledevice: idevice_id, idevicebackup2, idevicediagnostics)
+# Interface (Fase 2)
+fastapi>=0.110
+uvicorn>=0.29
+qrcode>=7.4
+reportlab>=4.0
+pywebview>=5.0; sys_platform == "win32"
