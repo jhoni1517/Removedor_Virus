@@ -9,6 +9,21 @@ Current Battery Service state:
   voltage: 4102
   temperature: 312
   Charge counter: 3500000
+@@SEC saude
+charge_full=3800000
+charge_full_design=5000000
+cycle_count=412
+@@SEC ident
+ro.product.manufacturer=Xiaomi
+ro.product.model=24090RA29G
+ro.product.marketname=Redmi Note 14
+ro.serialno=ABC123
+ro.build.version.release=16
+ro.build.version.security_patch=2026-07-01
+@@SEC imei
+Result: Parcel(00000000 0000000f 00360038 00340032 '....8.6.4.2.1.0.'
+  0x00000010: 00330035 00370039 00320031 00340033 '.3.5.7.9.1.2.3.4.'
+  0x00000020: 00000035                            '.5.')
 @@SEC df
 Filesystem 1K-blocks Used Available Use% Mounted on
 /dev/block/dm-5 115343360 90000000 25343360 78% /data

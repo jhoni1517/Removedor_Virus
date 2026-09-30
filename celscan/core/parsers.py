@@ -211,6 +211,8 @@ def chave_valor(txt: str) -> dict[str, str]:
 
 SAUDE_BATERIA = {"1": "desconhecida", "2": "boa", "3": "superaquecida", "4": "morta",
                  "5": "sobretensão", "6": "falha", "7": "fria"}
+STATUS_BATERIA = {"1": "desconhecido", "2": "carregando", "3": "descarregando",
+                  "4": "sem carregar", "5": "cheia"}
 
 
 def bateria(txt: str) -> dict[str, str | None] | None:
@@ -222,10 +224,39 @@ def bateria(txt: str) -> dict[str, str | None] | None:
     return {
         "nivel": b.get("level"),
         "saude": SAUDE_BATERIA.get(b.get("health", ""), b.get("health")),
+        "situacao": STATUS_BATERIA.get(b.get("status", ""), b.get("status")),
         "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdigit() else None,
         "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdigit() else None,
         "ciclos": b.get("cycle count") or b.get("battery cycle count") or b.get("mbatterycyclecount"),
     }
+
+
+def saude_bateria(txt: str) -> dict[str, int] | None:
+    """Lê charge_full/charge_full_design/cycle_count do /sys: capacidade real e desgaste da bateria."""
+    v: dict[str, int] = {}
+    for k, val in re.findall(r"^(\w+)=(-?\d+)\s*$", txt, re.M):
+        v[k] = int(val)
+    full, design = v.get("charge_full"), v.get("charge_full_design")
+    res: dict[str, int] = {}
+    if full and design and design > 0:
+        res["saude_pct"] = round(full / design * 100)
+        res["capacidade_mah"] = round(full / 1000)
+        res["capacidade_projeto_mah"] = round(design / 1000)
+    if "cycle_count" in v and v["cycle_count"] >= 0:
+        res["ciclos"] = v["cycle_count"]
+    return res or None
+
+
+def identificacao(txt: str) -> dict[str, str]:
+    """Pares chave=valor da seção 'ident' (getprop rotulado)."""
+    return {k: val.strip() for k, val in re.findall(r"^([\w.]+)=(.*)$", txt, re.M) if val.strip()}
+
+
+def imei(txt: str) -> str | None:
+    """Extrai os dígitos do IMEI da saída de `service call iphonesubinfo` (parcel em hex com texto UTF-16)."""
+    chars = "".join(re.findall(r"'([^']*)'", txt))
+    digitos = re.sub(r"\D", "", chars)
+    return digitos if 14 <= len(digitos) <= 17 else None
 
 
 def df(txt: str) -> dict[str, float] | None:

@@ -186,10 +186,25 @@ def cmd_otimizar(a):
     with con.status("Lendo bateria, armazenamento e memória..."):
         d = ot.diagnostico(ap)
     b, arm, ram = d["bateria"], d["armazenamento"], d["ram"]
+    ident = d.get("identificacao", {})
     t = Table.grid(padding=(0, 2))
+    if ident:
+        nome = ident.get("marketname") or ident.get("model") or "?"
+        t.add_row("Aparelho", f"{ident.get('manufacturer', '')} {nome}".strip())
+        if ident.get("imei"):
+            t.add_row("IMEI", ident["imei"])
+        if ident.get("release"):
+            t.add_row("Android", f"{ident['release']} · patch {ident.get('security_patch', '?')}")
     if b:
-        t.add_row("Bateria", f"{b['nivel']}% · saúde {b['saude']} · {b['temperatura'] or '?'}"
-                  + (f" · {b['ciclos']} ciclos" if b.get("ciclos") else ""))
+        linha = f"{b['nivel']}% · saúde {b['saude']} · {b['temperatura'] or '?'}"
+        if b.get("situacao"):
+            linha += f" · {b['situacao']}"
+        if b.get("saude_pct"):
+            cap = f"{b.get('capacidade_mah', '?')}/{b.get('capacidade_projeto_mah', '?')} mAh"
+            linha += f" · capacidade real ~{b['saude_pct']}% ({cap})"
+        if b.get("ciclos"):
+            linha += f" · {b['ciclos']} ciclos"
+        t.add_row("Bateria", linha)
     if arm:
         pct = arm["livre_gb"] / arm["total_gb"] * 100
         cor_livre = "red" if pct < 10 else "green"
