@@ -93,6 +93,7 @@ def listar(ap: Aparelho, categorias: list[str]) -> list[Arquivo]:
         for pasta in CATEGORIAS[cat][1]:
             cmd = (f"[ -d {shlex.quote(pasta)} ] && find {shlex.quote(pasta)} -type f "
                    f"! -name '.nomedia' ! -path '*/.thumbnails/*' ! -path '*/.trashed*' "
+                   f"! -path '*/.Statuses/*' "
                    f"-exec stat -c '%s|%Y|%n' {{}} + 2>/dev/null")
             for tamanho, mtime, caminho in parse_lista(ap.sh(cmd, timeout=600)):
                 if caminho not in vistos:
@@ -142,9 +143,11 @@ def _sha256_local(caminho: Path) -> str:
 
 def copiar(ap: Aparelho, arquivos: list[Arquivo], raiz: Path, progresso: Progresso | None = None,
            cancelar: threading.Event | None = None, verificar_hash: bool = False,
-           info: dict[str, str] | None = None) -> ResumoBackup:
+           info: dict[str, str] | None = None,
+           destino_de: Callable[[Path, Arquivo], Path] | None = None) -> ResumoBackup:
     from celscan.servicos import Cancelado, verificar_conexao
 
+    onde = destino_de or destino_local
     raiz.mkdir(parents=True, exist_ok=True)
     resumo = ResumoBackup(destino=str(raiz), verificado_hash=verificar_hash)
     total_bytes = sum(a.tamanho for a in arquivos) or 1
@@ -156,7 +159,7 @@ def copiar(ap: Aparelho, arquivos: list[Arquivo], raiz: Path, progresso: Progres
             raise Cancelado(f"Cópia interrompida. {resumo.copiados + resumo.pulados} de {len(arquivos)} arquivos "
                             f"já estão no PC; rode de novo para continuar de onde parou.")
         cat = resumo.por_categoria.setdefault(a.categoria, {"arquivos": 0, "bytes": 0})
-        local = destino_local(raiz, a)
+        local = onde(raiz, a)
         decorrido = time.perf_counter() - inicio
         velocidade = resumo.bytes_copiados / decorrido if decorrido > 1 else 0
         if progresso:
@@ -225,7 +228,8 @@ def _gravar_relatorio(raiz: Path, resumo: ResumoBackup, arquivos: list[Arquivo],
               "Conferência: " + ("tamanho e SHA-256 de cada arquivo" if resumo.verificado_hash else
                                   "tamanho de cada arquivo"), ""]
     for c, v in resumo.por_categoria.items():
-        linhas.append(f"- {CATEGORIAS[c][0]}: {v['arquivos']} arquivos, {v['bytes'] / 1048576:.1f} MB")
+        nome = CATEGORIAS[c][0] if c in CATEGORIAS else c
+        linhas.append(f"- {nome}: {v['arquivos']} arquivos, {v['bytes'] / 1048576:.1f} MB")
     if resumo.falhas:
         linhas += ["", "Arquivos que não foram copiados:"] + [f"- {f['arquivo']}: {f['erro']}" for f in resumo.falhas]
     linhas += ["", "Contatos, agenda e conversas do WhatsApp na nuvem ficam na conta Google/WhatsApp do dono.",

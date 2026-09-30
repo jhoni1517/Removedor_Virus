@@ -90,8 +90,24 @@ if a[0] == "shell":
     if "-exec stat" in c:
         m = re.search(r"find ('([^']*)'|(\S+)) -type f", c)
         pasta = (m.group(2) or m.group(3)).rstrip("/") + "/"
+
+        def manter(arq):
+            a = arq.lower()
+            lixo = ".trashed" in a or "/.trash" in a or "recyclebin" in a or "trashbin" in a
+            mini = "/.thumbnails/" in a
+            if "! -path '*/.thumbnails/*'" in c and mini:  # exclusão do backup
+                return False
+            if "! -path '*/.trashed*'" in c and lixo:
+                return False
+            if "! -path '*/.Statuses/*'" in c and "/.statuses/" in a:
+                return False
+            if "-ipath '*/.thumbnails/*'" in c:  # recuperação: só miniaturas
+                return mini
+            if ".trashed-*" in c or "recyclebin" in c.lower():  # recuperação: só lixeira
+                return lixo
+            return True
         for arq, (tam, mtime) in arquivos_fixture().items():
-            if arq.startswith(pasta):
+            if arq.startswith(pasta) and manter(arq):
                 print(f"{tam}|{mtime}|{arq}")
         fim()
     if c.startswith("sha256sum "):

@@ -155,6 +155,23 @@ def test_api_resgate(fake):
         assert c.post("/api/abrir-pasta", json={"caminho": os.path.expanduser("~")}, headers=H).status_code == 403
 
 
+def test_api_recuperacao(fake):
+    with TestClient(criar_app(TOKEN, observar=False)) as c:
+        cats = c.get("/api/recuperacao/categorias", headers=H).json()
+        assert "lixeira" in cats["categorias"] and "root" in cats["aviso"].lower()
+
+        proc = esperar(c, c.post("/api/recuperacao/procurar", json={"serial": "ABC123"}, headers=H).json())
+        r = proc["resultado"]
+        # lixeira (1) + miniaturas (1) + status do WhatsApp (1)
+        assert r["total_arquivos"] == 3
+        assert "lixeira" in r["categorias"] and "miniaturas" in r["categorias"]
+
+        t = esperar(c, c.post("/api/recuperacao/recuperar", json={"serial": "ABC123"}, headers=H).json())
+        assert t["estado"] == "concluida" and t["resultado"]["copiados"] == 3
+        destino = Path(t["resultado"]["destino"]) / "Recuperados"
+        assert destino.is_dir() and any(destino.rglob("*"))
+
+
 def test_api_espelho_otg_pausa_o_adb(fake):
     with TestClient(criar_app(TOKEN, observar=False)) as c:
         pausa = c.app.state.aparelhos.pausa

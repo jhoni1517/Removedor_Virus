@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, navegacao, quarentena
+from celscan.acoes import backup, navegacao, quarentena, recuperacao
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -88,6 +88,13 @@ class PedidoEspelho(BaseModel):
 class PedidoAjuste(BaseModel):
     serial: str | None = None
     ajuste: str
+
+
+class PedidoRecuperacao(BaseModel):
+    serial: str
+    categorias: list[str] = Field(default_factory=lambda: list(recuperacao.PADRAO))
+    destino: str | None = None
+    verificar: bool = False
 
 
 class PedidoBackup(BaseModel):
@@ -484,6 +491,44 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return {"aberto": navegacao.abrir_ajuste(ap, p.ajuste)}
         except ValueError as e:
             raise HTTPException(422, str(e))
+
+    # ---- recuperação de sobras (lixeira, miniaturas, mídia deixada nos apps) — sem root
+    @app.get("/api/recuperacao/categorias")
+    def categorias_recuperacao() -> dict[str, Any]:
+        cats = {c: recuperacao.nome_categoria(c) for c in (*recuperacao.FONTES, *recuperacao.PASTAS_APP)}
+        return {"categorias": cats, "padrao": list(recuperacao.PADRAO),
+                "aviso": "Sem root não há recuperação de arquivos realmente apagados nem de mensagens do "
+                         "WhatsApp. O CelScan resgata o que ainda está no aparelho: lixeira da galeria, "
+                         "miniaturas e mídia que sobrou dentro dos apps."}
+
+    @app.post("/api/recuperacao/procurar")
+    def procurar_recuperacao(p: PedidoRecuperacao) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "listar", "descricao": "Procurando o que dá para recuperar", "detalhe": "",
+                       "atual": None, "total": None, "estimativa_s": 25})
+            arquivos = recuperacao.procurar(ap, p.categorias)
+            return {"categorias": recuperacao.resumo(arquivos), "total_arquivos": len(arquivos),
+                    "total_bytes": sum(a.tamanho for a in arquivos)}
+        return nova_tarefa("recuperacao_procurar", p.serial, rodar)
+
+    @app.post("/api/recuperacao/recuperar")
+    def recuperar(p: PedidoRecuperacao) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        raiz = destino_backup(p.serial, p.destino)
+
+        def rodar(progresso, cancelar):
+            from dataclasses import asdict
+
+            progresso({"etapa": "listar", "descricao": "Procurando o que dá para recuperar", "detalhe": "",
+                       "atual": None, "total": None, "estimativa_s": 25})
+            arquivos = recuperacao.procurar(ap, p.categorias)
+            raiz.mkdir(parents=True, exist_ok=True)
+            info = {k: v for k, v in aparelhos.lista.get(p.serial, {}).items() if isinstance(v, str)}
+            return asdict(backup.copiar(ap, arquivos, raiz, progresso, cancelar, p.verificar, info,
+                                        destino_de=recuperacao.destino_recuperado))
+        return nova_tarefa("recuperacao", p.serial, rodar)
 
     def destino_backup(serial: str, destino: str | None) -> Path:
         if destino:

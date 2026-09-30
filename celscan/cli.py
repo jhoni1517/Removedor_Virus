@@ -445,6 +445,36 @@ def cmd_backup(a):
                     title="Backup", border_style="green" if not res.falhas else "yellow"))
 
 
+def cmd_recuperar(a):
+    from celscan.acoes import backup, recuperacao
+
+    ap = escolher_aparelho(a.serial)
+    con.print("[dim]Sem root não há 'undelete' real nem recuperação de mensagens do WhatsApp. "
+              "O CelScan resgata o que ainda está no aparelho: lixeira, miniaturas e sobras dos apps.[/]")
+    categorias = a.categorias.split(",") if a.categorias else list(recuperacao.PADRAO)
+    with con.status("Procurando o que dá para recuperar..."):
+        arquivos = recuperacao.procurar(ap, categorias)
+    resumo = recuperacao.resumo(arquivos)
+    t = Table(header_style="bold")
+    for c in ("Origem", "Arquivos", "Tamanho"):
+        t.add_column(c)
+    for v in resumo.values():
+        t.add_row(str(v["nome"]), str(v["arquivos"]), f"{int(v['bytes']) / 1048576:.1f} MB")
+    con.print(t)
+    if a.listar or not arquivos:
+        return con.print("Nada recuperável encontrado." if not arquivos else "")
+    raiz = Path(a.destino) if a.destino else backup.pasta_padrao() / backup.nome_seguro(ap.serial)
+    if not Confirm.ask(f"Recuperar {len(arquivos)} arquivos para {raiz}?", default=True):
+        return
+    with barra() as p:
+        t_id = p.add_task("Recuperando", total=len(arquivos))
+        res = backup.copiar(ap, arquivos, raiz, lambda ev: p.update(t_id, completed=ev["atual"]),
+                            verificar_hash=a.verificar, destino_de=recuperacao.destino_recuperado)
+    con.print(Panel(f"Recuperados: {res.copiados} · já estavam no PC: {res.pulados} · falhas: {len(res.falhas)}\n"
+                    f"Pasta: {raiz / 'Recuperados'}\n[dim]Dados pessoais: entregue e apague do PC depois (LGPD).[/]",
+                    title="Recuperação", border_style="green" if not res.falhas else "yellow"))
+
+
 def cmd_permissoes(a):
     from celscan.acoes import permissoes
 
@@ -599,6 +629,14 @@ def main():
     s.add_argument("--verificar", action="store_true", help="Confere o SHA-256 de cada arquivo (mais lento)")
     s.add_argument("--listar", action="store_true", help="Só mostra quanto há para copiar")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("recuperar", help="Resgata sobras apagadas: lixeira, miniaturas e mídia deixada nos apps")
+    s.add_argument("--serial")
+    s.add_argument("--categorias", help="Lista separada por vírgula (padrão: lixeira,miniaturas,status_whatsapp)")
+    s.add_argument("--destino")
+    s.add_argument("--verificar", action="store_true", help="Confere o SHA-256 de cada arquivo (mais lento)")
+    s.add_argument("--listar", action="store_true", help="Só mostra o que dá para recuperar")
+    s.set_defaults(func=cmd_recuperar)
 
     s = sub.add_parser("permissoes", help="Tira poderes perigosos de um app (com desfazer)")
     s.add_argument("pacote")
