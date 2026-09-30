@@ -163,7 +163,16 @@ def cmd_android(a):
 
     arq = relatorio.gerar(a.saida, res.info, n, rot, res.achados, res.resultados, loja=a.loja, acoes=acoes,
                           avisos=res.avisos)
-    con.print(f"Laudo salvo em [bold]{arq}[/] (+ .json) · varredura nº {res.varredura_id} no histórico")
+    from celscan.relatorio import pdf
+
+    con_db = db.conectar()
+    vid = res.varredura_id
+    conteudo, h = pdf.gerar_pdf(db.meta_varredura(con_db, vid), db.retrato(con_db, vid), "cliente", a.loja,
+                                db.acoes_da_varredura(con_db, vid))
+    db.registrar_laudo(con_db, vid, h)
+    arq.with_suffix(".pdf").write_bytes(conteudo)
+    con.print(f"Laudo salvo em [bold]{arq}[/] (+ .pdf e .json) · varredura nº {vid} · verificação "
+              f"{pdf.codigo_curto(h)}")
     if not a.nao_abrir:
         webbrowser.open(arq.resolve().as_uri())
     con.print("[dim]Terminou? Desative a Depuração USB no celular (Opções do desenvolvedor).[/]")
@@ -342,6 +351,31 @@ def cmd_historico(a):
         con.print(t)
 
 
+def cmd_laudo(a):
+    from celscan.relatorio import pdf
+
+    con_db = db.conectar()
+    meta, retrato = db.meta_varredura(con_db, a.id), db.retrato(con_db, a.id)
+    if not meta:
+        sys.exit(f"Varredura {a.id} não encontrada (veja: celscan historico)")
+    conteudo, h = pdf.gerar_pdf(meta, retrato, a.versao, a.loja, db.acoes_da_varredura(con_db, a.id))
+    db.registrar_laudo(con_db, a.id, h)
+    arq = Path(a.saida or f"laudo_celscan_{a.id}_{a.versao}.pdf")
+    arq.write_bytes(conteudo)
+    con.print(f"[green]✔[/] Laudo salvo em [bold]{arq}[/] · código de verificação {pdf.codigo_curto(h)}")
+
+
+def cmd_verificar(a):
+    achado = db.verificar_laudo(db.conectar(), a.codigo)
+    if not achado:
+        con.print(Panel("Código não encontrado neste computador. O laudo pode ser falso ou ter sido emitido em "
+                        "outro computador.", title="Não verificado", border_style="red"))
+        sys.exit(1)
+    con.print(Panel(f"Laudo nº {achado['varredura_id']} de {achado['data'].replace('T', ' ')}\n"
+                    f"{achado['fabricante']} {achado['modelo']} ({achado['serial']}) · nota {achado['nota']} "
+                    f"{achado['veredito']}", title="Laudo autêntico", border_style="green"))
+
+
 def cmd_interface(a):
     from celscan.api import servidor
 
@@ -442,6 +476,17 @@ def main():
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
     s.set_defaults(func=cmd_historico)
+
+    s = sub.add_parser("laudo", help="Gera o laudo PDF de uma varredura do histórico")
+    s.add_argument("id", type=int)
+    s.add_argument("--versao", choices=["cliente", "tecnico"], default="cliente")
+    s.add_argument("--loja")
+    s.add_argument("--saida")
+    s.set_defaults(func=cmd_laudo)
+
+    s = sub.add_parser("verificar", help="Confere o código de verificação de um laudo")
+    s.add_argument("codigo")
+    s.set_defaults(func=cmd_verificar)
 
     s = sub.add_parser("interface", help="Abre a interface gráfica")
     s.add_argument("--navegador", action="store_true", help="Abre no navegador em vez de janela própria")

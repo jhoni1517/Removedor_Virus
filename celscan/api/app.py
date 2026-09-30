@@ -239,6 +239,31 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return servicos.desfazer(ap, p.quarentena_id)
         return nova_tarefa("desfazer", p.serial, rodar)
 
+    @app.get("/api/varreduras/{vid}/laudo.pdf")
+    def laudo_pdf(vid: int, versao: str = "cliente", loja: str | None = None) -> Response:
+        from celscan.relatorio import pdf
+
+        con = db.conectar()
+        meta, retrato = db.meta_varredura(con, vid), db.retrato(con, vid)
+        if meta is None or retrato is None:
+            raise HTTPException(404, "Varredura não encontrada")
+        try:
+            conteudo, h = pdf.gerar_pdf(meta, retrato, versao, loja, db.acoes_da_varredura(con, vid))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        db.registrar_laudo(con, vid, h)
+        nome = f"laudo_celscan_{vid}_{versao}.pdf"
+        return Response(conteudo, media_type="application/pdf",
+                        headers={"Content-Disposition": f'inline; filename="{nome}"'})
+
+    @app.get("/api/laudos/verificar")
+    def verificar_laudo(codigo: str) -> dict[str, Any]:
+        achado = db.verificar_laudo(db.conectar(), codigo)
+        if not achado:
+            raise HTTPException(404, "Código não encontrado neste computador. O laudo pode ser falso ou ter sido "
+                                     "emitido em outro computador.")
+        return achado
+
     @app.get("/api/quarentena")
     def listar_quarentena() -> list[dict[str, Any]]:
         return quarentena.listar()

@@ -133,3 +133,16 @@ def test_servicos_mdns(monkeypatch):
     monkeypatch.setattr(wifi.adb, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, saida, ""))
     assert wifi.servicos_mdns() == [("celscan-Ab12Cd", "_adb-tls-pairing._tcp", "192.168.0.20:37123"),
                                    ("adb-R58M123-xyz", "_adb-tls-connect._tcp", "192.168.0.20:41555")]
+
+
+def test_laudo_pdf_e_verificacao(cliente):
+    t = esperar(cliente, cliente.post("/api/varreduras", json={"serial": "ABC123"}, headers=H).json())
+    vid = t["resultado"]["varredura_id"]
+    r = cliente.get(f"/api/varreduras/{vid}/laudo.pdf", params={"t": TOKEN, "versao": "tecnico"})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf" and r.content[:4] == b"%PDF"
+    from celscan.core import db
+
+    codigo = db.conectar().execute("SELECT hash FROM laudos WHERE varredura_id=?", (vid,)).fetchone()[0][:16]
+    assert cliente.get("/api/laudos/verificar", params={"codigo": codigo}, headers=H).json()["varredura_id"] == vid
+    assert cliente.get("/api/laudos/verificar", params={"codigo": "f" * 16}, headers=H).status_code == 404
+    assert cliente.get(f"/api/varreduras/{vid}/laudo.pdf", params={"versao": "x"}, headers=H).status_code == 422

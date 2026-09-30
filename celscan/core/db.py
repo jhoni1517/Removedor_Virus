@@ -36,6 +36,11 @@ MIGRACOES = [
     );
     CREATE TABLE vt_cache (sha TEXT PRIMARY KEY, ts REAL NOT NULL, dados TEXT NOT NULL);
     """,
+    """
+    CREATE TABLE laudos (
+        hash TEXT PRIMARY KEY, varredura_id INTEGER NOT NULL REFERENCES varreduras(id), criado_em TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -131,6 +136,45 @@ def acoes(con: sqlite3.Connection, serial: str | None = None, limite: int = 50) 
         return con.execute("SELECT * FROM acoes WHERE serial = ? ORDER BY id DESC LIMIT ?",
                            (serial, limite)).fetchall()
     return con.execute("SELECT * FROM acoes ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
+
+
+def meta_varredura(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None:
+    row = con.execute("SELECT id, serial, data, modo, nota, veredito, duracao_s FROM varreduras WHERE id = ?",
+                      (varredura_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def acoes_da_varredura(con: sqlite3.Connection, varredura_id: int) -> list[dict[str, Any]]:
+    """Ações feitas no aparelho depois desta varredura e antes da próxima."""
+    meta = meta_varredura(con, varredura_id)
+    if not meta:
+        return []
+    prox = con.execute("SELECT data FROM varreduras WHERE serial = ? AND id > ? ORDER BY id LIMIT 1",
+                       (meta["serial"], varredura_id)).fetchone()
+    fim = prox[0] if prox else "9999"
+    return [dict(r) for r in con.execute(
+        "SELECT * FROM acoes WHERE serial = ? AND data >= ? AND data < ? ORDER BY id",
+        (meta["serial"], meta["data"], fim)).fetchall()]
+
+
+# ---------------------------------------------------------------- laudos
+
+def registrar_laudo(con: sqlite3.Connection, varredura_id: int, hash_hex: str) -> None:
+    con.execute("INSERT OR IGNORE INTO laudos (hash, varredura_id, criado_em) VALUES (?, ?, ?)",
+                (hash_hex, varredura_id, _agora()))
+    con.commit()
+
+
+def verificar_laudo(con: sqlite3.Connection, codigo: str) -> dict[str, Any] | None:
+    """Aceita o código curto (XXXX-XXXX-XXXX-XXXX), o hash inteiro ou o texto do QR."""
+    texto = codigo.strip().split("|")[-1].replace("-", "").lower()
+    if len(texto) < 16 or any(c not in "0123456789abcdef" for c in texto):
+        return None
+    row = con.execute(
+        """SELECT l.hash, l.criado_em, v.id AS varredura_id, v.data, v.nota, v.veredito, a.serial, a.fabricante,
+                  a.modelo FROM laudos l JOIN varreduras v ON v.id = l.varredura_id JOIN aparelhos a USING (serial)
+           WHERE l.hash LIKE ?""", (texto + "%",)).fetchone()
+    return dict(row) if row else None
 
 
 # ---------------------------------------------------------------- clientes (LGPD)
