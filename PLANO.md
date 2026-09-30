@@ -1,6 +1,19 @@
 # CelScan v3 — Plano de implementação
 
-> **Aguardando sua aprovação.** Nada da Fase 2 em diante começa antes disso.
+> **Plano aprovado em 30/09/2026.** Decisões registradas abaixo, em "Decisões tomadas".
+
+## Decisões tomadas (30/09/2026)
+
+| # | Decisão | Resposta |
+|---|---|---|
+| 1 | Nome/destino | **CelScan é o produto.** O v0.2 é substituído quando a Etapa A ficar pronta |
+| 2 | Testes em aparelho real | **Sim**: você roda `celscan fixtures` em 3 marcas e os testes guiados ao fim de cada etapa |
+| 3 | Interface | **FastAPI + React + pywebview** |
+| 4 | PDF | **reportlab + qrcode** |
+| 5 | Certificados dos bancos | **Sim**: comando que extrai os certificados dos apps de banco do seu celular (junto com o item B1) |
+| 6 | Assinatura digital do `.exe` | **Adiada.** ⏰ **Lembrete:** perguntar de novo no fim da Etapa A (A3, instalador novo) e antes da D7 (atualização automática) |
+| 7 | Repositório público/privado | Continua como está. Mudar a visibilidade é com você, nas configurações do GitHub |
+| 8 | Modo balcão grátis/pago | Em aberto; só afeta a D4 (modo balcão) |
 
 ## Onde estamos
 
@@ -92,7 +105,7 @@ com o cabo desconectado, `README.md` com imagens e `DESENVOLVIMENTO.md`: **3 d**
 Ao fim de cada etapa entrego um resumo com: o que foi feito, o que foi testado no aparelho real,
 o que ficou pendente e o que você precisa decidir.
 
-## Decisões que preciso de você
+## Decisões que eu precisava de você (texto original)
 
 1. **Nome e destino do produto.** Proposta:
    - o CelScan vira o produto principal;
