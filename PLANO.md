@@ -1,4 +1,85 @@
-# CelScan v3 — Plano de implementação
+# CelScan Studio (v4) — Plano de transformação
+
+> **Status: aguardando sua aprovação.** Este plano (seção "CelScan Studio (v4)") ainda **não**
+> começou a ser implementado. Leia com o `AUDITORIA.md` e o `COMPARATIVO.md`. Abaixo dele fica o
+> plano da v3 (já executado), preservado como histórico.
+
+Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio é de **arquitetura**
+(motor com plugins + adbutils/asyncio, front Tauri, Agente Android, Nuvem) e de **cobertura**
+(funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
+plugins do motor; as telas React migram de pywebview para Tauri.
+
+## Decisões que eu preciso de você (com minha recomendação)
+
+Antes de começar, preciso destas respostas — algumas têm custo:
+
+| # | Decisão | Minha recomendação |
+|---|---|---|
+| D-A | **Migrar para Tauri 2 agora** ou manter pywebview e migrar por último? | **Migrar por último.** O front React já roda; Tauri dá instalador nativo/auto-update, mas trava tudo se vier primeiro. Faço o motor e as funções antes; Tauri na Fase 2. |
+| D-B | **Empacotar o motor Python** com Nuitka ou PyInstaller? | **PyInstaller agora** (já funciona), avaliar **Nuitka** depois (mais rápido/menor, porém mais frágil com FastAPI/uvicorn). |
+| D-C | **Agente Android (Kotlin)**: construo? Exige build Android (Gradle) no CI. | **Sim, mas na Fase 3.** Resolve nome/ícone/uso/rede de um jeito que o ADB não faz. Enquanto isso, uso a Play Store como fonte de nome/ícone. |
+| D-D | **Assinatura de código** (Windows ~US$ 200–400/ano; EV mais caro). Sem ela: "editor desconhecido" e antivírus reclamando. | **Comprar antes do auto-update (Fase 2/D7).** Recomendo certificado OV; te pergunto de novo na hora. **Custo seu.** |
+| D-E | **CelScan Nuvem (Next.js/Vercel)**: verificação de laudo, licença, painel. Tem custo de hospedagem. | **Só na Fase 7.** Começo com verificação de laudo estática (grátis na Vercel); licença Ed25519 **offline** não precisa de servidor. |
+| D-F | **IA opcional** (resumo do laudo): qual provedor e **quem paga a chave**? | **Desligada por padrão**, o usuário põe a própria chave (guardada no keyring). Recomendo Claude; te consulto sobre custo antes de ligar. |
+| D-G | **Repositório público ou privado?** Hoje é público. | Com marca própria e venda, **tornar privado** antes da Fase 5 (balcão/negócio). |
+| D-H | **Preço** (ver COMPARATIVO seção 6): Técnico **vitalício R$ 149**? | **Sim** — é o golpe mais forte contra as assinaturas em dólar dos concorrentes. |
+
+## Fases (ordem por impacto × esforço; segue a seção 9 do seu pedido)
+
+### Fase 0 — Fundação de qualidade (rápida, sem quebrar nada)
+- Quarentena em **zip com senha `infected`** + manifesto (dívida 5 — o antivírus para de apagar prova).
+- **Verificar SHA-256** de todo download (platform-tools, scrcpy) (dívida 7).
+- Segredos no **keyring** do sistema (dívida 10).
+- Detecção de **driver USB do fabricante** no Windows + oferta de instalação (dívida 6).
+- **Risco:** baixo. **Entrega:** correções + testes.
+
+### Fase 1 — Motor sólido (prioridade 1 do seu pedido)
+- Migrar `core/adb.py` para **adbutils** (conexão persistente) + **asyncio** por aparelho (dívida 1).
+- **Motor de plugins**: cada verificação vira plugin com manifesto (id, plataforma, coleta, parser,
+  regras, ações, desfazer). `core/analise/acoes` atuais viram os primeiros plugins.
+- **Pacotes de regras/IOCs versionados** e atualizáveis (dívida 11); parsear os **domínios** dos
+  IOCs do MVT (dívida 4).
+- Cache de assinatura/hash cobrindo **todos** os apps (dívida 2).
+- **Meta de desempenho:** 200 apps em ≤ 90 s. **Risco:** médio (refator grande, mas com testes).
+
+### Fase 2 — Interface: temas, layouts e Tauri
+- **Design system** com tokens + catálogo de componentes; acessibilidade AA.
+- **Temas**: Bancada, Noite, Terminal, Alto contraste, Minha Loja (cores do logo).
+- **Layouts**: Assistente, Painel técnico, Balcão (kanban), Modo cliente (2ª tela).
+- **Visualizações**: Raio-X (bolhas), Linha do tempo, Medidor com decomposição.
+- Migrar o empacotamento para **Tauri 2** (motor Python como sidecar) + **auto-update** + assinatura.
+
+### Fase 3 — Nomes/ícones + Agente Android + Segurança avançada
+- **Agente Android (Kotlin)** instalado por adb e removido no fim: nome/ícone em lote, uso, rede,
+  VPN/certificados. Fallback: Play Store.
+- **Segurança**: análise estática de APK (manifesto/strings/URLs + YARA + domínios IOC); apps que
+  imitam o sistema; ícone escondido pós-instalação; reputação na Play; **modo vítima** de
+  stalkerware (documentar antes de remover, contatos de apoio — Ligue 180).
+
+### Fase 4 — Balcão, laudos e negócio
+- Ordem de serviço, pacotes de serviço (1 clique), painel da loja (CSV).
+- Modelos de laudo: Clássico, Moderno, Resumido, Técnico, **Seminovo**.
+- Estrutura de **licença Ed25519 offline** + planos (preços configuráveis).
+
+### Fase 5 — Demais funções
+- Sensores, consumo em 2º plano (wakelocks/batterystats), rede (VPN/DNS), modo profundo
+  (AndroidQF+MVT), apps esquecidos, lote, transferência entre aparelhos (essencial), tendência de
+  bateria/armazenamento, teste de desempenho (am start -W, dd).
+
+### Fase 6 — Nuvem e IA (opcionais, com consentimento)
+- Verificação de laudo por QR (hash assinado, sem dado pessoal); painel multiloja; distribuição de
+  regras/IOCs; explicação por IA (chave do usuário, só metadados) e automações YAML.
+
+## Riscos principais
+- **Refator do adb (Fase 1)** pode regredir a coleta → mitigo com os testes atuais + fixtures reais.
+- **Agente Android** adiciona build Gradle no CI e superfície de segurança → assinado, removido no fim, sem internet.
+- **Tauri** muda todo o empacotamento → só depois do motor estável; mantenho pywebview até validar.
+- **Assinatura de código e Nuvem** têm **custo seu** → paro e pergunto (D-D, D-E).
+- **Aparelho real**: eu não testo daqui; cada fase depende de você rodar e mandar as saídas.
+
+---
+
+# CelScan v3 — Plano de implementação (já executado — histórico)
 
 > **Plano aprovado em 30/09/2026.** Decisões registradas abaixo, em "Decisões tomadas".
 

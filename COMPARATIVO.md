@@ -1,105 +1,137 @@
-# CelScan — Comparativo com concorrentes (setembro/2026)
+# CelScan Studio — Comparativo com concorrentes (v4, 30/09/2026)
 
-Pesquisa feita na web em 29/09/2026. Onde as fontes públicas eram rasas (páginas de produto
-sem detalhes, sites de download de terceiros), o texto diz **"não confirmado"**. Nesses casos,
-vale conferir com uso real antes de copiar a ideia. As fontes estão no fim do documento.
+Atualização da pesquisa de set/2026 com preços e reclamações de 2026. Onde a fonte pública é rasa,
+marco **"não confirmado"** — conferir com uso real antes de copiar. Fontes no fim.
 
-## Resumo de cada ferramenta
+> Preços em dólar/euro são dos concorrentes; um dos nossos diferenciais é **cobrar em real** e
+> oferecer **licença vitalícia** contra a assinatura em moeda estrangeira da maioria.
 
-| Ferramenta | O que é hoje (2026) | Pontos fortes para copiar |
+## 1. Resumo e preço de cada ferramenta (2026)
+
+| Ferramenta | O que é | Preço 2026 | Para copiar |
+|---|---|---|---|
+| **UAD-ng** | Debloat via ADB, sem root, código aberto (Rust GUI) | Grátis | Níveis *Recommended/Advanced/Expert/Unsafe*; listas por marca/operadora; desativar ≠ desinstalar; reversível |
+| **ADB AppControl** | Gerenciador Android no Windows | Grátis + Pro | Lote com **presets**, instalar APK/APKS, extrair APK, permissões, console com sintaxe |
+| **scrcpy** | Espelho/controle via USB/Wi-Fi (Apache 2.0, v4.1) | Grátis | Latência baixa, câmera/áudio, embutível |
+| **MVT + AndroidQF** (Amnesty) | Perícia: coleta + indicadores de spyware | Grátis | Coleta forense sem instalar, IOCs atualizados, saída criptografada (age) |
+| **iVerify Basic** | Caça a spyware (Pegasus) no próprio celular | **US$ 0,99**; forense avançada a cada 90 dias | Varredura de 5 min "no bolso"; achou 7 Pegasus em 2.500 testes; UX de confiança |
+| **Certo AntiSpy** | Anti-spyware iOS/Android | Grátis + **de US$ 8,99**; anual −53% | "Escaneia o aparelho inteiro e remove"; auditoria de privacidade; nota 4,6 na Play |
+| **Kaspersky / ESET / Malwarebytes / Avast / Bitdefender** | Antivírus residente | Kaspersky US$ 11,99/ano · Bitdefender US$ 14,99/ano · Malwarebytes ~US$ 3,33–5/mês | Detecção alta (Malwarebytes 100% stalkerware, AV-Comparatives 2025); ESET "Proteção de pagamento" |
+| **AirDroid Personal** | Espelho + transferência via nuvem | US$ 2,50–3,99/mês | Fluxo de transferência; **mas muita reclamação** (suporte, reembolso, cobrança) |
+| **Dr.Fone** (Wondershare) | Suíte paga Android/iOS | **US$ 79,95–139,95/ano**; vitalício ~US$ 115 | Assistentes 1 clique; **nota 3,0/5, custo-benefício 2,7/5** (caro, pop-ups, trava) |
+| **DroidKit** (iMobie) | Suíte Android | **US$ 39,99/ano · US$ 55,99 vitalício** | Reparo/recuperação guiados; recuperação real exige **root** |
+| **iMazing** | Gerenciador de iPhone + Spyware Analyzer grátis | **de US$ 39,99** (1 disp.) | Tudo local; análise por backup; UX de backup excelente |
+| **3uTools** | Gerenciador de iPhone (Windows) | Grátis | **Relatório de peças** (tela/bateria trocadas), saúde/ciclos, ativação/jailbreak |
+| **AnyTrans** (iMobie) | Transferência iOS | €39,99 vitalício | Transferência entre aparelhos |
+| **TinyCheck / PiRogue** | Raspberry Pi que analisa a **rede** do celular | Grátis (precisa de hardware) | Detecta stalkerware pelo tráfego — o que o ADB não vê |
+| **Samsung Smart Switch / Xiaomi / Motorola** | Suítes do fabricante | Grátis | Transferência oficial; só a própria marca |
+
+## 2. Matriz de funções (nota 0–3)
+
+0 = não tem · 1 = fraco/indireto · 2 = bom · 3 = referência. "Cel v4" = meta do CelScan Studio.
+
+| Função | UAD | AppControl | MVT/QF | iVerify | Certo | Antivírus | Dr.Fone/DroidKit | iMazing/3uTools | **Cel hoje** | **Cel v4** |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Detecção spyware/stalkerware | 0 | 0 | 3 | 3 | 3 | 3 | 0 | 2 | **2** | **3** |
+| Trojan bancário / Pix (overlay+captura) | 0 | 0 | 1 | 1 | 1 | 2 | 0 | 0 | **2** | **3** |
+| Análise estática de APK (sem rodar) | 0 | 1 | 2 | 0 | 1 | 2 | 0 | 0 | **2** | **3** |
+| Nome e ícone reais dos apps | 0 | 3 | 1 | 2 | 2 | 3 | 2 | 2 | **2** | **3** |
+| Debloat com níveis de segurança | 3 | 2 | 0 | 0 | 0 | 0 | 1 | 0 | **1** | **3** |
+| Gerenciar permissões (com desfazer) | 1 | 2 | 0 | 0 | 1 | 1 | 0 | 0 | **2** | **3** |
+| Espelhar/controlar a tela | 0 | 2 | 0 | 0 | 0 | 0 | 1 | 1 | **2** | **3** |
+| Análise de rede (VPN/DNS/proxy) | 0 | 0 | 2 | 1 | 1 | 1 | 0 | 0 | **1** | **2** |
+| Perícia completa (bugreport/IOCs) | 0 | 0 | 3 | 2 | 1 | 1 | 0 | 0 | **0** | **2** |
+| Saúde de bateria/peças (seminovo) | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 3 | **2** | **3** |
+| Otimização **medida** (antes/depois) | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1 | **1** | **3** |
+| Backup / recuperação de sobras | 0 | 1 | 1 | 0 | 0 | 0 | 3 | 3 | **2** | **2** |
+| Laudo profissional com QR verificável | 0 | 0 | 1 | 1 | 1 | 0 | 0 | 1 | **2** | **3** |
+| Histórico / diferenças entre visitas | 0 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | **1** | **3** |
+| Modo balcão (vários aparelhos, OS, kanban) | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | **1** | **3** |
+| iPhone (spyware + peças) | 0 | 0 | 2 | 3 | 2 | 1 | 1 | 3 | **1** | **2** |
+| Linguagem leiga (o que significa/fazer) | 1 | 0 | 0 | 2 | 2 | 2 | 1 | 1 | **3** | **3** |
+| Proteção à vítima de stalkerware | 0 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | **0** | **3** |
+| Português + preço em real | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | **3** | **3** |
+| Offline total / privacidade | 2 | 2 | 3 | 1 | 1 | 0 | 1 | 3 | **3** | **3** |
+
+**Leitura:** ninguém junta segurança séria + debloat + otimização medida + laudo + balcão **em
+português, offline e barato**. Os fortes em segurança (MVT, iVerify, antivírus) são fracos em
+balcão/laudo; os fortes em suíte (Dr.Fone, iMazing) são caros, em dólar e fracos em
+anti-stalkerware honesto.
+
+## 3. As 15 ideias para roubar (e fazer melhor)
+
+1. **Níveis de debloat do UAD** (Recommended/Advanced/Expert) → traduzir; **nunca** mostrar
+   "Unsafe" a leigo; sempre "desativar" antes de "desinstalar", com desfazer.
+2. **Presets em lote do ADB AppControl** → perfis por marca aplicáveis a vários aparelhos no balcão.
+3. **Relatório de peças do 3uTools** → checklist de hardware/seminovo no Android dentro do possível.
+4. **Spyware Analyzer local do iMazing** → nossa perícia (AndroidQF+MVT) roda offline e **traduz** o resultado.
+5. **Varredura de 5 min do iVerify** → "check-up rápido" com barra de progresso real e resultado em 1 tela.
+6. **Console com sintaxe do AppControl** → console adb ao vivo no layout técnico.
+7. **Extrair/instalar APK/APKS do AppControl** → com verificação de assinatura antes de instalar.
+8. **Saída criptografada do AndroidQF** → nossa quarentena/evidências em zip cifrado.
+9. **Auditoria de privacidade do Certo** → painel "quem vê sua câmera/microfone/localização".
+10. **Transferência do Smart Switch/AnyTrans** → transferência **entre dois aparelhos** reinstalando da Play.
+11. **Reputação na Play (fonte de nome/ícone)** → confere se o pacote existe e se o dev bate — sem depender do Agente.
+12. **Detecção por rede do TinyCheck** → sem hardware: ler VPN/DNS/proxy por ADB + cruzar domínios dos IOCs.
+13. **Assistente 1 clique do Dr.Fone**, mas honesto → pacotes de serviço ("check-up", "espionagem", "seminovo").
+14. **Backup guiado com retomada do iMazing** → já temos; falta prévia com miniaturas e escolha de pasta nativa.
+15. **Wakelocks/consumo (batterystats)** → mostrar quem "não deixa o celular dormir" e restringir com desfazer.
+
+## 4. O que os concorrentes erram (e o CelScan resolve)
+
+- **Assinatura cara em dólar** (Dr.Fone US$ 80–140/ano; antivírus anuais) → **real + vitalício**.
+- **Custo-benefício ruim / pop-ups / travas** (Dr.Fone 2,7/5) → produto enxuto, sem enganação.
+- **Suporte e reembolso ruins, cobranças indevidas** (AirDroid) → offline, sem cobrança recorrente obrigatória.
+- **"Limpador"/otimização falsa** (várias suítes) → só otimização **medida** (antes/depois).
+- **Recuperação que exige root e frustra** (DroidKit/Dr.Fone) → dizemos o limite **antes**, sem prometer o impossível.
+- **Ferramentas de segurança técnicas demais** (MVT/AndroidQF) → mesma força, em **linguagem leiga**.
+- **Falta de português** e de foco no **Pix/golpes brasileiros** → nosso território.
+- **Remover stalkerware sem cuidar da vítima** → **modo vítima** (documentar antes, contatos de apoio).
+
+## 5. Oceano azul (exclusivo do CelScan Studio)
+
+1. **Proteção Pix numa varredura por USB, em português** — cruza acessibilidade + overlay +
+   captura de tela + certificado do banco + imitação de nome. Ninguém junta isso.
+2. **Segurança + debloat + otimização medida + laudo com QR + balcão** num só produto, para leigo
+   **e** para assistência técnica.
+3. **Histórico do aparelho entre visitas** (apps novos, permissões novas, certificado trocado).
+4. **Modo balcão com LGPD de verdade** (consentimento, dado mínimo, exclusão) + OS + kanban.
+5. **Modo vítima de stalkerware** com documentação de evidências e orientação responsável.
+6. **Laudo de seminovo** (peças + segurança + espaço/bateria) com QR verificável — vale para lojas.
+7. **Marca própria da loja** (tema gerado do logo, aplicado no app e no laudo).
+
+## 6. Posicionamento e preço sugerido
+
+**Posição:** "O raio-X do celular, em português, honesto e offline — do leigo ao balcão."
+Entre o antivírus (barato, residente, mas cego a Pix/perícia) e as suítes caras (Dr.Fone/iMazing).
+
+| Plano | Preço sugerido (R$) | Âncora contra o concorrente |
 |---|---|---|
-| **UAD-ng** (Universal Android Debloater NG) | GUI em Rust, código aberto, remove apps de sistema via ADB sem root | Níveis de remoção com definição clara (*Recommended / Advanced / Expert / Unsafe*); listas por fabricante e operadora; diferencia **desativar** (mais seguro) de **desinstalar**; reversível. A própria equipe avisa que "Recommended" não quer dizer "recomendado remover" |
-| **ADB AppControl** | App para Windows (e versão para Android/TV) com modo pago | Ações em lote com **presets**, instalar APK/APKS, salvar APK, gerenciador de permissões, processos, logs, busca de bloatware, console com destaque de sintaxe |
-| **scrcpy** | Espelhamento e controle da tela via USB/Wi-Fi, código aberto (v4.1, jul/2026) | Latência baixa, sem instalar nada no celular, câmera e áudio; licença Apache 2.0 (pode ser embutido) |
-| **MVT + AndroidQF** (Amnesty) | AndroidQF: binário portátil que coleta backup, bugreport, logs, processos, pacotes/APKs, arquivos, módulos Magisk, com saída criptografada (age). MVT analisa com indicadores de spyware | Coleta forense completa sem instalar nada; indicadores atualizados; saída criptografada. Mas é técnico demais para leigo |
-| **iMazing** | Gerenciador de iPhone com Spyware Analyzer gratuito (3.5.2, abr/2026) | Tudo local (nada sobe para servidor); análise a partir do backup; UX de backup muito boa |
-| **3uTools** | Gerenciador de iPhone para Windows | **Relatório de verificação**: compara peças com as originais (tela, bateria trocadas), saúde e ciclos da bateria, status de ativação/jailbreak. Só iOS (Android não confirmado) |
-| **Dr.Fone / DroidKit / Tenorshare / iMyFone** | Suítes pagas (DroidKit ~US$ 40/ano) | Assistentes de 1 clique, transferência de dados entre aparelhos (inclusive WhatsApp), backup, recuperação. Detalhes de 2026 não confirmados |
-| **TinyCheck** (Kaspersky) / **PiRogue Tool Suite** | Raspberry Pi como ponto de acesso Wi-Fi; analisa para onde o celular se conecta (não lê conteúdo). PTS adiciona caso/evidências (Colander) e planeja VPN WireGuard | Detecta stalkerware **pela rede**, o que o ADB sozinho não vê |
-| **Antivírus mobile** (Kaspersky, ESET, Malwarebytes, Avast) | Apps residentes no celular | Detecção alta (teste AV-Comparatives 2025: Malwarebytes 100% dos stalkerwares; ESET e Kaspersky todos menos um); ESET Premium tem "Proteção de pagamento" para apps financeiros e antiphishing. Rodam o tempo todo, o que uma ferramenta via USB não faz |
+| **Grátis** | R$ 0 | vs. iVerify/Certo grátis: fazemos varredura + laudo simples |
+| **Técnico** | R$ 149 **vitalício** (ou R$ 12/mês) | vs. Dr.Fone US$ 80–140/**ano** |
+| **Loja** | R$ 39–59/mês por loja | vs. suítes em dólar sem balcão/OS |
+| **Rede** | sob consulta | inexistente nos concorrentes |
 
-## Contexto de ameaça que muda prioridades
+Recomendação: começar com **Grátis + Técnico vitalício** (o diferencial que mais dói no
+concorrente) e deixar Loja/Rede para quando a Nuvem existir.
 
-- **Trojans bancários são 53% dos instaladores maliciosos de Android no 1º tri/2026** (Testing
-  Ground Labs). Eles usam **telas falsas por cima (overlay)** e roubam senhas e códigos.
-- **PixRevolution** (Zimperium, mar/2026), feito para o Brasil:
-  - se passa por Correios, Sicredi, Expedia e AVG em páginas falsas da Play Store;
-  - pede **acessibilidade**, transmite a tela com **MediaProjection** e cobre tudo com "Aguarde…";
-  - troca a chave Pix no momento da transferência.
+## 7. Como isso muda as prioridades do PLANO
 
-  **Consequência para o CelScan:** além de acessibilidade e sobreposição, precisa ver quem usa
-  **captura de tela** (appop `PROJECT_MEDIA`) e quem imita nome de marca conhecida.
+- **Sobe:** proteção à vítima (modo stalkerware) — hoje é 0 e é diferencial ético + de marketing;
+  otimização medida e histórico/diferenças (oceano azul barato de entregar); quarentena em zip
+  cifrado (dívida que faz o antivírus apagar prova).
+- **Mantém:** Pix, nomes/ícones, debloat com níveis, laudo com QR, balcão.
+- **Desce:** transferência entre aparelhos e recuperação profunda (concorrentes pagos já fazem;
+  entra só o essencial e honesto).
+- **Fora de escopo (ético/jurídico):** espionagem, bypass de FRP/conta, desbloqueio de tela.
 
-## Tabela de funcionalidades
+## 8. Fontes
 
-Legenda da coluna "CelScan tem?": ✅ tem · 🟡 parcial · ❌ não tem.
-
-| Funcionalidade | Quem tem | Como fazem bem | CelScan tem? | Decisão |
-|---|---|---|---|---|
-| Detecção por indicadores de spyware/stalkerware | MVT, iMazing, antivírus | Bases públicas atualizadas | ✅ (MVT + Echap, 4.634 indicadores) | **Manter** |
-| Assinatura do APK sem baixar o app inteiro | — (MVT baixa o APK) | — | ✅ | **Manter** (diferencial) |
-| Heurística em linguagem leiga ("o que significa / o que fazer") | Antivírus (parcial) | Categorias de ameaça e explicação | ✅ (regras.yaml) | **Melhorar**: categorias (trojan bancário, stalkerware, adware) |
-| Detecção de captura de tela (MediaProjection) | Antivírus (não confirmado) | — | ❌ | **Copiar** (Fase 3 item 1, prioridade máxima) |
-| Certificado oficial de bancos (app falso com mesmo nome) | ESET "Proteção de pagamento" (parcial, dentro do celular) | Protege o app bancário | 🟡 (base criada, vazia) | **Melhorar**: lista brasileira conferida + typosquatting |
-| Níveis de segurança no debloat | UAD-ng | 4 níveis com definição clara; desativar ≠ desinstalar | 🟡 (só "Recommended") | **Copiar** e traduzir; nunca mostrar "Unsafe" para leigo |
-| Perfis de debloat / presets em lote | UAD-ng, ADB AppControl | Exportar/importar seleção | ❌ | **Copiar** (perfis por marca, aplicar em vários aparelhos) |
-| Multiusuário / perfil de trabalho | UAD-ng | Seleciona o usuário | ❌ | **Copiar** (Fase 3 item 11) |
-| Nome e ícone reais dos apps | ADB AppControl | Lista legível | ❌ | **Copiar** (item 8; essencial para leigo) |
-| Instalar APK/APKS/XAPK, extrair APK, lote | ADB AppControl | Arrastar e soltar, presets | 🟡 (restaurar reinstala APK) | **Copiar** (item 14) |
-| Gerenciar permissões | ADB AppControl | Conceder/revogar | ❌ | **Melhorar**: revogar em 1 clique **com desfazer** (item 6) |
-| Espelhar a tela | scrcpy | Baixa latência, sem instalar app | ❌ | **Embutir o scrcpy** (item 15), não reinventar |
-| Coleta forense completa / bugreport | AndroidQF + MVT | Portátil, criptografado | ❌ | **Integrar** AndroidQF + MVT no modo Profundo (item 5), com tradução do resultado |
-| Análise de rede (DNS, VPN, proxy) | TinyCheck, PiRogue | Tráfego real num Raspberry Pi | 🟡 (proxy global) | **Melhorar** via ADB: VPN, VPN sempre ativa, DNS privado, proxy de APN (item 4). **Ignorar** captura de tráfego (exige hardware) |
-| Relatório de peças/bateria (seminovo) | 3uTools (iOS) | Compara peças com as de fábrica | 🟡 (bateria) | **Copiar** para Android dentro do possível (item 16) |
-| Backup antes de formatar | Dr.Fone, iMazing, DroidKit | Assistente, progresso, retomada | ❌ | **Copiar** o essencial (item 13); **ignorar** recuperação de dados apagados |
-| Transferência entre aparelhos (WhatsApp etc.) | Dr.Fone, DroidKit, iMyFone | 1 clique | ❌ | **Ignorar** (fora do foco, arriscado, exige reengenharia) |
-| "Reparo do sistema" / desbloqueio de tela | Dr.Fone, DroidKit | — | ❌ | **Ignorar** (fora do foco, risco jurídico) |
-| Assistente de 1 clique | Dr.Fone, DroidKit | Fluxo guiado | 🟡 (CLI com perguntas) | **Copiar** (Fase 2) |
-| Laudo profissional | 3uTools (relatório), iMazing (exporta) | — | 🟡 (HTML imprimível) | **Melhorar**: PDF nativo com QR de autenticidade (item 18) |
-| Histórico / diferenças entre varreduras | — | — | 🟡 (banco guarda os retratos) | **Fazer** (item 7), diferencial |
-| Modo balcão (vários aparelhos, cliente, OS) | — (3uTools parcial) | — | 🟡 (tabela de clientes com LGPD) | **Fazer** (item 17), diferencial |
-| iPhone: spyware + bateria | iMazing, 3uTools, MVT | Backup local | 🟡 (MVT + bateria) | **Melhorar** (item 19) |
-| Proteção em tempo real | Antivírus | Residente | ❌ | **Ignorar** no PC. Fica para o app Android futuro |
-| Otimização honesta (antes/depois) | Ninguém mede de verdade | — | 🟡 (cache medido) | **Fazer** (item 12), diferencial |
-
-## (a) O que nenhum concorrente faz e o CelScan fará
-
-1. **Proteção Pix em uma varredura via USB**, em linguagem leiga. O CelScan vai cruzar:
-   acessibilidade, sobreposição, captura de tela, certificado oficial dos bancos e imitação de nome.
-   Hoje isso está espalhado entre antivírus residentes (que o usuário infectado muitas vezes
-   não tem) e ferramentas forenses (técnicas demais).
-2. **Varredura + debloat + otimização medida + laudo num só lugar**, para leigo e para balcão de assistência técnica.
-3. **Laudo com antes/depois real** (espaço, tempo de abertura de apps) e QR code verificável.
-4. **Histórico do aparelho**: o que mudou desde a última visita, como apps novos, permissões novas e certificado trocado.
-5. **Tudo reversível**: quarentena com APK, registro de desfazer para toda configuração alterada.
-6. **Modo balcão com LGPD de verdade**: consentimento, dado mínimo e exclusão do cliente.
-
-## (b) Lacunas que continuarão depois da v3
-
-- **Sem proteção em tempo real.** A ferramenta vê o aparelho só enquanto está no cabo; isso fica para o app Android.
-- **Sem análise do tráfego de rede real.** Só a configuração (VPN, DNS, proxy) é lida; ver o tráfego exige algo como TinyCheck/PiRogue.
-- **Sem root**, alguns dados ficam inacessíveis: dados privados dos apps e histórico de navegador, por exemplo.
-- **Verificação de peças no Android** é muito limitada comparada ao 3uTools no iPhone.
-- **iPhone continua dependendo do backup + MVT.** Remover spyware do iPhone continua sendo restaurar o aparelho.
-- **Heurística tem falso positivo.** Gerenciadores de senha usam acessibilidade, por exemplo. O mitigador é a lista de permitidos, que precisa de manutenção.
-- **A lista de certificados oficiais depende de conferência manual** em aparelhos reais.
-
-## Como isso muda as prioridades
-
-- **Sobe:** proteção Pix, agora incluindo **captura de tela** e **imitação de nome**; nome e ícone reais; gerenciador de permissões com desfazer.
-- **Mantém:** histórico/diferenças, debloat no nível do UAD, laudo PDF.
-- **Desce:** backup completo antes de formatar (concorrentes pagos fazem bem; aqui entra só o essencial) e atualização automática do programa, que depende da assinatura digital.
-- **Fora do escopo:** transferência de WhatsApp, reparo de sistema, desbloqueio de tela, captura de tráfego.
-
-## Fontes
-
-- UAD-ng: [README](https://cdn.jsdelivr.net/gh/universal-debloater-alliance/universal-android-debloater-next-generation@main/README.md), [FAQ](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/wiki/FAQ), [Debloat Lists](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/wiki/Debloat-Lists)
-- ADB AppControl: [site oficial](https://adbappcontrol.com/en/)
-- scrcpy: [4.1 (UbuntuHandbook, jul/2026)](https://ubuntuhandbook.org/index.php/2026/07/android-screen-mirroring-app-scrcpy-4-1-added-vp8-vp9-encoders-support/), [Wikipedia](https://en.wikipedia.org/wiki/Scrcpy)
-- AndroidQF/MVT: [androidqf](https://github.com/mvt-project/androidqf), [metodologia MVT](https://docs.mvt.re/en/latest/android/methodology/), [dicionário SocialTIC](https://forensics.socialtic.org/en/references/01-reference-androidqf-dictionary/)
-- iMazing: [3.5.2 (abr/2026)](https://imazing.com/blog/imazing-3-5-2-release), [Spyware Analyzer](https://imazing.com/guides/detect-pegasus-and-other-spyware-on-iphone)
-- 3uTools: [Apple Discussions](https://discussions.apple.com/thread/255413905), [SourceForge](https://sourceforge.net/app/3tools/mac/)
-- Suítes pagas: [DroidKit](https://gizmodo.com/download/droidkit), [Dr.Fone](https://gizmodo.com/download/dr-fone)
-- TinyCheck/PiRogue: [Kaspersky](https://www.kaspersky.com/blog/tinycheck-detects-spyware-stalkerware/38030/), [PortSwigger](https://portswigger.net/daily-swig/tinycheck-open-source-privacy-project-turns-your-raspberry-pi-into-a-stalkerware-detection-unit), [OTF PiRogue](https://www.opentech.fund/projects-we-support/supported-projects/pirogue-tool-suite/)
-- Antivírus: [EFF + AV-Comparatives 2025](https://www.eff.org/deeplinks/2025/11/eff-teams-av-comparatives-test-android-stalkerware-detection-major-antivirus-apps), [Malwarebytes 100%](https://www.malwarebytes.com/blog/news/2025/11/malwarebytes-scores-100-in-av-comparatives-stalkerware-test-2025), [Testing Ground Labs jun/2026](https://www.testingground.io/report/android/tgl_android_malware_detection_202606_consumer_en.html), [ESET Mobile Security](https://eset.com/ch-en/home/mobile-security-android)
-- PixRevolution: [Zimperium (mar/2026)](https://zimperium.com/blog/pixrevolution-the-agent-operated-android-trojan-hijacking-brazils-pix-payments-in-real-time), [TecMundo](https://www.tecmundo.com.br/seguranca/411537-malware-pixrevolution-sequestra-transferencias-pix-no-android.htm), [Dark Reading](https://www.darkreading.com/application-security/real-time-banking-trojan-strikes-brazils-pix-users)
+- iVerify: [preço US$ 0,99 e caça a spyware](https://www.phonearena.com/news/app-can-tell-if-your-phone-is-compromised-by-pegasus-spyware_id165531), [iVerify Basic na Android](https://iverify.io/blog/iverify-basic-is-now-on-android)
+- Certo AntiSpy: [preços e recursos 2026](https://www.certosoftware.com/android-spyware-detection/), [melhores anti-spyware 2026](https://www.certosoftware.com/insights/6-best-anti-spyware-apps-for-android/)
+- AirDroid: [review e reclamações](https://deskin.io/resource/blog/airdroid-review), [Trustpilot](https://ch.trustpilot.com/review/web.airdroid.com)
+- Dr.Fone/DroidKit: [preços e comparação](https://www.softwaretestinghelp.com/?p=314242), [Dr.Fone 3,0/5](https://www.capterra.com/p/210696/Dr-Fone/reviews/)
+- Antivírus: [preços Bitdefender/Kaspersky/Malwarebytes](https://www.cloudwards.net/best-antivirus-for-android/), [AV-Comparatives 2025 stalkerware](https://www.eff.org/deeplinks/2025/11/eff-teams-av-comparatives-test-android-stalkerware-detection-major-antivirus-apps)
+- iMazing/AnyTrans: [iMazing 3](https://imazing.com/blog/imazing-3-mac-beta), [AnyTrans vitalício](https://store.thestreet.com/sales/anytrans-for-ios-lifetime-plan)
+- UAD-ng, ADB AppControl, scrcpy, AndroidQF/MVT, 3uTools, TinyCheck/PiRogue, PixRevolution: ver
+  a versão de set/2026 no histórico do git (fontes mantidas).
