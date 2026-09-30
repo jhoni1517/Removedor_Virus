@@ -39,6 +39,9 @@ def localizar() -> str | None:
     return None
 
 
+CODECS = ("h264", "h265", "av1")
+
+
 @dataclass
 class OpcoesEspelho:
     modo: str = "controlar"
@@ -46,6 +49,17 @@ class OpcoesEspelho:
     acordado: bool = True  # não deixa o celular dormir com o cabo ligado
     gravar: str | None = None  # caminho .mp4 para gravar a tela
     tamanho_max: int = 0  # 0 = resolução do celular; ex.: 1280 para PCs mais fracos
+    fps_max: int = 0  # 0 = sem limite; ex.: 30 para suavizar em PCs fracos
+    bitrate_mbps: int = 0  # 0 = padrão do scrcpy (8); menor = menos travamento na rede/USB fraco
+    buffer_ms: int = 0  # atraso de exibição; ajuda vídeo a não engasgar (ex.: 100)
+    codec: str = ""  # "", "h264", "h265" ou "av1"
+    sem_audio: bool = False  # não transmite o áudio do celular
+    ligar_tela: bool = True  # acorda o celular ao abrir (útil quando está com a tela apagada)
+
+    @classmethod
+    def compativel(cls, modo: str = "controlar") -> OpcoesEspelho:
+        """Preset para PCs fracos ou vídeo (streaming) travando/preto: resolução e taxa menores + buffer."""
+        return cls(modo=modo, tamanho_max=1280, fps_max=30, buffer_ms=120, codec="h264", sem_audio=True)
 
 
 @dataclass
@@ -82,6 +96,18 @@ def montar_comando(scrcpy: str, serial: str | None, o: OpcoesEspelho) -> list[st
         cmd += ["--record", o.gravar]
     if o.tamanho_max:
         cmd += ["--max-size", str(o.tamanho_max)]
+    if o.fps_max:
+        cmd += ["--max-fps", str(o.fps_max)]
+    if o.bitrate_mbps:
+        cmd += ["--video-bit-rate", f"{o.bitrate_mbps}M"]
+    if o.buffer_ms:
+        cmd += ["--display-buffer", str(o.buffer_ms)]
+    if o.codec in CODECS:
+        cmd += ["--video-codec", o.codec]
+    if o.sem_audio:
+        cmd.append("--no-audio")
+    if not o.ligar_tela:
+        cmd.append("--no-power-on")
     return cmd
 
 

@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, quarentena
+from celscan.acoes import backup, navegacao, quarentena
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -76,6 +76,18 @@ class PedidoEspelho(BaseModel):
     tela_desligada: bool = False
     acordado: bool = True
     gravar: bool = False
+    compativel: bool = False  # preset para PC fraco / vídeo travando
+    tamanho_max: int = 0
+    fps_max: int = 0
+    bitrate_mbps: int = 0
+    buffer_ms: int = 0
+    codec: str = ""
+    sem_audio: bool = False
+
+
+class PedidoAjuste(BaseModel):
+    serial: str | None = None
+    ajuste: str
 
 
 class PedidoBackup(BaseModel):
@@ -427,7 +439,15 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         if p.gravar and p.modo != "otg":
             nome = backup.nome_seguro(f"tela_{p.serial}_{time.strftime('%Y%m%d_%H%M%S')}.mp4")
             gravacao = str(backup.pasta_padrao() / "Gravações de tela" / nome)
-        opcoes = OpcoesEspelho(modo=p.modo, tela_desligada=p.tela_desligada, acordado=p.acordado, gravar=gravacao)
+        if p.compativel:
+            opcoes = OpcoesEspelho.compativel(p.modo)
+            opcoes.tela_desligada, opcoes.acordado, opcoes.gravar = p.tela_desligada, p.acordado, gravacao
+        else:
+            opcoes = OpcoesEspelho(
+                modo=p.modo, tela_desligada=p.tela_desligada, acordado=p.acordado, gravar=gravacao,
+                tamanho_max=p.tamanho_max, fps_max=p.fps_max, bitrate_mbps=p.bitrate_mbps,
+                buffer_ms=p.buffer_ms, codec=p.codec, sem_audio=p.sem_audio,
+            )
         if p.modo == "otg":
             aparelhos.pausa.set()  # o adb precisa soltar o celular para o modo mouse funcionar
             try:
@@ -452,6 +472,18 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/espelho/parar")
     def parar_espelho(p: PedidoEspelho) -> dict[str, bool]:
         return {"parado": espelhos.parar(p.serial if p.modo != "otg" else None)}
+
+    @app.get("/api/ajustes")
+    def listar_ajustes() -> dict[str, str]:
+        return {k: v[0] for k, v in navegacao.AJUSTES.items()}
+
+    @app.post("/api/ajustes/abrir")
+    def abrir_ajuste(p: PedidoAjuste) -> dict[str, str]:
+        ap = aparelhos.pronto(p.serial)
+        try:
+            return {"aberto": navegacao.abrir_ajuste(ap, p.ajuste)}
+        except ValueError as e:
+            raise HTTPException(422, str(e))
 
     def destino_backup(serial: str, destino: str | None) -> Path:
         if destino:

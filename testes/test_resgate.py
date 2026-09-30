@@ -43,6 +43,21 @@ def test_montar_comando():
         montar_comando("s", "X", OpcoesEspelho(modo="x"))
 
 
+def test_montar_comando_compativel():
+    cmd = montar_comando("s", "X", OpcoesEspelho.compativel())
+    assert "--max-size" in cmd and "1280" in cmd
+    assert "--max-fps" in cmd and "30" in cmd
+    assert cmd[cmd.index("--display-buffer") + 1] == "120"
+    assert cmd[cmd.index("--video-codec") + 1] == "h264"
+    assert "--no-audio" in cmd
+
+
+def test_montar_comando_opcoes_avulsas():
+    cmd = montar_comando("s", "X", OpcoesEspelho(bitrate_mbps=4, ligar_tela=False))
+    assert cmd[cmd.index("--video-bit-rate") + 1] == "4M"
+    assert "--no-power-on" in cmd
+
+
 def test_espelho_abre_e_para(fake):
     esp = Espelhos()
     s = esp.abrir("ABC123", OpcoesEspelho())
@@ -123,6 +138,12 @@ def test_api_resgate(fake):
         assert c.get("/api/espelho", headers=H).json()["ativas"][0]["serial"] == "ABC123"
         assert c.post("/api/espelho/parar", json={"serial": "ABC123"}, headers=H).json()["parado"]
         assert c.post("/api/espelho", json={"serial": "NAO_EXISTE"}, headers=H).status_code == 409
+
+        assert "desenvolvedor" in c.get("/api/ajustes", headers=H).json()
+        r = c.post("/api/ajustes/abrir", json={"serial": "ABC123", "ajuste": "desenvolvedor"}, headers=H).json()
+        assert "desenvolvedor" in r["aberto"].lower()
+        assert c.post("/api/ajustes/abrir", json={"serial": "ABC123", "ajuste": "xxx"},
+                      headers=H).status_code == 422
 
         lista = esperar(c, c.post("/api/backup/listar", json={"serial": "ABC123"}, headers=H).json())
         assert lista["resultado"]["total_arquivos"] == 6

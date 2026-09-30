@@ -402,8 +402,10 @@ def cmd_espelhar(a):
     if a.modo == "otg":
         adb.run(["kill-server"], timeout=15)  # o modo mouse precisa da porta USB livre
     esp = Espelhos()
+    opcoes = OpcoesEspelho.compativel(a.modo) if a.compativel else OpcoesEspelho(modo=a.modo)
+    opcoes.tela_desligada, opcoes.gravar = a.tela_desligada, a.gravar
     try:
-        sessao = esp.abrir(serial, OpcoesEspelho(modo=a.modo, tela_desligada=a.tela_desligada, gravar=a.gravar))
+        sessao = esp.abrir(serial, opcoes)
     except EspelhoErro as e:
         sys.exit(str(e))
     erro = esp.erro_inicial(sessao)
@@ -586,6 +588,8 @@ def main():
                    help="otg = mouse/teclado do PC no celular, sem depuração USB (toque quebrado)")
     s.add_argument("--tela-desligada", action="store_true", help="Desliga a tela do celular enquanto espelha")
     s.add_argument("--gravar", help="Grava a tela neste arquivo .mp4")
+    s.add_argument("--compativel", action="store_true",
+                   help="PC fraco ou vídeo (streaming) travando/preto: resolução e taxa menores + buffer")
     s.set_defaults(func=cmd_espelhar)
 
     s = sub.add_parser("backup", help="Copia fotos, vídeos, documentos e WhatsApp para o PC")
