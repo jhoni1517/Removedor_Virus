@@ -49,6 +49,9 @@ class Varredura:
     def ler_certificado(self, pkg: str) -> None:
         coleta.ler_certificado(self.ap, self.apps[pkg])
 
+    def ler_rotulo(self, pkg: str) -> None:
+        coleta.ler_rotulo(self.ap, self.apps[pkg])
+
     def consultar_vt(self, pkg: str) -> None:
         app = self.apps[pkg]
         if self.vt and app.sha256:

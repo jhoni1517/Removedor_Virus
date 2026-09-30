@@ -24,6 +24,8 @@ export interface AppResultado {
   versao: string | null;
   instalado: string | null;
   sha256: string | null;
+  nome: string | null;
+  icone: string | null;
 }
 
 export interface InfoAparelho {

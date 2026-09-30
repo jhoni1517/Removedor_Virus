@@ -70,7 +70,8 @@ def ler_local(caminho):
     return resumo(der) if der else None
 
 
-def ler_remoto(aparelho, caminho, tamanho):
+def leitor_remoto(aparelho, caminho):
+    """Devolve ler(off, n) que lê n bytes do arquivo no celular a partir de off (com dd, sem baixar tudo)."""
     q = shlex.quote(caminho)
 
     def ler(off, n, bs=4096):
@@ -78,5 +79,9 @@ def ler_remoto(aparelho, caminho, tamanho):
         dados = aparelho.bytes(f"dd if={q} bs={bs} skip={ini} count={fim - ini} 2>/dev/null")
         d = off - ini * bs
         return dados[d:d + n]
-    der = certificado_der(ler, tamanho)
+    return ler
+
+
+def ler_remoto(aparelho, caminho, tamanho):
+    der = certificado_der(leitor_remoto(aparelho, caminho), tamanho)
     return resumo(der) if der else None

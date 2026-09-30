@@ -139,6 +139,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "instalado": app.instalado.isoformat() if app.instalado else None,
         "sha256": app.sha256, "cert": app.cert, "virustotal": app.vt,
         "admins": dados.admins.get(pkg, []),
+        "nome": app.nome, "icone": app.icone,
     }
 
 

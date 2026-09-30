@@ -33,7 +33,9 @@ function CartaoApp({ r, selecionado, alternar, remover, removido, podeAgir }: {
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate font-mono text-sm font-semibold">{r.pacote}</span>
+            {r.icone && <img src={r.icone} alt="" className="h-5 w-5 rounded" />}
+            {r.nome && r.nome !== r.pacote && <span className="font-semibold">{r.nome}</span>}
+            <span className="truncate font-mono text-xs text-fraco">{r.pacote}</span>
             <Selo nivel={r.nivel} />
             <span className="numeros font-mono text-xs text-fraco">{r.score} pts</span>
             {removido && <span className="rounded bg-ok-suave px-1.5 py-0.5 text-xs font-semibold text-ok">Removido</span>}

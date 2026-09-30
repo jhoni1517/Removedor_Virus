@@ -100,6 +100,8 @@ class AppBruto:
     tamanho: int | None = None
     cert: dict | None = None
     vt: dict | None = None
+    nome: str | None = None
+    icone: str | None = None  # data URI do PNG
 
 
 @dataclass
@@ -192,3 +194,17 @@ def ler_certificado(ap: Aparelho, app: AppBruto) -> None:
             app.cert = apksig.ler_remoto(ap, app.apk, app.tamanho)
         except Exception:
             app.cert = None
+
+
+def ler_rotulo(ap: Aparelho, app: AppBruto) -> None:
+    """Nome e ícone reais do app (só faz sentido com o tamanho do APK já conhecido)."""
+    from celscan.analise import rotulos
+
+    if not app.tamanho:
+        return
+    try:
+        r = rotulos.obter(ap, app.pacote, app.apk, app.tamanho, app.sha256)
+        app.nome = r.nome
+        app.icone = rotulos.icone_data_uri(r.icone_png)
+    except Exception:
+        pass

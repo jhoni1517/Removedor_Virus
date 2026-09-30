@@ -34,6 +34,7 @@ ETAPAS = {
     "iocs": ("Carregando a lista de ameaças conhecidas", 5),
     "hashes": ("Calculando a impressão digital de cada app", 40),
     "assinaturas": ("Conferindo a assinatura dos apps suspeitos", 15),
+    "rotulos": ("Lendo o nome e o ícone dos apps", 12),
     "virustotal": ("Consultando o VirusTotal", 0),
     "analise": ("Analisando e montando o resultado", 2),
 }
@@ -148,6 +149,10 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
             for i, pkg in enumerate(cands, 1):
                 passos.etapa("assinaturas", i, len(cands), pkg)
                 sc.ler_certificado(pkg)
+        with log.etapa("rotulos"):
+            for i, pkg in enumerate(cands, 1):
+                passos.etapa("rotulos", i, len(cands), pkg)
+                sc.ler_rotulo(pkg)
 
         if vt:
             alvo = sc.candidatos(todos=opcoes.vt_todos)
