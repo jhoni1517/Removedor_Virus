@@ -42,7 +42,8 @@ if a == ["track-devices"]:
     sys.stdout.flush()
     fim()
 if a == ["devices"]:
-    fim("* daemon not running; starting now at tcp:5037\nList of devices attached\nABC123\tdevice\nXYZ\tunauthorized\n")
+    lista = os.getenv("CELSCAN_FAKE_DISPOSITIVOS", "ABC123\tdevice\nXYZ\tunauthorized\n")
+    fim("* daemon not running; starting now at tcp:5037\nList of devices attached\n" + lista)
 if a[0] == "-s":
     a = a[2:]
 if a[0] == "push":
@@ -67,6 +68,10 @@ if a[0] == "shell":
         with open(os.path.join(EST, "script.sh"), encoding="utf-8") as f:
             script = f.read()
         fim(fixture("coleta.txt" if "pkgdump" in script else "diag.txt"))
+    if c.startswith("getprop "):
+        chave = c.split()[1]
+        m = re.search(r"^\[" + re.escape(chave) + r"\]: \[(.*)\]$", fixture("coleta.txt"), re.M)
+        fim(m.group(1) if m else "")
     if "sha256sum" in c:
         tam = os.path.getsize(APK_REAL)
         for pkg, h in zip(PACOTES, "abcd"):

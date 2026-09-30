@@ -1,0 +1,144 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-sans/latin-700.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+
+/* Tokens da "bancada técnica". O tema escuro troca só os valores. */
+:root {
+  --papel: #f3f2ee;
+  --superficie: #ffffff;
+  --superficie-2: #f8f7f4;
+  --tinta: #17191b;
+  --fraco: #5d646c;
+  --linha: #dad7cf;
+  --grade: rgba(23, 25, 27, 0.055);
+  --destaque: #24578a;
+  --destaque-suave: #e3ecf5;
+  --ok: #1e7a4c;
+  --ok-suave: #e1f1e8;
+  --atencao: #a86a12;
+  --atencao-suave: #fbf0dc;
+  --perigo: #b3261e;
+  --perigo-suave: #fbe4e1;
+  --foco: #24578a;
+  color-scheme: light;
+}
+
+:root.escuro {
+  --papel: #0f1113;
+  --superficie: #171a1d;
+  --superficie-2: #1d2124;
+  --tinta: #e8e6e1;
+  --fraco: #9aa1a8;
+  --linha: #2c3135;
+  --grade: rgba(232, 230, 225, 0.04);
+  --destaque: #7fb2e5;
+  --destaque-suave: #1b2a38;
+  --ok: #4fc289;
+  --ok-suave: #15291f;
+  --atencao: #e8b04a;
+  --atencao-suave: #2d2413;
+  --perigo: #f07366;
+  --perigo-suave: #321816;
+  --foco: #7fb2e5;
+  color-scheme: dark;
+}
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --color-papel: var(--papel);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-tinta: var(--tinta);
+  --color-fraco: var(--fraco);
+  --color-linha: var(--linha);
+  --color-destaque: var(--destaque);
+  --color-destaque-suave: var(--destaque-suave);
+  --color-ok: var(--ok);
+  --color-ok-suave: var(--ok-suave);
+  --color-atencao: var(--atencao);
+  --color-atencao-suave: var(--atencao-suave);
+  --color-perigo: var(--perigo);
+  --color-perigo-suave: var(--perigo-suave);
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Papel quadriculado discreto da área de trabalho */
+.bancada {
+  background-image:
+    linear-gradient(var(--grade) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grade) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.numeros {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.pular-link {
+  position: absolute;
+  left: -999px;
+}
+.pular-link:focus {
+  left: 12px;
+  top: 12px;
+  z-index: 50;
+  background: var(--superficie);
+  padding: 8px 12px;
+}
+
+/* Micro-animações: só progresso e conclusão */
+@keyframes pulsar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes marcar {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes varrer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.pulsar { animation: pulsar 1.4s ease-in-out infinite; }
+.entrar { animation: entrar 0.25s ease-out both; }
+.marcar { animation: marcar 0.3s ease-out both; }
+.varrer { animation: varrer 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulsar, .entrar, .marcar, .varrer { animation: none; }
+  * { transition: none !important; }
+}
+
+.qr svg { width: 100%; height: auto; display: block; }
+.qr svg path { fill: #000; }

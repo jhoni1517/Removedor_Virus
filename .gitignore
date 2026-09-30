@@ -9,3 +9,5 @@ testes/.estado/
 .pytest_cache/
 .coverage
 .ruff_cache/
+celscan/web/node_modules/
+celscan/web/dist/
