@@ -4,6 +4,8 @@
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 raiz = Path(SPECPATH).parent
 icone = str(raiz / "assets" / "celscan.ico")
 web = raiz / "celscan" / "web" / "dist"
@@ -23,6 +25,9 @@ ocultos = [
     "uvicorn.protocols.websockets.auto", "uvicorn.protocols.websockets.websockets_impl",
     "celscan.acoes.otimizacao", "celscan.analise.certificados",
 ]
+# A lib websockets usa imports preguiçosos (__getattr__); sem coletar tudo, o WebSocket não sobe no exe
+# e a interface fica presa em "Reconectando...". Coleta explícita resolve.
+ocultos += collect_submodules("websockets")
 excluir = ["tkinter", "unittest", "pydoc", "numpy", "pytest", "cryptography"]  # PIL fica: o reportlab usa
 
 janela = Analysis([str(raiz / "instalador" / "celscan_app.py")], pathex=[str(raiz)], datas=datas,

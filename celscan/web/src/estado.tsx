@@ -48,26 +48,37 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   const [erroBackend, setErroBackend] = useState<string | null>(null);
 
+  const wsAberto = useRef(false);
+
   const recarregar = useCallback(async () => {
     try {
       const e = await api<Estado>("/estado");
       setEstado(e);
       setDispositivos(e.dispositivos);
       setErroBackend(null);
+      // O WebSocket é só um atalho de tempo real; se o polling responde, o programa está conectado.
+      setOnline(true);
     } catch (e) {
       setErroBackend((e as Error).message);
+      if (!wsAberto.current) setOnline(false);
       throw e;
     }
   }, []);
 
-  // Tempo real: reconecta sozinho se a conexão cair.
+  // Tempo real: reconecta sozinho se a conexão cair. Se o WebSocket não subir (ex.: certos WebView2),
+  // o polling de 3s abaixo mantém a interface viva e o status verde.
   useEffect(() => {
     let ws: WebSocket | null = null;
     let parar = false;
     let espera = 500;
     const conectar = () => {
-      ws = new WebSocket(urlWebSocket());
+      try {
+        ws = new WebSocket(urlWebSocket());
+      } catch {
+        return; // sem WebSocket: o polling assume
+      }
       ws.onopen = () => {
+        wsAberto.current = true;
         setOnline(true);
         espera = 500;
       };
@@ -85,14 +96,14 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
         }
       };
       ws.onclose = () => {
-        setOnline(false);
+        wsAberto.current = false;
         if (!parar) setTimeout(conectar, (espera = Math.min(espera * 2, 5000)));
       };
     };
     conectar();
     recarregar().catch(() => undefined);
     // Rede de segurança: mesmo que uma mensagem do WebSocket se perca, o estado se atualiza sozinho.
-    const timer = setInterval(() => recarregar().catch(() => undefined), 4000);
+    const timer = setInterval(() => recarregar().catch(() => undefined), 3000);
     return () => {
       parar = true;
       clearInterval(timer);
