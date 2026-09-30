@@ -1,4 +1,9 @@
-"""Quarentena: guarda o APK antes de remover e permite desfazer qualquer ação."""
+"""Quarentena: guarda o APK antes de remover e permite desfazer qualquer ação.
+
+Os APKs ficam num zip cifrado com a senha padrão da área ("infected"). Isso impede o
+antivírus do Windows de escanear e apagar a amostra (o que fazia a prova sumir), e é o
+mesmo formato usado para compartilhar malware entre analistas.
+"""
 import json
 import shlex
 import shutil
@@ -6,9 +11,42 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+import pyzipper
+
 from celscan.config import DIR
 
 DIRQ = DIR / "quarentena"
+ZIP_APKS = "apks_infected.zip"
+SENHA_APKS = b"infected"  # convenção da área para amostras de malware
+
+
+def _guardar_apks(pasta, arquivos_locais):
+    """Grava os APKs (caminho_local, nome_no_zip) num zip AES com senha 'infected'. Devolve os nomes."""
+    nomes = []
+    with pyzipper.AESZipFile(pasta / ZIP_APKS, "w", compression=pyzipper.ZIP_DEFLATED,
+                            encryption=pyzipper.WZ_AES) as z:
+        z.setpassword(SENHA_APKS)
+        for caminho, nome in arquivos_locais:
+            z.write(caminho, nome)
+            nomes.append(nome)
+    return nomes
+
+
+def _extrair_apks(pasta, meta, destino):
+    """Extrai os APKs da quarentena para 'destino'. Cobre o zip cifrado (novo) e os arquivos soltos (antigo)."""
+    apks = []
+    if meta.get("protegido") and (pasta / ZIP_APKS).exists():
+        with pyzipper.AESZipFile(pasta / ZIP_APKS) as z:
+            z.setpassword(SENHA_APKS)
+            for nome in meta["arquivos"]:
+                z.extract(nome, destino)
+                apks.append(str(Path(destino) / nome))
+    else:  # quarentenas antigas: arquivos .quarentena soltos
+        for a in meta["arquivos"]:
+            alvo = Path(destino) / a.replace(".quarentena", "")
+            shutil.copy(pasta / a, alvo)
+            apks.append(str(alvo))
+    return apks
 
 
 def _ler(pasta):
@@ -22,19 +60,25 @@ def _gravar(pasta, meta):
 def criar(ap, pacote, dados=None, copiar_apk=True):
     pasta = DIRQ / f"{datetime.now():%Y%m%d_%H%M%S}_{pacote}"
     pasta.mkdir(parents=True, exist_ok=True)
-    arquivos = []
+    arquivos, protegido = [], False
     if copiar_apk:
         caminhos = [linha[8:] for linha in ap.sh(f"pm path {pacote}").splitlines() if linha.startswith("package:")]
-        for i, c in enumerate(caminhos):
-            destino = pasta / f"{i:02d}_{Path(c).name}.quarentena"
-            ap.adb("pull", c, str(destino), timeout=900)
-            if destino.exists():
-                arquivos.append(destino.name)
+        with tempfile.TemporaryDirectory() as tmp:
+            locais = []
+            for i, c in enumerate(caminhos):
+                bruto = Path(tmp) / f"{i:02d}_{Path(c).name}"
+                ap.adb("pull", c, str(bruto), timeout=900)
+                if bruto.exists():
+                    locais.append((str(bruto), bruto.name))
+            if locais:
+                arquivos = _guardar_apks(pasta, locais)
+                protegido = True
     d = dados or {}
     _gravar(pasta, {
         "id": pasta.name, "pacote": pacote, "serial": ap.serial,
         "data": datetime.now().isoformat(timespec="seconds"), "acao": None,
-        "arquivos": arquivos, "motivos": d.get("motivos", []), "sha256": d.get("sha256"),
+        "arquivos": arquivos, "protegido": protegido,
+        "motivos": d.get("motivos", []), "sha256": d.get("sha256"),
         "ajustes": [],
     })
     return pasta
@@ -114,15 +158,13 @@ def restaurar(ap, ident):
         ok = "installed" in out.lower()
     elif acao == "removido" and meta["arquivos"]:
         tmp = Path(tempfile.mkdtemp())
-        apks = []
-        for a in meta["arquivos"]:
-            destino = tmp / a.replace(".quarentena", "")
-            shutil.copy(pasta / a, destino)
-            apks.append(str(destino))
-        cmd = "install-multiple" if len(apks) > 1 else "install"
-        out = ap.adb(cmd, "-r", *apks, timeout=600, erro=True)
-        ok = "Success" in out
-        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            apks = _extrair_apks(pasta, meta, tmp)
+            cmd = "install-multiple" if len(apks) > 1 else "install"
+            out = ap.adb(cmd, "-r", *apks, timeout=600, erro=True)
+            ok = "Success" in out
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     elif acao == "ajuste":
         ok, msgs = _reverter_ajustes(ap, meta)
         out = "; ".join(msgs) or "nada a desfazer"
