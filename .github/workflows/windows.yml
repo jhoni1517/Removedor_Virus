@@ -20,55 +20,78 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: celscan/web/package-lock.json
+
+      - name: Compilar a interface
+        working-directory: celscan/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Dependências Python
+        run: python -m pip install -r requirements-dev.txt pyinstaller
 
       - name: Testes
-        run: python -m unittest discover -s tests -v
+        env:
+          COLUMNS: "200"
+        run: python -m pytest
 
-      - name: Baixar ADB oficial (embutido no instalador)
-        run: python -m removedor_virus baixar-adb --destino .
+      - name: Baixar ADB oficial e scrcpy (vão embutidos)
+        run: python instalador/baixar_dependencias.py
 
       - name: Ler versão
         id: versao
         shell: bash
-        run: echo "versao=$(python -c 'import removedor_virus as r; print(r.__version__)')" >> "$GITHUB_OUTPUT"
+        run: |
+          v=$(python -c 'import celscan; print(celscan.__version__)')
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+          if [[ "$v" =~ (a|b|rc|dev) ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; else echo "pre=false" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Gerar executável
-        run: pyinstaller --noconfirm --clean instalador/RemovedorVirus.spec
+      - name: Gerar executáveis
+        run: pyinstaller --noconfirm --clean instalador/CelScan.spec
+
+      - name: Testar o executável
+        run: |
+          dist\CelScan\celscan-cli.exe --help
+          dist\CelScan\celscan-cli.exe bases
 
       - name: Gerar instalador
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/DAppVersion=${{ steps.versao.outputs.versao }}" instalador\RemovedorVirus.iss
+          & $iscc "/DAppVersion=${{ steps.versao.outputs.versao }}" instalador\CelScan.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Compress-Archive -Path dist\RemovedorVirus -DestinationPath "dist\RemovedorVirus-Portatil-${{ steps.versao.outputs.versao }}.zip"
+          Compress-Archive -Path dist\CelScan -DestinationPath "dist\CelScan-Portatil-${{ steps.versao.outputs.versao }}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RemovedorVirus-${{ steps.versao.outputs.versao }}
+          name: CelScan-${{ steps.versao.outputs.versao }}
           path: |
-            dist/RemovedorVirus-Setup-*.exe
-            dist/RemovedorVirus-Portatil-*.zip
+            dist/CelScan-Setup-*.exe
+            dist/CelScan-Portatil-*.zip
 
       # Publica ao enviar uma tag v* ou ao rodar manualmente (Actions > Run workflow).
-      # Na execução manual, a tag v<versão> é criada automaticamente.
+      # Na execução manual, a tag v<versão> é criada automaticamente. Versões beta saem como pré-lançamento.
       - name: Publicar na página de Releases
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.versao.outputs.versao }}
           target_commitish: ${{ github.sha }}
-          name: Removedor de Vírus Android ${{ steps.versao.outputs.versao }}
+          name: CelScan ${{ steps.versao.outputs.versao }}
+          prerelease: ${{ steps.versao.outputs.pre }}
           body: |
-            Baixe **RemovedorVirus-Setup-${{ steps.versao.outputs.versao }}.exe**, execute e siga o instalador.
-            Não precisa instalar Python nem ADB.
+            Baixe **CelScan-Setup-${{ steps.versao.outputs.versao }}.exe**, execute e siga o instalador.
+            Não precisa instalar Python nem ADB: tudo vem junto. Substitui o antigo "Removedor de Vírus Android".
 
-            Versão portátil (sem instalar): **RemovedorVirus-Portatil-${{ steps.versao.outputs.versao }}.zip**.
+            Versão portátil (sem instalar): **CelScan-Portatil-${{ steps.versao.outputs.versao }}.zip**.
 
             Se o Windows avisar "editor desconhecido", clique em *Mais informações > Executar assim mesmo*.
           files: |
-            dist/RemovedorVirus-Setup-*.exe
-            dist/RemovedorVirus-Portatil-*.zip
+            dist/CelScan-Setup-*.exe
+            dist/CelScan-Portatil-*.zip

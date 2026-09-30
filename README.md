@@ -1,99 +1,94 @@
-# Removedor de Vírus Android
+# CelScan
 
-Programa para Windows que detecta e remove vírus e **adware** (apps que enchem o celular de anúncios) de celulares Android conectados por cabo USB. Não precisa de root.
+Segurança, diagnóstico e otimização de celulares Android pelo cabo USB, no Windows.
+O CelScan substitui o antigo "Removedor de Vírus Android".
+
+> **Versão 3.0 beta 1.** A interface nova ainda não foi testada num celular real. Se algo der
+> errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
 
 ## Download e instalação
 
-1. Abra a página **[Releases](https://github.com/jhoni1517/Removedor_Virus/releases)** e baixe `RemovedorVirus-Setup-X.Y.Z.exe`.
-2. Execute o instalador. Ele não pede senha de administrador e cria atalhos no menu Iniciar e, se quiser, na área de trabalho.
-3. Abra o **Removedor de Vírus Android**.
+1. Abra a página **[Releases](https://github.com/jhoni1517/Removedor_Virus/releases)** e baixe `CelScan-Setup-X.Y.Z.exe`.
+2. Execute o instalador:
+   - não pede senha de administrador;
+   - remove o "Removedor de Vírus Android" antigo, se ele estiver instalado.
+3. Abra o **CelScan** pelo menu Iniciar.
 
-Não precisa instalar Python nem ADB: tudo já vem no instalador. Também existe a versão portátil (`RemovedorVirus-Portatil-X.Y.Z.zip`), que não precisa instalar.
+Não precisa instalar Python, ADB nem nada mais: vem tudo junto. Também existe a versão portátil
+(`CelScan-Portatil-X.Y.Z.zip`), que não precisa instalar.
 
-> O Windows SmartScreen pode avisar "editor desconhecido", porque o programa ainda não tem assinatura digital. Clique em **Mais informações > Executar assim mesmo**.
+> O Windows pode avisar "editor desconhecido", porque o programa ainda não tem assinatura digital.
+> Clique em **Mais informações > Executar assim mesmo**.
 
 ## Como usar
 
-1. No celular, ative a **Depuração USB**:
-   - Configurações > Sobre o telefone > toque 7× em **Número da versão**;
-   - Configurações > Sistema > **Opções do desenvolvedor** > **Depuração USB**.
-2. Conecte o cabo USB e toque em **Permitir** no aviso do celular.
-3. No programa: **Conectar** > **Escanear**.
-4. Clique em um app para ver por que ele é suspeito. Depois use **Remover selecionados** ou **Limpeza rápida**, que remove todos os apps de risco alto.
+1. **Conectar.** Ligue o celular no cabo e ele aparece sozinho. A tela mostra o passo a passo
+   para ligar a Depuração USB na sua marca (Samsung, Motorola, Xiaomi, OPPO/Realme, vivo...).
+   Também dá para conectar pelo Wi-Fi lendo um código QR (Android 11 ou mais novo).
+2. **Escolher o tipo:**
+   - **Rápido** (1–2 min): apps, permissões, assinaturas e ameaças conhecidas;
+   - **Completo**: tudo do rápido e mais a opinião de mais de 70 antivírus (VirusTotal).
+     Precisa de uma chave gratuita, que você cadastra em Configurações.
+3. **Resultado.** O programa mostra uma nota de 0 a 100. Cada problema vem com
+   **"o que isso significa"** e **"o que fazer"**. Dá para filtrar por nível e remover apps
+   um a um ou em lote.
+4. **Desfazer.** Toda remoção guarda uma cópia do app na quarentena e registra as configurações
+   alteradas. O botão "Desfazer" aparece por 10 segundos e continua disponível no **Histórico**.
+5. **Laudo.** Gere o laudo em PDF: versão para o cliente ou versão técnica. Cada laudo tem um
+   **código de verificação** e um QR code, que você confere em Histórico > Verificar laudo.
 
-> Samsung: se o celular não aparecer, instale o [driver USB da Samsung](https://developer.samsung.com/android-usb-driver).
+## O que o CelScan verifica
 
-## O que ele detecta
+- **Ameaças conhecidas:** listas públicas de spyware e stalkerware da Amnesty/MVT e da Echap.
+  Compara nome do pacote, certificado e impressão digital do arquivo.
+- **Sinais de golpe:**
+  - serviço de acessibilidade ativo (usado por trojans bancários que roubam Pix);
+  - app administrador do aparelho;
+  - leitor de notificações;
+  - app sem ícone;
+  - app instalado fora da loja;
+  - telas por cima de outros apps;
+  - SMS, áudio e localização em segundo plano;
+  - certificado de teste.
+- **Aparelho:** atualização de segurança antiga, proxy, root e bootloader desbloqueado.
+- **VirusTotal**, no modo Completo.
 
-Cada app instalado pelo usuário recebe uma pontuação (Alto ≥ 60, Médio ≥ 30):
+As regras e os textos ficam em `celscan/dados/regras.yaml` e podem ser ajustados sem mexer no código.
 
-| Sinal | Pontos |
-|---|---|
-| Malware conhecido (lista de assinaturas) | 100 |
-| VirusTotal: 3 ou mais antivírus detectam / 1 ou 2 detectam | 100 / 30 |
-| Administrador do dispositivo (bloqueia a desinstalação) | 40 |
-| Serviço de acessibilidade ativo | 30 |
-| Sem ícone na tela inicial (app escondido) | 30 |
-| Pode exibir janelas sobre outros apps (anúncios) | 25 |
-| Lê todas as notificações | 20 |
-| Instalado fora da loja oficial | 15 |
-| SMS, chamadas, áudio, localização em segundo plano (concedidos) | 3–15 |
-| Nome típico de adware, permissões de instalar apps / iniciar sozinho | 3–10 |
+## Linha de comando
 
-Apps do sistema nunca são tocados. Apps conhecidos (WhatsApp, Google…) instalados pela loja oficial são ignorados, a não ser que o VirusTotal os acuse.
+A instalação inclui o `celscan-cli.exe`. Quem usa Python pode rodar `python celscan.py`:
 
-### VirusTotal (opcional)
-
-Em **Opções > Chave do VirusTotal**, cole uma chave gratuita de [virustotal.com](https://www.virustotal.com/gui/join-us). Assim o programa confere os apps suspeitos em mais de 70 antivírus. O plano gratuito permite 4 consultas por minuto.
-
-## Como a remoção funciona
-
-1. Faz uma cópia do app na **quarentena**, para poder restaurar depois.
-2. Para o app e tira os "poderes" dele: sobreposição, acessibilidade e administrador.
-3. Desinstala. Se não conseguir, remove só do usuário; em último caso, desativa o app.
-
-Além disso:
-- **Restaurar...** reinstala um app da quarentena.
-- **Bloquear anúncios (DNS)** ativa o DNS Privado AdGuard, que bloqueia anúncios no celular todo (Android 9+).
-
-Os relatórios e a quarentena ficam em `%LOCALAPPDATA%\RemovedorVirus`, acessível pelo menu **Arquivo**.
-
-> Anúncios que chegam como notificação do Chrome vêm de sites, não de vírus. Desative em Chrome > Configurações > Configurações do site > Notificações.
+```
+celscan-cli android [--modo rapido|completo] [--remover]   varredura + laudo
+celscan-cli otimizar                                       cache, compilação, animações, bloatware
+celscan-cli historico | quarentena listar | quarentena restaurar ID
+celscan-cli laudo ID [--versao tecnico] | verificar CÓDIGO
+celscan-cli bases [--atualizar]   (e --offline em qualquer comando)
+celscan-cli fixtures              grava as saídas do celular para os testes
+celscan-cli interface [--navegador]
+```
 
 ## Para desenvolvedores
 
 ```
-python -m removedor_virus                 # abre a janela
-python -m removedor_virus menu            # menu no terminal
-python -m removedor_virus escanear | limpar | remover PACOTE | restaurar | dns ativar | virustotal CHAVE
-python -m unittest discover -s tests      # testes
+pip install -r requirements-dev.txt
+cd celscan/web && npm ci && npm run build && cd ../..
+python celscan.py interface --navegador      # interface
+python -m pytest && ruff check celscan testes celscan.py
 ```
 
-### Gerar o instalador
-
-Cada push gera o instalador pelo GitHub Actions (`.github/workflows/windows.yml`); ele aparece em **Actions > artefatos**. Para publicar na página de Releases, use um destes caminhos:
-- no GitHub: **Actions > Instalador Windows > Run workflow** (cria a tag `v<versão>` automaticamente);
-- ou envie uma tag: `git tag v0.2.0 && git push origin v0.2.0`.
-
-Antes de publicar uma versão nova, atualize `__version__` em `removedor_virus/__init__.py`.
-
-Para gerar manualmente no Windows (Python 3.9+, PyInstaller e [Inno Setup 6](https://jrsoftware.org/isdl.php)):
-
-```
-pip install pyinstaller
-python -m removedor_virus baixar-adb --destino .
-pyinstaller --noconfirm instalador\RemovedorVirus.spec
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.2.0 instalador\RemovedorVirus.iss
-```
-
-O instalador fica em `dist\`.
-
-## Roadmap
-
-- [x] v0.1: versão para PC via USB (linha de comando)
-- [x] v0.2: programa Windows com janela e instalador, VirusTotal
-- [ ] Atualização automática da lista de assinaturas
-- [ ] Verificação de apps pré-instalados (adware de fábrica)
-- [ ] Assinatura digital do instalador
-- [ ] iPhone (análise de spyware via backup + MVT)
-- [ ] App Android instalável (sem PC)
+- **Sem celular:** `CELSCAN_ADB=testes/fake_adb.py`, com as fixtures em `testes/fixtures/`.
+- **Teste da interface no navegador:** `testes/e2e_interface.py`, que usa o Playwright.
+- **Instalador:** o GitHub Actions gera a cada push (Actions > artefatos). Para publicar em
+  Releases, use **Actions > Instalador Windows > Run workflow**, que cria a tag `v<versão>`
+  de `celscan/__init__.py`.
+- **Estrutura:**
+  - `celscan/core` (adb, coleta, parsers, banco);
+  - `celscan/analise` (regras, ameaças, VirusTotal);
+  - `celscan/acoes` (remoção, quarentena, otimização);
+  - `celscan/api` (backend da interface);
+  - `celscan/web` (React);
+  - `celscan/relatorio` (laudos).
+- **Planejamento:** [`PLANO.md`](PLANO.md) (etapas e decisões) e
+  [`COMPARATIVO.md`](COMPARATIVO.md) (concorrentes).

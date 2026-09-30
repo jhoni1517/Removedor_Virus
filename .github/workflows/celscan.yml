@@ -7,6 +7,21 @@ on:
   workflow_dispatch:
 
 jobs:
+  interface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: celscan/web/package-lock.json
+      - name: Tipos e build da interface
+        working-directory: celscan/web
+        run: |
+          npm ci
+          npm run build
+
   testes:
     strategy:
       fail-fast: false

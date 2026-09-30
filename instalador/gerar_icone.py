@@ -1,40 +1,31 @@
-"""Gera assets/icone.ico (escudo verde com check). Requer Pillow: pip install pillow"""
+"""Gera assets/celscan.ico (celular com linha de varredura). Requer Pillow: pip install pillow"""
 
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 TAMANHO = 256
-DESTINO = Path(__file__).resolve().parent.parent / "assets" / "icone.ico"
+DESTINO = Path(__file__).resolve().parent.parent / "assets" / "celscan.ico"
+FUNDO, TINTA, DESTAQUE = (23, 25, 27), (240, 238, 233), (127, 178, 229)
 
 
 def desenhar() -> Image.Image:
-    escala = 4  # desenha grande e reduz, para bordas suaves
-    t = TAMANHO * escala
+    e = 4  # desenha grande e reduz, para bordas suaves
+    t = TAMANHO * e
     img = Image.new("RGBA", (t, t), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    m = t * 0.08
-    topo, base = m, t - m
-    esquerda, direita = m * 1.4, t - m * 1.4
-    meio = t / 2
-    escudo = [
-        (meio, topo),
-        (direita, topo + t * 0.14),
-        (direita, t * 0.50),
-        (meio + t * 0.20, base - t * 0.12),
-        (meio, base),
-        (meio - t * 0.20, base - t * 0.12),
-        (esquerda, t * 0.50),
-        (esquerda, topo + t * 0.14),
-    ]
-    d.polygon(escudo, fill=(22, 128, 61))
-    interno = [(meio + (x - meio) * 0.86, t * 0.52 + (y - t * 0.52) * 0.86) for x, y in escudo]
-    d.polygon(interno, fill=(34, 197, 94))
-    largura = int(t * 0.085)
-    d.line([(t * 0.33, t * 0.52), (t * 0.46, t * 0.65), (t * 0.69, t * 0.38)],
-           fill="white", width=largura, joint="curve")
-    for x, y in ((t * 0.33, t * 0.52), (t * 0.69, t * 0.38)):
-        d.ellipse([x - largura / 2, y - largura / 2, x + largura / 2, y + largura / 2], fill="white")
+    d.rounded_rectangle([0, 0, t - 1, t - 1], radius=int(t * 0.22), fill=FUNDO)
+    # celular
+    w, h = t * 0.40, t * 0.66
+    x0, y0 = (t - w) / 2, (t - h) / 2
+    d.rounded_rectangle([x0, y0, x0 + w, y0 + h], radius=int(t * 0.07), outline=TINTA, width=int(t * 0.045))
+    # cantos de mira
+    m, c, g = t * 0.14, t * 0.12, int(t * 0.035)
+    for (x, y, dx, dy) in ((m, m, 1, 1), (t - m, m, -1, 1), (m, t - m, 1, -1), (t - m, t - m, -1, -1)):
+        d.line([(x, y + dy * c), (x, y), (x + dx * c, y)], fill=DESTAQUE, width=g, joint="curve")
+    # linha de varredura
+    y = t * 0.5
+    d.rounded_rectangle([t * 0.18, y - t * 0.025, t * 0.82, y + t * 0.025], radius=int(t * 0.025), fill=DESTAQUE)
     return img.resize((TAMANHO, TAMANHO), Image.LANCZOS)
 
 

@@ -10,7 +10,9 @@ import webbrowser
 
 import uvicorn
 
+from celscan import config
 from celscan.api.app import criar_app
+from celscan.core import adb
 from celscan.core.log import LOGGER
 
 
@@ -24,7 +26,9 @@ def subir(porta: int = 0) -> tuple[uvicorn.Server, str]:
     """Inicia o servidor numa thread e devolve (servidor, url com token)."""
     token = secrets.token_urlsafe(24)
     porta = porta or porta_livre()
-    servidor = uvicorn.Server(uvicorn.Config(criar_app(token), host="127.0.0.1", port=porta, log_level="warning"))
+    # log_config=None: no programa com janela não existe console para o uvicorn escrever.
+    servidor = uvicorn.Server(uvicorn.Config(criar_app(token), host="127.0.0.1", port=porta, log_level="warning",
+                                             log_config=None))
     threading.Thread(target=servidor.run, name="celscan-servidor", daemon=True).start()
     for _ in range(200):
         if servidor.started:
@@ -55,3 +59,14 @@ def abrir(modo: str = "janela", porta: int = 0) -> None:
         pass
     finally:
         servidor.should_exit = True
+        encerrar_adb_embutido()
+
+
+def encerrar_adb_embutido() -> None:
+    """Fecha o servidor do adb que veio com o programa (libera os arquivos para atualizar/desinstalar)."""
+    caminho = adb.localizar()
+    if caminho and caminho.startswith((str(config.recursos() / "platform-tools"), str(config.DIR))):
+        try:
+            adb.run(["kill-server"], timeout=10)
+        except adb.AdbErro:
+            pass

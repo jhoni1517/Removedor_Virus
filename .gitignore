@@ -11,3 +11,4 @@ testes/.estado/
 .ruff_cache/
 celscan/web/node_modules/
 celscan/web/dist/
+scrcpy/

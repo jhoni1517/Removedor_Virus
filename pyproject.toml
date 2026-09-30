@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py39"
-extend-exclude = ["removedor_virus", "tests", "instalador"]
+extend-exclude = ["instalador"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
