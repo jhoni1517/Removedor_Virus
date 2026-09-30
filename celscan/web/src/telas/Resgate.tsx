@@ -29,6 +29,7 @@ export function PainelEspelho({ d }: { d: Dispositivo | undefined }) {
   const [modo, setModo] = useState<"controlar" | "ver">("controlar");
   const [telaDesligada, setTelaDesligada] = useState(false);
   const [gravar, setGravar] = useState(false);
+  const [compativel, setCompativel] = useState(false);
   const [aberto, setAberto] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const pronto = d?.estado === "device";
@@ -36,7 +37,7 @@ export function PainelEspelho({ d }: { d: Dispositivo | undefined }) {
   async function abrir() {
     setOcupado(true);
     try {
-      const r = await api<{ gravacao: string | null }>("/espelho", { corpo: { serial: d!.serial, modo, tela_desligada: telaDesligada, gravar } });
+      const r = await api<{ gravacao: string | null }>("/espelho", { corpo: { serial: d!.serial, modo, tela_desligada: telaDesligada, gravar, compativel } });
       setAberto(true);
       avisar({ tipo: "ok", texto: r.gravacao ? `Tela aberta. Gravando em ${r.gravacao}` : "A tela do celular abriu numa janela nova." });
     } catch (e) {
@@ -65,7 +66,11 @@ export function PainelEspelho({ d }: { d: Dispositivo | undefined }) {
           <span>Desligar a tela do celular enquanto espelha <span className="text-fraco">(tela queimada, vazando ou esquentando)</span></span></label>
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={gravar}
           onChange={(e) => setGravar(e.target.checked)} /> <span>Gravar a tela em vídeo</span></label>
+        <label className="flex items-start gap-2"><input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={compativel}
+          onChange={(e) => setCompativel(e.target.checked)} />
+          <span>Modo compatível <span className="text-fraco">(PC fraco ou vídeo travando/preto: resolução e taxa menores)</span></span></label>
       </div>
+      <p className="mt-2 text-xs text-fraco">Vídeo de streaming com proteção (Netflix, Prime etc.) aparece preto de propósito — isso não tem como contornar.</p>
       <div className="mt-4 flex gap-2">
         <Botao variante="primario" onClick={abrir} disabled={!pronto || ocupado || aberto}><Monitor size={15} aria-hidden /> {ocupado ? "Abrindo..." : "Abrir a tela"}</Botao>
         {aberto && <Botao onClick={fechar}><Square size={14} aria-hidden /> Fechar</Botao>}
@@ -96,6 +101,31 @@ function PainelOtg() {
       <Botao variante="primario" onClick={abrir} disabled={aberto}><MousePointer2 size={15} aria-hidden /> Usar o mouse do PC no celular</Botao>
       {aberto && <Botao onClick={fechar}><Square size={14} aria-hidden /> Fechar modo mouse</Botao>}
     </div>
+  );
+}
+
+export function PainelAtalhos({ d }: { d: Dispositivo | undefined }) {
+  const { avisar } = useApp();
+  const [ajustes, setAjustes] = useState<Record<string, string>>({});
+  const pronto = d?.estado === "device";
+  useEffect(() => { api<Record<string, string>>("/ajustes").then(setAjustes).catch(() => undefined); }, []);
+  async function abrir(chave: string) {
+    try {
+      const r = await api<{ aberto: string }>("/ajustes/abrir", { corpo: { serial: d!.serial, ajuste: chave } });
+      avisar({ tipo: "ok", texto: `Abri "${r.aberto}" no celular. Olhe a tela (ou o espelho).` });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
+  return (
+    <Cartao className="p-5">
+      <h3 className="flex items-center gap-2 font-semibold"><Monitor size={18} aria-hidden /> Abrir ajustes direto no celular</h3>
+      <p className="mt-1 text-sm text-fraco">Cai na tela certa sem procurar no menu — combine com o espelho ou o modo mouse.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {Object.entries(ajustes).map(([k, nome]) => (
+          <Botao key={k} variante="fantasma" onClick={() => abrir(k)} disabled={!pronto}>{nome}</Botao>
+        ))}
+      </div>
+      {!pronto && <p className="mt-2 text-sm text-fraco">Precisa do celular conectado e autorizado.</p>}
+    </Cartao>
   );
 }
 
@@ -274,9 +304,12 @@ export default function Resgate() {
       </Cartao>
 
       {casoAtual === "autorizado" && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <PainelEspelho d={d} />
-          <PainelBackup d={d} />
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PainelEspelho d={d} />
+            <PainelBackup d={d} />
+          </div>
+          <PainelAtalhos d={d} />
         </div>
       )}
 
