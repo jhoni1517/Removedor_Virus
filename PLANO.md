@@ -15,7 +15,29 @@
 | 7 | Repositório público/privado | Continua como está. Mudar a visibilidade é com você, nas configurações do GitHub |
 | 8 | Modo balcão grátis/pago | Em aberto; só afeta a D4 (modo balcão) |
 
-## Onde estamos
+## Etapa A: concluída em 30/09/2026 (beta 3.0.0b1)
+
+| Item | Situação | Como foi testado |
+|---|---|---|
+| A1 Backend | ✅ FastAPI + WebSocket, track-devices, tarefas canceláveis, Wi-Fi com QR, token por sessão | 11 testes de API com o ADB simulado |
+| A2 Interface | ✅ Conectar (passo a passo por marca, Wi-Fi), Modo, Varredura, Resultado, Desfazer em 10 s, Histórico, Configurações; tema claro/escuro | Chromium (Playwright) com o ADB simulado, sem erros de console |
+| A3 Empacotamento | ✅ CelScan.exe + celscan-cli.exe com adb e scrcpy; instalador que remove o v0.2 | Build no Windows (GitHub Actions) + `celscan-cli.exe --help/bases`; binário completo testado no Linux |
+| A4 Laudo PDF | ✅ Cliente e técnico, QR + código de verificação | Testes de texto do PDF e verificação |
+
+**Não testado ainda (depende de você):**
+- aparelho real;
+- a janela no Windows (pywebview/WebView2);
+- o instalador de verdade (instalar, atualizar sobre o v0.2, desinstalar);
+- o pareamento Wi-Fi com celular de verdade.
+
+**Pendências da Etapa A:**
+- imagens no passo a passo por marca (hoje é só texto);
+- a marca não é detectada antes de o celular autorizar o computador (o usuário escolhe).
+
+⏰ **Lembrete (decisão 6): assinatura digital do `.exe`.** O instalador novo está pronto e ainda
+sai sem assinatura. Pergunto de novo antes da D7 (atualização automática).
+
+## Onde estamos (antes da Etapa A)
 
 A **Fase 0 está concluída**: 10 commits, todos já no GitHub (branch `ccr-b3fdeeb6-jqhbn5`).
 O CI roda **ruff + 44 testes** no Windows e no Linux, com Python 3.9 e 3.12, e está todo verde.
