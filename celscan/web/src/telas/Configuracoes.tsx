@@ -1,12 +1,25 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 
 interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string }
 
 export default function Configuracoes() {
-  const { avisar, recarregar, tema, mudarTema, estado } = useApp();
+  const { avisar, recarregar, tema, mudarTema, estado, dispositivos, esperar } = useApp();
+  const pronto = dispositivos.find((d) => d.estado === "device");
+
+  async function registrarCertificados() {
+    try {
+      const t = await esperar(await api<Tarefa<{ nome: string }[]>>(`/certificados/registrar?serial=${encodeURIComponent(pronto!.serial)}`, { corpo: {} }));
+      if (t.estado !== "concluida") throw new Error(t.erro ?? "Não terminou.");
+      const n = t.resultado ?? [];
+      avisar({ tipo: "ok", texto: n.length ? `Certificados registrados: ${n.map((x) => x.nome).join(", ")}.` :
+        "Nenhum app de banco da lista instalado pela Play Store neste celular." });
+    } catch (e) {
+      avisar({ tipo: "erro", texto: (e as Error).message });
+    }
+  }
   const [cfg, setCfg] = useState<Config | null>(null);
   const [chave, setChave] = useState("");
 
@@ -38,6 +51,17 @@ export default function Configuracoes() {
           <Botao type="submit" variante="primario" disabled={!chave.trim()}>Salvar chave</Botao>
           {cfg?.chave_virustotal && <Botao onClick={() => salvar({ chave_virustotal: "" })}>Remover chave</Botao>}
         </form>
+      </Cartao>
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Proteção Pix</h2>
+        <p className="mt-1 text-sm text-fraco">
+          Guarda a "assinatura digital" dos apps de banco oficiais instalados pela Play Store no celular conectado.
+          Depois disso, cópias falsas desses apps são apontadas em qualquer celular analisado neste computador.
+        </p>
+        <Botao className="mt-3" onClick={registrarCertificados} disabled={!pronto}>
+          Registrar certificados dos apps de banco{pronto?.modelo ? ` (${pronto.modelo})` : ""}
+        </Botao>
       </Cartao>
 
       <Cartao className="p-5">

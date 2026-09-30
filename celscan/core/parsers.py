@@ -175,8 +175,11 @@ def appops(txt: str, interesse: set[str]) -> dict[str, set[str]]:
             atual = res.setdefault(linha[6:].strip(), set())
         elif atual is not None:
             # "OP: allow; time=..." (8-15), "Uid mode: OP: allow" (alguns Samsung/Xiaomi)
-            m = re.match(r"^\s*(?:Uid mode:\s*)?(\w+):\s*allow\b", linha)
-            if m and m.group(1) in interesse:
+            m = re.match(r"^\s*(?:Uid mode:\s*)?(\w+):\s*(\w+)(.*)$", linha)
+            if not m or m.group(1) not in interesse:
+                continue
+            # liberada ("allow") ou usada recentemente ("time=..."), como a captura de tela
+            if m.group(2) == "allow" or (m.group(1) == "PROJECT_MEDIA" and "time=" in m.group(3)):
                 atual.add(m.group(1))
     return res
 

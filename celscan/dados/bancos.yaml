@@ -1,0 +1,26 @@
+# Apps de bancos, carteiras e serviços muito usados no Brasil.
+# Base da "Proteção Pix": avisar quando um app IMITA um destes (nome parecido, instalado fora da loja)
+# e quando há um trojan bancário no mesmo aparelho que eles.
+# Só coloque pacotes conferidos na Play Store. "termos": palavras que um app falso usaria no pacote.
+
+apps:
+  - {pacote: com.nu.production, nome: Nubank, termos: [nubank, nuconta]}
+  - {pacote: br.com.bb.android, nome: Banco do Brasil, termos: [bancodobrasil, bbbanco]}
+  - {pacote: com.itau, nome: Itaú, termos: [itau, itaucard]}
+  - {pacote: com.bradesco, nome: Bradesco, termos: [bradesco]}
+  - {pacote: br.com.gabba.Caixa, nome: Caixa, termos: [caixaeconomica]}
+  - {pacote: br.gov.caixa.tem, nome: Caixa Tem, termos: [caixatem]}
+  - {pacote: com.santander.app, nome: Santander, termos: [santander]}
+  - {pacote: br.com.intermedium, nome: Banco Inter, termos: [bancointer]}
+  - {pacote: com.c6bank.app, nome: C6 Bank, termos: [c6bank]}
+  - {pacote: com.picpay, nome: PicPay, termos: [picpay]}
+  - {pacote: com.mercadopago.wallet, nome: Mercado Pago, termos: [mercadopago]}
+  - {pacote: br.com.uol.ps.myaccount, nome: PagBank, termos: [pagbank, pagseguro]}
+  - {pacote: br.gov.meugovbr, nome: gov.br, termos: [govbr, meugov]}
+  - {pacote: com.whatsapp, nome: WhatsApp, termos: [whatsapp, whatsap, watsapp]}
+
+# Marcas usadas como isca em golpes (não são bancos, mas o app falso finge ser delas).
+iscas:
+  - {nome: Correios, termos: [correios]}
+  - {nome: Receita Federal, termos: [receitafederal]}
+  - {nome: Detran, termos: [detran]}

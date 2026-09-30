@@ -428,6 +428,19 @@ def cmd_backup(a):
                     title="Backup", border_style="green" if not res.falhas else "yellow"))
 
 
+def cmd_certificados_bancos(a):
+    from celscan.analise import certificados
+
+    ap = escolher_aparelho(a.serial)
+    with con.status("Lendo os certificados dos apps de banco instalados pela Play Store..."):
+        novos = certificados.registrar_do_aparelho(ap)
+    if not novos:
+        return con.print("Nenhum app de banco da lista instalado pela Play Store neste aparelho.")
+    for n in novos:
+        con.print(f"[green]✔[/] {n['nome']} ({n['pacote']}): {n['sha256'][0][:16]}…")
+    con.print(f"[dim]Guardado em {certificados.BASE.caminho}. Cópias falsas desses apps agora são detectadas.[/]")
+
+
 def cmd_interface(a):
     from celscan.api import servidor
 
@@ -555,6 +568,11 @@ def main():
     s.add_argument("--verificar", action="store_true", help="Confere o SHA-256 de cada arquivo (mais lento)")
     s.add_argument("--listar", action="store_true", help="Só mostra quanto há para copiar")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("certificados-bancos",
+                       help="Registra os certificados oficiais dos apps de banco deste celular (Play Store)")
+    s.add_argument("--serial")
+    s.set_defaults(func=cmd_certificados_bancos)
 
     s = sub.add_parser("interface", help="Abre a interface gráfica")
     s.add_argument("--navegador", action="store_true", help="Abre no navegador em vez de janela própria")

@@ -12,7 +12,8 @@ from celscan.config import PASTAS_SISTEMA
 from celscan.core import parsers
 from celscan.core.adb import AdbErro, Aparelho
 
-APPOPS_COLETADOS = ("SYSTEM_ALERT_WINDOW", "REQUEST_INSTALL_PACKAGES")
+# PROJECT_MEDIA = captura/transmissão da tela (usada por trojans bancários como o PixRevolution)
+APPOPS_COLETADOS = ("SYSTEM_ALERT_WINDOW", "REQUEST_INSTALL_PACKAGES", "PROJECT_MEDIA")
 
 SCRIPT = r"""
 sec(){ echo "@@SEC $1"; }

@@ -146,3 +146,10 @@ def test_laudo_pdf_e_verificacao(cliente):
     assert cliente.get("/api/laudos/verificar", params={"codigo": codigo}, headers=H).json()["varredura_id"] == vid
     assert cliente.get("/api/laudos/verificar", params={"codigo": "f" * 16}, headers=H).status_code == 404
     assert cliente.get(f"/api/varreduras/{vid}/laudo.pdf", params={"versao": "x"}, headers=H).status_code == 422
+
+
+def test_registrar_certificados_via_api(cliente):
+    t = cliente.post("/api/certificados/registrar", params={"serial": "ABC123"}, headers=H).json()
+    t = esperar(cliente, t)
+    assert t["estado"] == "concluida" and t["resultado"] == []  # o celular simulado não tem app de banco
+    assert cliente.post("/api/certificados/registrar", params={"serial": "NAO"}, headers=H).status_code == 409

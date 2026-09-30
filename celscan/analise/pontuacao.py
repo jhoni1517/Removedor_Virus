@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from celscan.analise import certificados as certificados_mod
+from celscan.analise import pix
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
 from celscan.config import LOJAS, SMS_CONHECIDOS
@@ -23,6 +25,16 @@ def regras_padrao() -> Regras:
     if _padrao is None:
         _padrao = regras_mod.carregar()
     return _padrao
+
+
+def _oficiais() -> dict:
+    global _certs
+    if _certs is None:
+        _certs = certificados_mod.carregar()
+    return _certs
+
+
+_certs: dict | None = None
 
 
 def nivel(score: int, regras: Regras | None = None) -> str:
@@ -59,6 +71,11 @@ def achados_aparelho(dados: DadosAparelho, regras: Regras | None = None,
         a.append(ra["gerenciado"].achado(o))
     if dados.sms and dados.sms not in SMS_CONHECIDOS:
         a.append(ra["sms_incomum"].achado(dados.sms))
+    bancos = pix.bancarios_instalados(dados.apps)
+    suspeitos = sorted(p for p, app in dados.apps.items() if not app.sistema
+                       and LOJAS.get(app.instalador or "") is None and pix.padrao_trojan(p, dados.acess, app.appops))
+    if bancos and suspeitos:
+        a.insert(0, ra["risco_pix"].achado(f"{', '.join(suspeitos)} junto com {', '.join(bancos)}"))
     return a
 
 
@@ -86,6 +103,12 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
             a.append(ra["sem_icone"].achado())
         if not loja:
             a.append(ra["fora_da_loja"].achado(app.instalador or "origem desconhecida"))
+    if not app.sistema and not loja and (imitado := pix.imitacao(pkg)):
+        a.append(ra["imita_app_conhecido"].achado(imitado))
+    if pix.padrao_trojan(pkg, dados.acess, app.appops) and not (loja and pkg in (permitidos or set())):
+        a.append(ra["trojan_bancario"].achado())
+    if certificados_mod.conferir(pkg, app.cert, _oficiais()) == "falso":
+        a.append(ra["certificado_falso"].achado(pix.carregar().oficiais.get(pkg, pix.AppConhecido(pkg, pkg, ())).nome))
     if pkg == dados.sms and pkg not in SMS_CONHECIDOS:
         a.append(ra["sms_padrao"].achado())
     a += [r.permissoes[p].achado() for p in sorted(app.perms) if p in r.permissoes]

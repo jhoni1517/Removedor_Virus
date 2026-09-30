@@ -87,6 +87,21 @@ apps:
     titulo: "Arquivo nunca visto pelo VirusTotal"
     significa: "Ninguém enviou este app para análise antes. Não quer dizer que é vírus, mas é incomum para apps populares."
     fazer: "Se não reconhece o app, remova."
+  imita_app_conhecido:
+    peso: 60
+    titulo: "Imita o app {detalhe}"
+    significa: "O nome do app é parecido com o de um banco ou marca conhecida, mas ele não é o app oficial e veio de fora da loja. É o disfarce mais comum de golpes para roubar senhas e Pix."
+    fazer: "Remova. Se precisar do app, instale o oficial pela Play Store, conferindo o nome da empresa que publica."
+  certificado_falso:
+    peso: 100
+    titulo: "Cópia falsificada do {detalhe}"
+    significa: "O app usa o mesmo nome de pacote do app oficial, mas foi assinado por outra pessoa. É uma versão modificada ou falsa."
+    fazer: "Remova agora e reinstale o oficial pela Play Store. Troque as senhas usadas nele, a partir de outro aparelho."
+  trojan_bancario:
+    peso: 40
+    titulo: "Combinação usada para roubar Pix"
+    significa: "O app controla a tela (acessibilidade) e também consegue cobrir ou transmitir a tela. É exatamente o que trojans bancários fazem para trocar a chave Pix sem a vítima perceber."
+    fazer: "Se você não reconhece o app, remova antes de abrir qualquer app de banco. Depois confira as últimas transações."
   sempre_ativo:
     peso: 5
     titulo: "Roda sempre (sem economia de bateria)"
@@ -151,6 +166,11 @@ appops:
     titulo: "Desenha sobre outros apps"
     significa: "Pode abrir janelas por cima de tudo: anúncios em tela cheia ou telas falsas de banco."
     fazer: "Desative em Configurações > Apps > Acesso especial > Sobrepor a outros apps."
+  PROJECT_MEDIA:
+    peso: 20
+    titulo: "Pode transmitir a tela"
+    significa: "O app já pediu ou usou a captura de tela: consegue gravar ou enviar o que aparece no celular, inclusive senhas e códigos."
+    fazer: "Só apps de gravação de tela ou reunião precisam disso. Se não reconhece, remova."
   REQUEST_INSTALL_PACKAGES:
     peso: 15
     titulo: "Pode instalar outros apps"
@@ -158,6 +178,11 @@ appops:
     fazer: "Desative em Configurações > Apps > Acesso especial > Instalar apps desconhecidos."
 
 aparelho:
+  risco_pix:
+    nivel: ALTO
+    titulo: "Risco de golpe no Pix: {detalhe}"
+    significa: "Há um app com o conjunto de permissões usado por trojans bancários no mesmo celular que tem apps de banco."
+    fazer: "Não use os apps de banco até remover o app suspeito. Depois confira as transações e, se houver algo estranho, ligue para o banco."
   patch_muito_antigo:
     nivel: ALTO
     titulo: "Atualização de segurança de {detalhe} meses atrás"

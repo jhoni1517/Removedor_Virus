@@ -343,6 +343,20 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def wifi_conectar(p: PedidoWifi) -> dict[str, str]:
         return {"resposta": adb.conectar(p.endereco)}
 
+    # ---- proteção Pix: certificados oficiais dos apps de banco
+    @app.post("/api/certificados/registrar")
+    def registrar_certificados(serial: str) -> dict[str, Any]:
+        from celscan.analise import certificados
+
+        alvo = serial
+        ap = aparelhos.pronto(alvo)
+
+        def rodar(progresso, _cancelar):
+            progresso({"etapa": "certificados", "descricao": "Lendo certificados dos apps de banco", "detalhe": "",
+                       "atual": None, "total": None, "estimativa_s": 10})
+            return certificados.registrar_do_aparelho(ap)
+        return nova_tarefa("certificados", alvo, rodar)
+
     # ---- tela quebrada: espelhar e copiar dados
     @app.get("/api/resgate")
     def guia_resgate() -> dict[str, Any]:
