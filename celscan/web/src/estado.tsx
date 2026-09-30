@@ -21,6 +21,7 @@ interface Contexto {
   avisos: Toast[];
   tema: string;
   mudarTema: (t: string) => void;
+  erroBackend: string | null;
 }
 
 const Ctx = createContext<Contexto | null>(null);
@@ -45,10 +46,18 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [tema, setTema] = useState(() => localStorage.getItem("celscan-tema") ?? "sistema");
   const proximo = useRef(1);
 
+  const [erroBackend, setErroBackend] = useState<string | null>(null);
+
   const recarregar = useCallback(async () => {
-    const e = await api<Estado>("/estado");
-    setEstado(e);
-    setDispositivos(e.dispositivos);
+    try {
+      const e = await api<Estado>("/estado");
+      setEstado(e);
+      setDispositivos(e.dispositivos);
+      setErroBackend(null);
+    } catch (e) {
+      setErroBackend((e as Error).message);
+      throw e;
+    }
   }, []);
 
   // Tempo real: reconecta sozinho se a conexão cair.
@@ -134,7 +143,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema }}
+      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema, erroBackend }}
     >
       {children}
     </Ctx.Provider>

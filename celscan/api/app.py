@@ -534,6 +534,13 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     # ---- interface (arquivos do React já compilados)
     if (WEB / "index.html").exists():
+        # Injeta o token direto na página, para não depender de query-string nem sessionStorage
+        # (em algumas versões do WebView2 do Windows o ?t= não chega ao JavaScript).
+        @app.get("/", response_class=HTMLResponse)
+        def raiz() -> str:
+            html = (WEB / "index.html").read_text(encoding="utf-8")
+            return html.replace("<head>", f'<head><script>window.__CELSCAN_TOKEN__="{token}";</script>', 1)
+
         app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
     else:
         @app.get("/", response_class=HTMLResponse)

@@ -98,14 +98,19 @@ export interface Remocao {
 const CHAVE = "celscan-token";
 
 function lerToken(): string {
+  const injetado = (window as unknown as { __CELSCAN_TOKEN__?: string }).__CELSCAN_TOKEN__;
+  if (injetado) {
+    try { sessionStorage.setItem(CHAVE, injetado); } catch { /* modo privado */ }
+    return injetado;
+  }
   const url = new URL(window.location.href);
   const t = url.searchParams.get("t");
   if (t) {
-    sessionStorage.setItem(CHAVE, t);
+    try { sessionStorage.setItem(CHAVE, t); } catch { /* ignore */ }
     url.searchParams.delete("t");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   }
-  return sessionStorage.getItem(CHAVE) ?? "";
+  try { return sessionStorage.getItem(CHAVE) ?? ""; } catch { return ""; }
 }
 
 export const TOKEN = lerToken();

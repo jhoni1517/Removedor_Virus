@@ -158,3 +158,8 @@ def test_registrar_certificados_via_api(cliente):
 def test_reconectar(cliente):
     r = cliente.post("/api/adb/reconectar", headers=H)
     assert r.status_code == 200 and "dispositivos" in r.json()
+
+
+def test_token_injetado_no_index(cliente):
+    r = cliente.get("/", headers={"Host": "127.0.0.1"})
+    assert r.status_code == 200 and f'window.__CELSCAN_TOKEN__="{TOKEN}"' in r.text

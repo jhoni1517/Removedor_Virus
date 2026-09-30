@@ -40,7 +40,7 @@ function Marca() {
 }
 
 export default function App() {
-  const { estado, online, dispositivos, avisar } = useApp();
+  const { estado, online, dispositivos, avisar, erroBackend } = useApp();
   const [secao, setSecao] = useState<Secao>("varredura");
   const [fluxo, setFluxo] = useState<Fluxo>({ tela: "conectar" });
 
@@ -115,6 +115,12 @@ export default function App() {
       </nav>
 
       <main id="conteudo" className="bancada flex-1 overflow-auto px-10 py-8" tabIndex={-1}>
+        {erroBackend && (
+          <div className="mb-4 rounded-lg border border-perigo/50 bg-perigo-suave p-3 text-sm text-perigo" role="alert">
+            Não consegui falar com o CelScan ({erroBackend}). Feche e abra o programa. Se continuar, me mande o
+            arquivo celscan.log da pasta .celscan\logs.
+          </div>
+        )}
         {secao === "resgate" && <Resgate />}
         {secao === "historico" && <Historico onAbrir={abrirHistorico} />}
         {secao === "config" && <Configuracoes />}
