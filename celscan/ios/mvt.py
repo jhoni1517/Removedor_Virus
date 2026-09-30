@@ -2,6 +2,7 @@
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -51,9 +52,40 @@ def criptografado(pasta):
     return bool(plistlib.loads(m.read_bytes()).get("IsEncrypted"))
 
 
+def ferramentas_ok():
+    """True se o libimobiledevice está instalado (dá para ver iPhones)."""
+    return shutil.which("idevice_id") is not None and shutil.which("ideviceinfo") is not None
+
+
 def aparelhos():
     _exigir("idevice_id")
     return _run(["idevice_id", "-l"])[1].split()
+
+
+# campo do ideviceinfo -> nome amigável
+_CAMPOS = {
+    "DeviceName": "nome", "ProductType": "modelo", "ProductVersion": "ios",
+    "SerialNumber": "serial", "InternationalMobileEquipmentIdentity": "imei",
+    "PhoneNumber": "telefone", "WiFiAddress": "wifi_mac",
+}
+
+
+def info(udid=None):
+    """Leitura rápida do iPhone (sem backup): nome, modelo, iOS, IMEI e saúde da bateria."""
+    _exigir("ideviceinfo")
+    cod, out = _run(["ideviceinfo", *(["-u", udid] if udid else [])])
+    if cod != 0:
+        raise IOSErro("Não consegui ler o iPhone. Desbloqueie e toque em 'Confiar'.\n" + out[-400:])
+    bruto = dict(re.findall(r"^([\w.]+): (.*)$", out, re.M))
+    dados = {nome: bruto[campo] for campo, nome in _CAMPOS.items() if bruto.get(campo)}
+    if udid:
+        try:
+            bat = bateria(udid)
+            if bat:
+                dados["bateria"] = bat
+        except Exception:
+            pass
+    return dados
 
 
 def bateria(udid):

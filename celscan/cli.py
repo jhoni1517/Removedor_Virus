@@ -298,6 +298,27 @@ def cmd_quarentena(a):
 # ---------------------------------------------------------------- ios
 def cmd_ios(a):
     from celscan.ios import mvt as ios
+    if getattr(a, "info", False):
+        if not ios.ferramentas_ok():
+            sys.exit("Instale o libimobiledevice (idevice_id, ideviceinfo). No Windows vem com o iTunes/Apple Devices.")
+        udids = ios.aparelhos()
+        if not udids:
+            sys.exit("Nenhum iPhone conectado. Desbloqueie e toque em 'Confiar'.")
+        for u in udids:
+            try:
+                d = ios.info(u)
+            except ios.IOSErro as e:
+                con.print(Panel(str(e), title=u, border_style="red"))
+                continue
+            t = Table.grid(padding=(0, 2))
+            for chave in ("nome", "modelo", "ios", "serial", "imei", "telefone"):
+                if d.get(chave):
+                    t.add_row(chave.capitalize(), str(d[chave]))
+            if d.get("bateria", {}).get("saude_pct"):
+                b = d["bateria"]
+                t.add_row("Bateria", f"saúde ~{b['saude_pct']}% · {b.get('ciclos', '?')} ciclos")
+            con.print(Panel(t, title=f"iPhone {u}", border_style="cyan"))
+        return
     if a.listar_backups:
         bs = ios.pastas_backup()
         if not bs:
@@ -589,7 +610,8 @@ def main():
     s.add_argument("--serial")
     s.set_defaults(func=cmd_quarentena)
 
-    s = sub.add_parser("ios", help="Varredura de iPhone (backup + MVT)")
+    s = sub.add_parser("ios", help="iPhone: ver info (--info) ou varredura completa (backup + MVT)")
+    s.add_argument("--info", action="store_true", help="Só mostra os iPhones conectados (nome, modelo, iOS, IMEI)")
     s.add_argument("--udid")
     s.add_argument("--senha", help="Senha do backup (prefira digitar quando pedir)")
     s.add_argument("--backup", help="Usar backup existente (pasta)")

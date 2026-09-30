@@ -501,6 +501,26 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         except ValueError as e:
             raise HTTPException(422, str(e))
 
+    # ---- iPhone (leitura por USB via libimobiledevice)
+    @app.get("/api/ios/estado")
+    def ios_estado() -> dict[str, Any]:
+        from celscan.ios import mvt as ios
+        if not ios.ferramentas_ok():
+            return {"disponivel": False, "aparelhos": [],
+                    "aviso": "Para ver iPhones, instale o libimobiledevice (idevice_id, ideviceinfo). "
+                             "No Windows ele vem com o iTunes/Apple Devices."}
+        try:
+            udids = ios.aparelhos()
+        except Exception as e:
+            return {"disponivel": True, "aparelhos": [], "aviso": str(e)}
+        aparelhos_ios = []
+        for u in udids:
+            try:
+                aparelhos_ios.append({"udid": u, **ios.info(u)})
+            except Exception as e:
+                aparelhos_ios.append({"udid": u, "erro": str(e)})
+        return {"disponivel": True, "aparelhos": aparelhos_ios}
+
     # ---- diagnóstico e limpeza segura
     @app.post("/api/diagnostico")
     def diagnostico(p: PedidoSerial) -> dict[str, Any]:
