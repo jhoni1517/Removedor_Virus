@@ -3,7 +3,6 @@ import argparse
 import getpass
 import os
 import sys
-import time
 import webbrowser
 from pathlib import Path
 
@@ -13,9 +12,9 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from rich.prompt import Confirm, InvalidResponse, Prompt
 from rich.table import Table
 
-from celscan import config
+from celscan import config, servicos
 from celscan.config import VERSAO
-from celscan.core import adb, bases, db, log
+from celscan.core import adb, bases, db, log, preferencias
 
 con = Console()
 
@@ -106,83 +105,49 @@ def tabela_apps(resultados, todos=False):
 
 # ---------------------------------------------------------------- android
 def cmd_android(a):
-    from celscan import relatorio
-    from celscan.analise import iocs as iocmod
-    from celscan.analise.pontuacao import nota
-    from celscan.analise.virustotal import VirusTotal
-    from celscan.varredura import Varredura
+    from celscan import relatorio, servicos
+    from celscan.core import preferencias
 
     ap = escolher_aparelho(a.serial)
-    # Atualiza as bases vencidas enquanto o aparelho é lido.
-    atualizacao = None if a.sem_iocs else bases.atualizar_em_segundo_plano(["iocs"])
-    chave = os.getenv("VT_API_KEY")
-    vt = VirusTotal(chave) if chave else None
+    modo = a.modo or ("completo" if preferencias.chave_virustotal() else "rapido")
+    opcoes = servicos.OpcoesVarredura(modo=modo, sistema=a.sistema, usar_iocs=not a.sem_iocs, vt_todos=a.vt_todos)
+    con.print(f"[dim]Modo: {servicos.MODOS[modo]}[/]")
 
-    sc = Varredura(ap, vt, None, sistema=a.sistema)
-    inicio = time.perf_counter()
-    with con.status("Coletando dados do aparelho (uma única leitura)..."), log.etapa("coleta"):
-        sc.coletar()
-    info = sc.info()
-    mostrar_info(info)
-    for av in sc.avisos:
+    with barra() as p:
+        tarefas = {}
+
+        def progresso(ev):
+            nome = ev["etapa"]
+            if nome not in tarefas:
+                for t in tarefas.values():  # etapa anterior terminou
+                    p.update(t, completed=p.tasks[t].total or 1)
+                tarefas[nome] = p.add_task(ev["descricao"], total=ev["total"] or 1)
+            if ev["atual"] is not None:
+                p.update(tarefas[nome], completed=ev["atual"], total=ev["total"],
+                         description=f"{ev['descricao']}: {ev['detalhe'][:30]}")
+
+        res = servicos.executar_varredura(ap, opcoes, progresso)
+
+    mostrar_info(res.info)
+    for av in res.avisos:
         con.print(f"[yellow]Aviso:[/] {av}")
-    if atualizacao is not None:
-        with con.status("Carregando indicadores de ameaças (Amnesty/MVT + Echap)..."):
-            atualizacao.join(timeout=120)
-            sc.iocs = iocmod.carregar(avisar=lambda m: con.print(f"[yellow]{m}[/]"))
-        if sc.iocs:
-            con.print(f"[dim]{len(sc.iocs)} indicadores carregados.[/]")
-        else:
-            con.print("[yellow]Aviso:[/] indicadores de ameaças indisponíveis (sem internet e sem cópia local).")
-
-    with barra() as p, log.etapa("hashes"):
-        t = p.add_task("Calculando hashes dos apps", total=len(sc.apps))
-        for pkg in sc.calcular_hashes():
-            p.update(t, advance=1, description=f"Hash: {pkg[:40]}")
-
-    cands = sc.candidatos()
-    with barra() as p, log.etapa("assinaturas"):
-        t = p.add_task("Verificando assinaturas", total=len(cands))
-        for pkg in cands:
-            sc.ler_certificado(pkg)
-            p.advance(t)
-
-    if vt:
-        alvo = sc.candidatos(todos=a.vt_todos)
-        sem_cache = sum(1 for x in alvo if sc.apps[x].sha256 and vt.em_cache(sc.apps[x].sha256) is None)
-        if sem_cache:
-            minutos = sem_cache * 16 // 60 + 1
-            con.print(f"[dim]VirusTotal: {sem_cache} consulta(s) novas (~{minutos} min no plano grátis).[/]")
-        with barra() as p, log.etapa("virustotal"):
-            t = p.add_task("Consultando VirusTotal", total=len(alvo))
-            for pkg in alvo:
-                sc.consultar_vt(pkg)
-                p.advance(t)
-    else:
-        con.print("[dim]Sem VT_API_KEY: VirusTotal desativado.[/]")
-
-    achados, res = sc.pontuar()
-    n, rot = nota(achados, res)
-    duracao = time.perf_counter() - inicio
-    log.LOGGER.info("varredura: %d apps em %.1fs (nota %d)", len(res), duracao, n)
-
-    if achados:
+    if res.achados:
         con.print("\n[bold]Configurações do aparelho[/]")
-        for ach in achados:
+        for ach in res.achados:
             nv = ach["nivel"]
             con.print(f"  [{COR[nv]}]{nv:<6}[/] [bold]{ach['titulo']}[/]")
             con.print(f"         [dim]{ach['significa']}[/]\n         → {ach['fazer']}")
     con.print()
-    risco = [r for r in res if r["nivel"] in ("ALTO", "MÉDIO")]
+    risco = [r for r in res.resultados if r["nivel"] in ("ALTO", "MÉDIO")]
     if risco or a.todos:
-        con.print(tabela_apps(res, a.todos))
+        con.print(tabela_apps(res.resultados, a.todos))
+    n, rot = res.nota, res.veredito
     cor = "green" if n >= 70 else "yellow" if n >= 50 else "red"
-    con.print(Panel(f"[bold {cor}]{n}/100 — {rot}[/]\n{len(res)} apps analisados · {len(risco)} com risco médio/alto"
-                    f" · {duracao:.0f} s",
-                    title="Resultado", border_style=cor))
+    con.print(Panel(f"[bold {cor}]{n}/100 — {rot}[/]\n{len(res.resultados)} apps analisados · {len(risco)} com "
+                    f"risco médio/alto · {res.duracao_s:.0f} s", title="Resultado", border_style=cor))
 
-    acoes, acoes_db = [], []
-    alvos = [r for r in res if r["score"] >= a.limite and r["nivel"] != "PERMITIDO"]
+    acoes = []
+    alvos = [r for r in res.resultados if r["score"] >= a.limite and r["nivel"] != "PERMITIDO"]
     if alvos and (a.remover or Confirm.ask(f"Revisar a remoção de {len(alvos)} app(s) de risco agora?", default=False)):
         for r in alvos:
             texto = "\n".join(f"• [bold]{x['titulo']}[/]\n  [dim]{x['significa']}[/]\n  → {x['fazer']}"
@@ -191,19 +156,14 @@ def cmd_android(a):
                             border_style="red" if r["score"] >= 60 else "yellow"))
             if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60):
                 with con.status("Removendo..."):
-                    ok, msg = sc.remover(r)
-                con.print(f"  {'[green]✔' if ok else '[red]✘'}[/] {msg}")
-                if ok:
-                    acoes.append(f"{r['pacote']}: {msg}")
-                    acoes_db.append((r, msg, sc.ultima_quarentena))
+                    feito = servicos.remover_apps(ap, [r])[0]
+                con.print(f"  {'[green]✔' if feito['ok'] else '[red]✘'}[/] {feito['mensagem']}")
+                if feito["ok"]:
+                    acoes.append(f"{r['pacote']}: {feito['mensagem']}")
 
-    con_db = db.conectar()
-    vid = db.salvar_varredura(con_db, info, n, rot, achados, res, sc.avisos, duracao)
-    for r, msg, qid in acoes_db:
-        db.registrar_acao(con_db, info["serial"], "remocao", r["pacote"], msg, qid)
-    log.LOGGER.info("varredura %d salva no banco", vid)
-    arq = relatorio.gerar(a.saida, info, n, rot, achados, res, loja=a.loja, acoes=acoes, avisos=sc.avisos)
-    con.print(f"Laudo salvo em [bold]{arq}[/] (+ .json)")
+    arq = relatorio.gerar(a.saida, res.info, n, rot, res.achados, res.resultados, loja=a.loja, acoes=acoes,
+                          avisos=res.avisos)
+    con.print(f"Laudo salvo em [bold]{arq}[/] (+ .json) · varredura nº {res.varredura_id} no histórico")
     if not a.nao_abrir:
         webbrowser.open(arq.resolve().as_uri())
     con.print("[dim]Terminou? Desative a Depuração USB no celular (Opções do desenvolvedor).[/]")
@@ -382,6 +342,12 @@ def cmd_historico(a):
         con.print(t)
 
 
+def cmd_interface(a):
+    from celscan.api import servidor
+
+    servidor.abrir("navegador" if a.navegador else "janela", a.porta)
+
+
 def cmd_fixtures(a):
     from celscan.core import fixtures
 
@@ -429,6 +395,8 @@ def main():
     s = sub.add_parser("android", help="Varredura de segurança do Android")
     s.add_argument("--serial")
     s.add_argument("--sistema", action="store_true", help="Inclui apps do sistema (pré-instalados)")
+    s.add_argument("--modo", choices=["rapido", "completo", "profundo"],
+                   help="Padrão: completo se houver chave do VirusTotal, senão rápido")
     s.add_argument("--vt-todos", action="store_true", help="Consulta todos os apps no VirusTotal")
     s.add_argument("--remover", action="store_true", help="Vai direto para a remoção")
     s.add_argument("--limite", type=int, default=60, help="Risco mínimo para sugerir remoção (padrão 60)")
@@ -475,6 +443,11 @@ def main():
     s.add_argument("--limite", type=int, default=20)
     s.set_defaults(func=cmd_historico)
 
+    s = sub.add_parser("interface", help="Abre a interface gráfica")
+    s.add_argument("--navegador", action="store_true", help="Abre no navegador em vez de janela própria")
+    s.add_argument("--porta", type=int, default=0)
+    s.set_defaults(func=cmd_interface)
+
     s = sub.add_parser("fixtures", help="Grava as saídas reais do aparelho para os testes")
     s.add_argument("--serial")
     s.add_argument("--pasta", default="testes/fixtures")
@@ -490,10 +463,14 @@ def main():
     a = p.parse_args()
     if a.offline:
         config.OFFLINE = True
+    preferencias.aplicar()
     arquivo_log = log.configurar()
     log.LOGGER.info("CelScan %s: %s", VERSAO, " ".join(sys.argv[1:]))
     try:
         a.func(a)
+    except (servicos.ModoIndisponivel, servicos.Cancelado) as e:
+        con.print(Panel(str(e), border_style="yellow"))
+        sys.exit(1)
     except adb.AdbErro as e:
         log.LOGGER.error("erro de conexão: %s", e)
         con.print(Panel(f"{e}\n\n[dim]Detalhes no log: {arquivo_log}[/]", title="Erro de conexão", border_style="red"))
