@@ -5,11 +5,13 @@ Uso: python instalador/baixar_dependencias.py   (cria ./platform-tools e ./scrcp
 
 from __future__ import annotations
 
+import hashlib
 import io
 import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 RAIZ = Path(__file__).resolve().parent.parent
 SISTEMA = {"win32": "windows", "darwin": "darwin"}.get(sys.platform, "linux")
@@ -19,11 +21,44 @@ SCRCPY = f"https://github.com/Genymobile/scrcpy/releases/download/v{SCRCPY_VERSA
 # Do scrcpy só vai o necessário: o adb (e suas DLLs) vem do platform-tools oficial.
 SCRCPY_FORA = {"adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll", "open_a_terminal_here.bat", "scrcpy-noconsole.vbs"}
 
+# Só baixamos destes hosts oficiais (evita redirecionamento para um atacante).
+HOSTS_OK = {"dl.google.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
+# SHA-256 fixados (integridade). O platform-tools é "latest" e muda sempre, então não dá para fixar:
+# nesse caso apenas conferimos que é um zip válido e mostramos o hash obtido.
+HASHES = {
+    SCRCPY: "5b12172b3264b2889f4583ee64752ce832e29bc8b1089dca81093459697165db",
+}
+
+
+class DownloadInseguro(Exception):
+    pass
+
+
+def _ler_url(url: str) -> bytes:
+    if urlparse(url).scheme != "https":
+        raise DownloadInseguro(f"Recuso baixar sem HTTPS: {url}")
+    with urllib.request.urlopen(url, timeout=300) as r:  # noqa: S310 (host conferido abaixo)
+        destino = urlparse(r.geturl()).hostname or ""
+        if not any(destino == h or destino.endswith("." + h) for h in HOSTS_OK):
+            raise DownloadInseguro(f"Download veio de host inesperado: {destino}")
+        return r.read()
+
 
 def baixar(url: str) -> zipfile.ZipFile:
     print("Baixando", url)
-    with urllib.request.urlopen(url, timeout=300) as r:
-        return zipfile.ZipFile(io.BytesIO(r.read()))
+    dados = _ler_url(url)
+    obtido = hashlib.sha256(dados).hexdigest()
+    esperado = HASHES.get(url)
+    if esperado and obtido != esperado:
+        raise DownloadInseguro(f"SHA-256 não confere para {url}\n  esperado: {esperado}\n  obtido:   {obtido}")
+    if esperado:
+        print("  SHA-256 confere.")
+    else:
+        print(f"  SHA-256 (não fixado, 'latest'): {obtido}")
+    zf = zipfile.ZipFile(io.BytesIO(dados))  # valida que é um zip íntegro
+    if zf.testzip() is not None:
+        raise DownloadInseguro(f"Zip corrompido: {url}")
+    return zf
 
 
 def main() -> None:
