@@ -19,6 +19,7 @@ SCRIPT = r"""
 sec(){ echo "@@SEC $1"; }
 sec props; getprop
 sec pkgs; pm list packages -f -i {F}
+sec syspkgs; pm list packages -s
 sec desativados; pm list packages -d
 sec acess; settings get secure enabled_accessibility_services
 sec notif; settings get secure enabled_notification_listeners
@@ -130,6 +131,12 @@ class DadosAparelho:
         }
 
 
+def _limpo(valor: str | None) -> str:
+    """Normaliza saídas do settings: 'null' e vazio viram '' (nada configurado)."""
+    v = (valor or "").strip()
+    return "" if v == "null" else v
+
+
 def filtro(sistema: bool) -> str:
     return "-e" if sistema else "-3"
 
@@ -140,11 +147,15 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         raise AdbErro("Coleta interrompida — resultado incompleto. Reconecte o cabo e tente de novo.")
     dump = parsers.pkgdump(s.get("pkgdump", ""))
     ops = parsers.appops(s.get("appops", ""), set(APPOPS_COLETADOS))
+    # Apps de sistema atualizados pela loja migram para /data/app e perdem o caminho de sistema; por isso
+    # perguntamos ao próprio Android quais são de sistema (pm list packages -s), além de olhar o caminho.
+    syspkgs = parsers.desativados(s.get("syspkgs", ""))
     apps: dict[str, AppBruto] = {}
     for pkg, (caminho, inst) in parsers.pacotes(s.get("pkgs", "")).items():
         d = dump.get(pkg, {})
         apps[pkg] = AppBruto(
-            pacote=pkg, apk=caminho, instalador=inst, sistema=caminho.startswith(PASTAS_SISTEMA),
+            pacote=pkg, apk=caminho, instalador=inst,
+            sistema=caminho.startswith(PASTAS_SISTEMA) or pkg in syspkgs,
             perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
             appops=ops.get(pkg, set()),
         )
@@ -159,7 +170,7 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         notif=parsers.componentes(s.get("notif")),
         admins=parsers.admins(s.get("admins", "")),
         owners=parsers.owners(s.get("owners", "")),
-        sms=(s.get("sms") or "").strip(),
+        sms=_limpo(s.get("sms")),
         proxy=(s.get("proxy") or "").strip(),
         su=parsers.linhas_nao_vazias(s.get("su", "")),
         sempre_ativo=parsers.sempre_ativo(s.get("idle", "")),

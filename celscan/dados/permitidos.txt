@@ -19,3 +19,19 @@ com.google.android.marvin.talkback
 com.google.android.apps.authenticator2
 com.microsoft.appmanager
 com.samsung.android.app.routines
+# Apps de consumo muito conhecidos (só contam como confiáveis se vierem de loja oficial):
+com.whatsapp
+com.whatsapp.w4b
+org.telegram.messenger
+org.telegram.messenger.web
+com.instagram.android
+com.facebook.katana
+com.facebook.orca
+com.google.android.gm
+com.google.android.apps.maps
+com.google.android.youtube
+com.spotify.music
+com.ubercab
+com.nubank.app
+com.itau
+com.bradesco

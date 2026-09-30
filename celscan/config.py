@@ -29,6 +29,7 @@ LOJAS = {
     "com.huawei.appmarket": "AppGallery",
     "com.xiaomi.market": "GetApps",
     "com.xiaomi.mipicks": "GetApps",
+    "com.xiaomi.discover": "GetApps (recomendados MIUI)",
     "com.heytap.market": "App Market (OPPO/Realme)",
     "com.oppo.market": "App Market (OPPO)",
     "com.vivo.appstore": "V-Appstore",

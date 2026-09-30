@@ -10,6 +10,9 @@ package:/data/app/~~X==/com.whatsapp-Y==/base.apk=com.whatsapp  installer=com.an
 package:/data/app/~~X==/com.systemservice-Y==/base.apk=com.systemservice  installer=com.google.android.packageinstaller
 package:/data/app/~~X==/com.x8bit.bitwarden-Y==/base.apk=com.x8bit.bitwarden  installer=com.android.vending
 package:/data/app/~~X==/com.exemplo.jogo-Y==/base.apk=com.exemplo.jogo  installer=com.google.android.feedback
+@@SEC syspkgs
+package:com.android.systemui
+package:com.android.settings
 @@SEC desativados
 @@SEC acess
 com.systemservice/com.systemservice.Acc:com.x8bit.bitwarden/com.x8bit.bitwarden.Acc
