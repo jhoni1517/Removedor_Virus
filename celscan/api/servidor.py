@@ -48,9 +48,13 @@ def abrir(modo: str = "janela", porta: int = 0) -> None:
             except ImportError:
                 modo = "navegador"
             else:
-                webview.create_window("CelScan", url, width=1280, height=820, min_size=(960, 640))
-                webview.start()
-                return
+                try:
+                    webview.create_window("CelScan", url, width=1280, height=820, min_size=(960, 640))
+                    webview.start()
+                    return
+                except Exception:  # ex.: Windows sem o WebView2 -> usa o navegador
+                    LOGGER.exception("janela própria indisponível; abrindo no navegador")
+                    modo = "navegador"
         webbrowser.open(url)
         print(f"CelScan aberto no navegador: {url}\nFeche com Ctrl+C.")
         while not servidor.should_exit:
