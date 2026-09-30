@@ -72,7 +72,7 @@ celscan-cli interface [--navegador]
 ## Para desenvolvedores
 
 ```
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt   # Python 3.10 ou mais novo
 cd celscan/web && npm ci && npm run build && cd ../..
 python celscan.py interface --navegador      # interface
 python -m pytest && ruff check celscan testes celscan.py

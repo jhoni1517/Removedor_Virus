@@ -74,7 +74,7 @@ if a[0] == "shell":
         fim(m.group(1) if m else "")
     if "sha256sum" in c:
         tam = os.path.getsize(APK_REAL)
-        for pkg, h in zip(PACOTES, "abcd"):
+        for pkg, h in zip(PACOTES, "abcd", strict=True):
             print(f"@@H\t{tam}\t{h * 64}\t/data/app/~~X==/{pkg}-Y==/base.apk")
         fim()
     if c.startswith("pm path"):
