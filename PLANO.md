@@ -15,6 +15,27 @@
 | 7 | Repositório público/privado | Continua como está. Mudar a visibilidade é com você, nas configurações do GitHub |
 | 8 | Modo balcão grátis/pago | Em aberto; só afeta a D4 (modo balcão) |
 
+## Beta 3.0.0b4 (30/09/2026): correções do aparelho real + novas funções
+
+Testado no Redmi (24090RA29G) do dono: conectou por USB, laudo saiu. Ajustes:
+
+| Item | Situação |
+|---|---|
+| **Conexão "Reconectando..."** | ✅ o status agora reflete o polling (fica verde mesmo se o WebSocket não subir); a lib `websockets` passou a ser empacotada de verdade no `.exe` |
+| **Falsos positivos no laudo** | ✅ apps de sistema atualizados pela loja não são mais acusados de "escondido/fora da loja" (usa `pm list packages -s`); GetApps `com.xiaomi.discover` reconhecida; SMS padrão "null" ignorado; apps de consumo conhecidos na lista de confiáveis |
+| **Diagnóstico completo** | ✅ saúde real da bateria (capacidade vs projeto, ciclos), situação, identificação e IMEI (via `service call`), espaço, RAM, pastas grandes — CLI, API e tela nova |
+| **Limpeza** | ✅ cache + lixo seguro (miniaturas, temporários, cache do Telegram), medindo o quanto libera; nunca apaga mídia pessoal (irreversível) |
+| **Recuperação de sobras** | ✅ lixeira da galeria, miniaturas e mídia deixada nos apps; aviso honesto: sem root não há undelete real nem recuperação de WhatsApp apagado |
+| **Espelho: streaming travando/preto** | ✅ "modo compatível" (resolução/taxa menores + buffer); aviso de que DRM aparece preto de propósito; atalhos que abrem direto as telas de ajuste no celular |
+| **iPhone: ver por USB** | ✅ nome, modelo, iOS, IMEI e saúde da bateria (precisa do libimobiledevice); varredura completa (backup+MVT) continua no `celscan ios` |
+| **Interface** | ✅ novas seções Diagnóstico, Recuperar; painéis de iPhone e atalhos |
+
+**Recusado (e por quê):** função de "espionagem" de celular/redes sociais — é stalkerware,
+é crime e contradiz o produto, que existe para detectar e remover exatamente isso.
+
+**Não testado em aparelho real ainda:** limpeza, recuperação, diagnóstico de bateria/IMEI
+(varia por fabricante), iPhone (precisa de Mac/Windows com libimobiledevice).
+
 ## Extra pedido em 30/09/2026: tela quebrada (beta 3.0.0b2)
 
 | Item | Situação |
