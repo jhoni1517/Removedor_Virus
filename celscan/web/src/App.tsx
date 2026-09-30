@@ -1,4 +1,4 @@
-import { History, ScanLine, Settings, Smartphone } from "lucide-react";
+import { History, MonitorSmartphone, ScanLine, Settings, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, obterVarredura, type Tarefa, type Varredura } from "./api";
 import { useApp } from "./estado";
@@ -6,6 +6,7 @@ import Configuracoes from "./telas/Configuracoes";
 import Conectar from "./telas/Conectar";
 import Historico from "./telas/Historico";
 import Modo from "./telas/Modo";
+import Resgate from "./telas/Resgate";
 import Resultado from "./telas/Resultado";
 import Varrendo from "./telas/Varrendo";
 import { Avisos } from "./ui";
@@ -15,10 +16,11 @@ type Fluxo =
   | { tela: "modo"; serial: string }
   | { tela: "varrendo"; tarefa: Tarefa<Varredura>; modo: string }
   | { tela: "resultado"; v: Varredura };
-type Secao = "varredura" | "historico" | "config";
+type Secao = "varredura" | "resgate" | "historico" | "config";
 
 const SECOES: { id: Secao; nome: string; icone: typeof ScanLine }[] = [
   { id: "varredura", nome: "Varredura", icone: ScanLine },
+  { id: "resgate", nome: "Tela quebrada", icone: MonitorSmartphone },
   { id: "historico", nome: "Histórico", icone: History },
   { id: "config", nome: "Configurações", icone: Settings },
 ];
@@ -42,7 +44,7 @@ export default function App() {
   const [secao, setSecao] = useState<Secao>("varredura");
   const [fluxo, setFluxo] = useState<Fluxo>({ tela: "conectar" });
 
-  // Alt+1..3 muda de seção
+  // Alt+1..4 muda de seção
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       if (!e.altKey) return;
@@ -113,6 +115,7 @@ export default function App() {
       </nav>
 
       <main id="conteudo" className="bancada flex-1 overflow-auto px-10 py-8" tabIndex={-1}>
+        {secao === "resgate" && <Resgate />}
         {secao === "historico" && <Historico onAbrir={abrirHistorico} />}
         {secao === "config" && <Configuracoes />}
         {secao === "varredura" && (

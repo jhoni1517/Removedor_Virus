@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, FileText, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
@@ -139,6 +139,15 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     }
   }
 
+  async function verTela() {
+    try {
+      await api("/espelho", { corpo: { serial: v.info.serial, modo: "controlar" } });
+      avisar({ tipo: "ok", texto: "A tela do celular abriu numa janela nova." });
+    } catch (e) {
+      avisar({ tipo: "erro", texto: (e as Error).message });
+    }
+  }
+
   function alternar(p: string) {
     setSelecao((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   }
@@ -165,6 +174,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
             href={urlLaudo(v.varredura_id, "cliente")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo (cliente)</a>
           <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
             href={urlLaudo(v.varredura_id, "tecnico")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo técnico</a>
+          <Botao onClick={verTela} disabled={!conectado} title={conectado ? "Abre a tela do celular numa janela" : "Conecte o celular"}>
+            <Monitor size={15} aria-hidden /> Ver a tela
+          </Botao>
           <Botao variante="fantasma" onClick={onNova}>Nova varredura</Botao>
         </div>
       </Cartao>

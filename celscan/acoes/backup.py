@@ -66,7 +66,8 @@ class ResumoBackup:
 
 
 def pasta_padrao() -> Path:
-    return Path.home() / "Documents" / "CelScan Backups"
+    """Documentos/CelScan Backups (ou CELSCAN_BACKUPS)."""
+    return Path(os.getenv("CELSCAN_BACKUPS") or Path.home() / "Documents" / "CelScan Backups")
 
 
 def nome_seguro(texto: str) -> str:
@@ -108,11 +109,27 @@ def resumo_listagem(arquivos: list[Arquivo]) -> dict[str, dict[str, Any]]:
     return res
 
 
+# Nome curto da pasta de cada categoria no PC
+PASTAS_PC = {"fotos": "Fotos e vídeos", "imagens": "Imagens", "videos": "Vídeos", "whatsapp_midia": "WhatsApp - mídia",
+             "whatsapp_backup": "WhatsApp - backup das conversas", "documentos": "Documentos",
+             "downloads": "Downloads", "audio": "Áudio", "telegram": "Telegram"}
+
+
+def _rotulo_raiz(categoria: str, raiz: str) -> str:
+    """Quando a categoria tem várias pastas no celular, separa por um nome curto (Music, WhatsApp Business...)."""
+    raizes = CATEGORIAS[categoria][1]
+    if len(raizes) == 1:
+        return ""
+    nomes = [Path(r).name for r in raizes]
+    return Path(raiz).name if nomes.count(Path(raiz).name) == 1 else Path(raiz).parent.name
+
+
 def destino_local(raiz: Path, a: Arquivo) -> Path:
-    """Mantém a estrutura de pastas do celular dentro da pasta da categoria."""
-    relativo = a.caminho[len("/sdcard/"):] if a.caminho.startswith("/sdcard/") else a.caminho.lstrip("/")
-    partes = [nome_seguro(p) for p in relativo.split("/") if p]
-    return raiz.joinpath(nome_seguro(CATEGORIAS[a.categoria][0].split(" (")[0]), *partes)
+    """Pasta curta da categoria + caminho a partir da pasta de origem (ex.: Fotos e vídeos/Camera/IMG.jpg)."""
+    origem = next((r for r in CATEGORIAS[a.categoria][1] if a.caminho.startswith(r.rstrip("/") + "/")), "")
+    relativo = a.caminho[len(origem) + 1:] if origem else a.caminho.lstrip("/")
+    partes = [nome_seguro(p) for p in (_rotulo_raiz(a.categoria, origem) if origem else "", *relativo.split("/")) if p]
+    return raiz.joinpath(PASTAS_PC[a.categoria], *partes)
 
 
 def _sha256_local(caminho: Path) -> str:

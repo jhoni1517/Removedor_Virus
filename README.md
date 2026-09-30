@@ -3,7 +3,7 @@
 Segurança, diagnóstico e otimização de celulares Android pelo cabo USB, no Windows.
 O CelScan substitui o antigo "Removedor de Vírus Android".
 
-> **Versão 3.0 beta 1.** A interface nova ainda não foi testada num celular real. Se algo der
+> **Versão 3.0 beta 2.** A interface nova ainda não foi testada num celular real. Se algo der
 > errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
 
 ## Download e instalação
@@ -37,6 +37,26 @@ Não precisa instalar Python, ADB nem nada mais: vem tudo junto. Também existe 
 5. **Laudo.** Gere o laudo em PDF: versão para o cliente ou versão técnica. Cada laudo tem um
    **código de verificação** e um QR code, que você confere em Histórico > Verificar laudo.
 
+## Tela quebrada ou queimada
+
+No menu **Tela quebrada** o CelScan pergunta a situação e mostra o caminho:
+
+- **O celular aparece como conectado**: a depuração já estava autorizada neste PC.
+  - **Ver e controlar a tela no PC** com mouse e teclado. Dá para desligar a tela do celular
+    (tela queimada) e gravar em vídeo.
+  - **Copiar os dados para o PC**: fotos, vídeos, documentos, downloads, áudio, mídia e backup
+    local do WhatsApp, e a lista de apps.
+  - A cópia só lê do celular, confere cada arquivo e, se o cabo cair, continua de onde parou.
+- **Tela com imagem, mas sem toque**: o modo **"Usar o mouse do PC no celular"** funciona **sem
+  a depuração USB**. Com ele você liga a depuração e toca em "Permitir". Não há imagem no PC
+  nesse modo: olhe para a tela do celular.
+- **Tela sem imagem, com depuração nunca autorizada**: pelo cabo não há acesso, por causa da
+  criptografia do Android. O guia mostra as saídas: HDMI/DeX, Smart Switch da Samsung ou uma
+  tela de teste na assistência.
+
+Só use com autorização do dono. Os arquivos copiados são dados pessoais: entregue ao dono e
+apague do PC depois (LGPD).
+
 ## O que o CelScan verifica
 
 - **Ameaças conhecidas:** listas públicas de spyware e stalkerware da Amnesty/MVT e da Echap.
@@ -65,6 +85,8 @@ celscan-cli otimizar                                       cache, compilação, 
 celscan-cli historico | quarentena listar | quarentena restaurar ID
 celscan-cli laudo ID [--versao tecnico] | verificar CÓDIGO
 celscan-cli bases [--atualizar]   (e --offline em qualquer comando)
+celscan-cli espelhar [--modo controlar|ver|otg] [--tela-desligada] [--gravar video.mp4]
+celscan-cli backup [--categorias fotos,whatsapp_midia] [--destino PASTA] [--verificar]
 celscan-cli fixtures              grava as saídas do celular para os testes
 celscan-cli interface [--navegador]
 ```

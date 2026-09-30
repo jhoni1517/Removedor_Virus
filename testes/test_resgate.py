@@ -68,7 +68,9 @@ def test_listar_e_copiar_com_retomada(fake):
     eventos = []
     r = backup.copiar(ap, arquivos, raiz, eventos.append, verificar_hash=True, info={"modelo": "moto"})
     assert r.copiados == 5 and not r.falhas and eventos[-1]["atual"] == 5
-    foto = raiz / "Fotos e vídeos da câmera" / "DCIM" / "Camera" / "IMG_20260901_101010.jpg"
+    foto = raiz / "Fotos e vídeos" / "Camera" / "IMG_20260901_101010.jpg"
+    zap = raiz / "WhatsApp - mídia" / "WhatsApp" / "WhatsApp Images" / "IMG-20260903-WA0001.jpg"
+    assert zap.exists() and (raiz / "WhatsApp - backup das conversas" / "WhatsApp" / "msgstore.db.crypt14").exists()
     esperado = hashlib.sha256((b"/sdcard/DCIM/Camera/IMG_20260901_101010.jpg" * 100)[:2048]).hexdigest()
     assert hashlib.sha256(foto.read_bytes()).hexdigest() == esperado
     assert int(foto.stat().st_mtime) == 1727600000  # data original preservada
@@ -92,6 +94,13 @@ def test_copiar_cancelado_explica_retomada(fake):
 
 def test_nome_seguro_windows():
     assert backup.nome_seguro('a:b*c?"d') == "a_b_c__d"
+
+
+def test_pastas_curtas_no_pc(tmp_path):
+    a = backup.Arquivo("audio", "/sdcard/Recordings/Call/gravacao.m4a", 1, 0)
+    assert backup.destino_local(tmp_path, a) == tmp_path / "Áudio" / "Recordings" / "Call" / "gravacao.m4a"
+    b = backup.Arquivo("whatsapp_midia", "/sdcard/Android/media/com.whatsapp.w4b/WhatsApp Business/Media/x.jpg", 1, 0)
+    assert backup.destino_local(tmp_path, b) == tmp_path / "WhatsApp - mídia" / "WhatsApp Business" / "x.jpg"
 
 
 def esperar(cliente, tarefa):

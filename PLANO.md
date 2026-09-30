@@ -15,6 +15,20 @@
 | 7 | Repositório público/privado | Continua como está. Mudar a visibilidade é com você, nas configurações do GitHub |
 | 8 | Modo balcão grátis/pago | Em aberto; só afeta a D4 (modo balcão) |
 
+## Extra pedido em 30/09/2026: tela quebrada (beta 3.0.0b2)
+
+| Item | Situação |
+|---|---|
+| **D1 Espelhamento (antecipado)** | ✅ scrcpy embutido: ver e controlar, só ver, desligar a tela do celular, gravar em vídeo; botão "Ver a tela" também no resultado |
+| **Modo mouse sem depuração (OTG)** | ✅ toque quebrado: o mouse/teclado do PC controla o celular sem depuração USB, para ligar a depuração e tocar em Permitir; o CelScan pausa o adb enquanto isso |
+| **Cópia dos dados (parte do item 13)** | ✅ por categoria, só leitura, datas preservadas, conferência de tamanho (SHA-256 opcional), retomada, relatório e LEIA-ME com aviso de LGPD, lista de apps |
+| **Guia por situação** | ✅ autorizado / toque quebrado / sem imagem / não liga, com os limites reais explicados |
+
+**Ainda falta do item 13 (D6):** contatos, SMS e registro de chamadas (o Android bloqueia pelo
+adb sem um app auxiliar), prévia com imagens e escolha de pasta pela janela do Windows.
+**Não testado em aparelho real:** tudo isso. O modo mouse (OTG) no Windows depende do driver
+USB do celular; se falhar, o guia oferece o mouse USB com adaptador OTG.
+
 ## Etapa A: concluída em 30/09/2026 (beta 3.0.0b1)
 
 | Item | Situação | Como foi testado |
