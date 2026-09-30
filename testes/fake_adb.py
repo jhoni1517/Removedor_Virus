@@ -124,6 +124,12 @@ if a[0] == "shell":
             "/dev/block/dm-5 115343360 90000000 25343360 78% /data")
     if c.startswith("pm list packages -e"):
         fim("package:com.facebook.appmanager\npackage:com.whatsapp\npackage:com.miui.analytics")
+    if c.startswith("appops set") or c.startswith("pm revoke") or c.startswith("pm grant"):
+        fim()
+    if c.startswith("appops get"):
+        fim("SYSTEM_ALERT_WINDOW: allow")
+    if c.startswith("am force-stop"):
+        fim()
     if "disable-user" in c:
         fim(f"Package {c.split()[-1]} new state: disabled-user")
     if c.startswith("pm enable"):

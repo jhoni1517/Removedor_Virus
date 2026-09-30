@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
@@ -18,10 +18,21 @@ function ItemAchado({ a }: { a: Achado }) {
   );
 }
 
-function CartaoApp({ r, selecionado, alternar, remover, removido, podeAgir }: {
-  r: AppResultado; selecionado: boolean; alternar: () => void; remover: () => void; removido: boolean; podeAgir: boolean;
+const ACOES_APP: [string, string][] = [
+  ["acessibilidade", "Tirar do controle de tela"],
+  ["notificacoes", "Tirar do acesso às notificações"],
+  ["sobreposicao", "Bloquear janelas sobre outros apps"],
+  ["captura_tela", "Bloquear captura de tela"],
+  ["instalar_apps", "Bloquear instalar apps"],
+  ["parar", "Forçar parada agora"],
+];
+
+function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, podeAgir }: {
+  r: AppResultado; selecionado: boolean; alternar: () => void; remover: () => void;
+  permissoes: (pkg: string, acoes: string[]) => void; removido: boolean; podeAgir: boolean;
 }) {
   const [aberto, setAberto] = useState(r.nivel === "ALTO");
+  const [ajustar, setAjustar] = useState(false);
   const achados = r.achados.filter((a) => a.chave !== "ameaca_conhecida");
   const acionavel = !r.sistema && r.nivel !== "OK" && r.nivel !== "PERMITIDO" && !removido;
   return (
@@ -60,12 +71,29 @@ function CartaoApp({ r, selecionado, alternar, remover, removido, podeAgir }: {
           )}
         </div>
         {acionavel && (
-          <Botao variante={r.nivel === "ALTO" ? "perigo" : "secundario"} onClick={remover} disabled={!podeAgir}
-            title={podeAgir ? "Remove o app (fica uma cópia na quarentena)" : "Conecte o celular para agir"}>
-            <Trash2 size={15} aria-hidden /> Remover
-          </Botao>
+          <div className="flex shrink-0 flex-col gap-2">
+            <Botao variante={r.nivel === "ALTO" ? "perigo" : "secundario"} onClick={remover} disabled={!podeAgir}
+              title={podeAgir ? "Remove o app (fica uma cópia na quarentena)" : "Conecte o celular para agir"}>
+              <Trash2 size={15} aria-hidden /> Remover
+            </Botao>
+            <Botao onClick={() => setAjustar((v) => !v)} disabled={!podeAgir} aria-expanded={ajustar}
+              title="Tira poderes do app sem desinstalar">
+              <SlidersHorizontal size={15} aria-hidden /> Permissões
+            </Botao>
+          </div>
         )}
       </div>
+      {ajustar && acionavel && (
+        <div className="border-t border-linha p-4">
+          <p className="mb-2 text-sm text-fraco">Tirar poderes deste app sem desinstalar (dá para desfazer no Histórico):</p>
+          <div className="flex flex-wrap gap-2">
+            {ACOES_APP.map(([k, nome]) => (
+              <Botao key={k} className="py-1" disabled={!podeAgir}
+                onClick={() => { permissoes(r.pacote, [k]); setAjustar(false); }}>{nome}</Botao>
+            ))}
+          </div>
+        </div>
+      )}
     </Cartao>
   );
 }
@@ -150,6 +178,22 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     }
   }
 
+  async function ajustarPermissoes(pacote: string, acoes: string[]) {
+    try {
+      const t = await esperar(await api<Tarefa<{ feitas: string[]; quarentena_id: string }>>("/permissoes", {
+        corpo: { serial: v.info.serial, pacote, acoes } }));
+      if (t.estado !== "concluida" || !t.resultado) throw new Error(t.erro ?? "Não terminou.");
+      const feitas = t.resultado.feitas;
+      avisar({ tipo: "ok", duracao: 10000, texto: feitas.length ? feitas.join("; ") : "O app já não tinha esse poder.",
+        acao: feitas.length ? { rotulo: "Desfazer", executar: async () => {
+          await api("/desfazer", { corpo: { serial: v.info.serial, quarentena_id: t.resultado!.quarentena_id } }).catch(() => undefined);
+          avisar({ tipo: "ok", texto: "Desfeito." });
+        } } : undefined });
+    } catch (e) {
+      avisar({ tipo: "erro", texto: (e as Error).message });
+    }
+  }
+
   function alternar(p: string) {
     setSelecao((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   }
@@ -219,7 +263,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         {visiveis.length === 0 ? <Vazio>Nenhum app neste filtro. Ótimo sinal.</Vazio> :
           visiveis.map((r) => (
             <CartaoApp key={r.pacote} r={r} selecionado={selecao.has(r.pacote)} alternar={() => alternar(r.pacote)}
-              removido={removidos.has(r.pacote)} podeAgir={conectado && !ocupado} remover={() => setConfirmando([r.pacote])} />
+              removido={removidos.has(r.pacote)} podeAgir={conectado && !ocupado} remover={() => setConfirmando([r.pacote])}
+              permissoes={ajustarPermissoes} />
           ))}
       </div>
 

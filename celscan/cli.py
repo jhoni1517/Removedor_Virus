@@ -428,6 +428,18 @@ def cmd_backup(a):
                     title="Backup", border_style="green" if not res.falhas else "yellow"))
 
 
+def cmd_permissoes(a):
+    from celscan.acoes import permissoes
+
+    ap = escolher_aparelho(a.serial)
+    r = permissoes.aplicar(ap, a.pacote, a.acoes or [], a.revogar or [])
+    if not r["feitas"]:
+        return con.print("Nada a fazer (o app já não tinha esses poderes).")
+    for f in r["feitas"]:
+        con.print(f"[green]✔[/] {f}")
+    con.print(f"[dim]Desfaça com: celscan quarentena restaurar {r['quarentena_id']}[/]")
+
+
 def cmd_certificados_bancos(a):
     from celscan.analise import certificados
 
@@ -568,6 +580,14 @@ def main():
     s.add_argument("--verificar", action="store_true", help="Confere o SHA-256 de cada arquivo (mais lento)")
     s.add_argument("--listar", action="store_true", help="Só mostra quanto há para copiar")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("permissoes", help="Tira poderes perigosos de um app (com desfazer)")
+    s.add_argument("pacote")
+    s.add_argument("--serial")
+    s.add_argument("--acoes", nargs="*",
+                   help="acessibilidade, notificacoes, sobreposicao, captura_tela, instalar_apps, parar")
+    s.add_argument("--revogar", nargs="*", help="permissões Android a revogar (ex: android.permission.READ_SMS)")
+    s.set_defaults(func=cmd_permissoes)
 
     s = sub.add_parser("certificados-bancos",
                        help="Registra os certificados oficiais dos apps de banco deste celular (Play Store)")

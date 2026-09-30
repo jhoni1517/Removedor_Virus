@@ -80,6 +80,11 @@ def _reverter_ajustes(ap, meta):
         elif a["tipo"] == "appops":
             ap.sh(f"appops set {a['pacote']} {a['op']} {a.get('anterior') or 'default'}")
             msgs.append(f"{a['op']} de {a['pacote']}: {a.get('anterior') or 'default'}")
+        elif a["tipo"] == "permissao":
+            out = ap.sh(f"pm grant {a['pacote']} {a['permissao']}", erro=True)
+            certo = "error" not in out.lower() and "exception" not in out.lower()
+            msgs.append(f"{a['permissao']} de {a['pacote']}: {'devolvida' if certo else 'não confirmou'}")
+            ok &= certo
     return ok, msgs
 
 

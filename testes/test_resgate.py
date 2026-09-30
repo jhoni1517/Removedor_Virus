@@ -146,3 +146,31 @@ def test_api_espelho_otg_pausa_o_adb(fake):
             time.sleep(0.05)
         assert not pausa.is_set()  # fechou o modo mouse: volta a vigiar os aparelhos
         assert "--otg" in (fake / "estado" / "scrcpy.log").read_text(encoding="utf-8")
+
+
+def test_permissoes_aplicar_e_desfazer(fake):
+    from celscan.acoes import permissoes, quarentena
+    from celscan.core.adb import Aparelho
+
+    ap = Aparelho("ABC123")  # fake_adb responde settings/appops
+    r = permissoes.aplicar(ap, "com.systemservice", ["acessibilidade", "sobreposicao", "parar"],
+                           ["android.permission.READ_SMS"])
+    assert r["quarentena_id"] and "Forçar a parada do app agora" in r["feitas"]
+    log = (fake / "estado" / "comandos.log").read_text(encoding="utf-8")
+    assert "appops set com.systemservice SYSTEM_ALERT_WINDOW ignore" in log
+    assert "pm revoke com.systemservice android.permission.READ_SMS" in log
+    item = next(m for m in quarentena.listar() if m["id"] == r["quarentena_id"])
+    tipos = {a["tipo"] for a in item["ajustes"]}
+    assert {"settings", "appops", "permissao"} <= tipos
+    ok, _ = quarentena.restaurar(ap, r["quarentena_id"])
+    assert ok
+    log2 = (fake / "estado" / "comandos.log").read_text(encoding="utf-8")
+    assert "pm grant com.systemservice android.permission.READ_SMS" in log2
+
+
+def test_permissoes_acao_invalida(fake):
+    from celscan.acoes import permissoes
+    from celscan.core.adb import Aparelho
+
+    with pytest.raises(ValueError):
+        permissoes.aplicar(Aparelho("ABC123"), "com.x", ["voar"])

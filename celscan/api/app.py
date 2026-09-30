@@ -85,6 +85,13 @@ class PedidoBackup(BaseModel):
     verificar: bool = False
 
 
+class PedidoPermissoes(BaseModel):
+    serial: str
+    pacote: str
+    acoes: list[str] = Field(default_factory=list)
+    revogar: list[str] = Field(default_factory=list)
+
+
 class PedidoPasta(BaseModel):
     caminho: str
 
@@ -256,6 +263,28 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             return servicos.remover_apps(ap, alvos, progresso, cancelar)
         return nova_tarefa("remocao", p.serial, rodar)
+
+    @app.get("/api/permissoes/acoes")
+    def permissoes_acoes() -> dict[str, Any]:
+        from celscan.acoes import permissoes
+        return {"acoes": permissoes.ACOES, "permissoes": permissoes.PERMISSOES}
+
+    @app.post("/api/permissoes")
+    def aplicar_permissoes(p: PedidoPermissoes) -> dict[str, Any]:
+        from celscan.acoes import permissoes
+
+        ap = aparelhos.pronto(p.serial)
+        if not p.acoes and not p.revogar:
+            raise HTTPException(422, "Escolha ao menos uma ação")
+
+        def rodar(progresso, _cancelar):
+            progresso({"etapa": "permissoes", "descricao": "Ajustando permissões", "detalhe": p.pacote,
+                       "atual": None, "total": None, "estimativa_s": 5})
+            r = permissoes.aplicar(ap, p.pacote, p.acoes, p.revogar)
+            db.registrar_acao(db.conectar(), p.serial, "permissoes", p.pacote, ", ".join(r["feitas"]),
+                              r["quarentena_id"])
+            return r
+        return nova_tarefa("permissoes", p.serial, rodar)
 
     @app.post("/api/desfazer")
     def desfazer(p: PedidoDesfazer) -> dict[str, Any]:
