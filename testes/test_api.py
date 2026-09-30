@@ -161,5 +161,9 @@ def test_reconectar(cliente):
 
 
 def test_token_injetado_no_index(cliente):
+    from celscan.api.app import WEB
+
+    if not (WEB / "index.html").exists():
+        pytest.skip("interface não compilada (celscan/web/dist)")
     r = cliente.get("/", headers={"Host": "127.0.0.1"})
     assert r.status_code == 200 and f'window.__CELSCAN_TOKEN__="{TOKEN}"' in r.text
