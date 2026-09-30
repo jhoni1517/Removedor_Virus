@@ -153,3 +153,8 @@ def test_registrar_certificados_via_api(cliente):
     t = esperar(cliente, t)
     assert t["estado"] == "concluida" and t["resultado"] == []  # o celular simulado não tem app de banco
     assert cliente.post("/api/certificados/registrar", params={"serial": "NAO"}, headers=H).status_code == 409
+
+
+def test_reconectar(cliente):
+    r = cliente.post("/api/adb/reconectar", headers=H)
+    assert r.status_code == 200 and "dispositivos" in r.json()

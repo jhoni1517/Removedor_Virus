@@ -82,8 +82,11 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
     };
     conectar();
     recarregar().catch(() => undefined);
+    // Rede de segurança: mesmo que uma mensagem do WebSocket se perca, o estado se atualiza sozinho.
+    const timer = setInterval(() => recarregar().catch(() => undefined), 4000);
     return () => {
       parar = true;
+      clearInterval(timer);
       ws?.close();
     };
   }, [recarregar]);

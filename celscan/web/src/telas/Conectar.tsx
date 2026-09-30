@@ -1,4 +1,4 @@
-import { Cable, Download, Smartphone, Wifi } from "lucide-react";
+import { Cable, Download, RefreshCw, Smartphone, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ErroApi, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
@@ -133,6 +133,19 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
   const [marca, setMarca] = useState("samsung");
   const [wifi, setWifi] = useState(false);
   const [baixando, setBaixando] = useState(false);
+  const [procurando, setProcurando] = useState(false);
+
+  async function procurarDeNovo() {
+    setProcurando(true);
+    try {
+      await api("/adb/reconectar", { corpo: {} });
+      await recarregar();
+    } catch (e) {
+      avisar({ tipo: "erro", texto: (e as Error).message });
+    } finally {
+      setProcurando(false);
+    }
+  }
 
   useEffect(() => {
     api<Ajuda>("/ajuda/conexao").then(setAjuda).catch(() => undefined);
@@ -186,10 +199,17 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
       )}
 
       {prontos.length === 0 && (
-        <p className="mb-6 flex items-center gap-2 text-fraco" role="status">
-          <span className="pulsar inline-block h-2 w-2 rounded-full bg-destaque" aria-hidden />
-          Esperando o celular...
-        </p>
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <p className="flex items-center gap-2 text-fraco" role="status">
+            <span className="pulsar inline-block h-2 w-2 rounded-full bg-destaque" aria-hidden />
+            Esperando o celular...
+          </p>
+          <Botao onClick={procurarDeNovo} disabled={procurando}>
+            <RefreshCw size={15} className={procurando ? "animate-spin" : ""} aria-hidden />
+            {procurando ? "Procurando..." : "Procurar de novo"}
+          </Botao>
+          <span className="text-xs text-fraco">Já tocou em Permitir e não apareceu? Feche emuladores de Android e clique aqui.</span>
+        </div>
       )}
 
       {ajuda && (

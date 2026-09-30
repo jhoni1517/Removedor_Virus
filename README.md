@@ -3,7 +3,7 @@
 Segurança, diagnóstico e otimização de celulares Android pelo cabo USB, no Windows.
 O CelScan substitui o antigo "Removedor de Vírus Android".
 
-> **Versão 3.0 beta 2.** A interface nova ainda não foi testada num celular real. Se algo der
+> **Versão 3.0 beta 3.** A interface nova ainda não foi testada num celular real. Se algo der
 > errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
 
 ## Download e instalação

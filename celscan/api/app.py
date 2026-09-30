@@ -147,6 +147,22 @@ class Aparelhos:
 
         threading.Thread(target=rodar, name="celscan-aparelhos", daemon=True).start()
 
+    def reiniciar(self) -> list[dict[str, Any]]:
+        """Reinicia o servidor adb (resolve briga com outro adb) e relista os aparelhos agora."""
+        self.parar.set()
+        try:
+            adb.run(["kill-server"], timeout=15)
+        except adb.AdbErro:
+            pass
+        self._info.clear()
+        self.parar = threading.Event()
+        try:
+            self.atualizar(adb.dispositivos())
+        except adb.AdbErro:
+            pass
+        self.iniciar()
+        return list(self.lista.values())
+
     def pronto(self, serial: str) -> adb.Aparelho:
         item = self.lista.get(serial)
         if not item or item["estado"] != "device":
@@ -206,6 +222,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                 "vt": preferencias.chave_virustotal() is not None, "modos": servicos.MODOS,
                 "dispositivos": list(aparelhos.lista.values()),
                 "tarefas": [t.publico() for t in tarefas.listar() if t.estado == "executando"]}
+
+    @app.post("/api/adb/reconectar")
+    def reconectar() -> dict[str, Any]:
+        if not adb.localizar():
+            raise HTTPException(503, "ADB não encontrado. Use o botão para baixar.")
+        return {"dispositivos": aparelhos.reiniciar()}
 
     @app.post("/api/adb/instalar")
     def instalar_adb() -> dict[str, Any]:
