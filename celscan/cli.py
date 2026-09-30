@@ -376,6 +376,58 @@ def cmd_verificar(a):
                     f"{achado['veredito']}", title="Laudo autêntico", border_style="green"))
 
 
+def cmd_espelhar(a):
+    from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
+
+    serial = None
+    if a.modo != "otg":
+        serial = escolher_aparelho(a.serial).serial
+    elif not Confirm.ask("Modo mouse: o celular recebe mouse e teclado do PC (sem imagem). Continuar?", default=True):
+        return
+    if a.modo == "otg":
+        adb.run(["kill-server"], timeout=15)  # o modo mouse precisa da porta USB livre
+    esp = Espelhos()
+    try:
+        sessao = esp.abrir(serial, OpcoesEspelho(modo=a.modo, tela_desligada=a.tela_desligada, gravar=a.gravar))
+    except EspelhoErro as e:
+        sys.exit(str(e))
+    erro = esp.erro_inicial(sessao)
+    if erro:
+        sys.exit(f"O espelhamento não abriu: {erro}")
+    con.print("[green]✔[/] Janela aberta. Feche a janela do scrcpy para terminar.")
+    sessao.processo.wait()
+
+
+def cmd_backup(a):
+    from celscan.acoes import backup
+
+    ap = escolher_aparelho(a.serial)
+    categorias = a.categorias.split(",") if a.categorias else list(backup.PADRAO)
+    with con.status("Procurando arquivos no celular..."):
+        arquivos = backup.listar(ap, categorias)
+    resumo = backup.resumo_listagem(arquivos)
+    t = Table(header_style="bold")
+    for c in ("Categoria", "Arquivos", "Tamanho"):
+        t.add_column(c)
+    for c in categorias:
+        t.add_row(resumo[c]["nome"], str(resumo[c]["arquivos"]), f"{resumo[c]['bytes'] / 1048576:.1f} MB")
+    con.print(t)
+    if a.listar or not arquivos:
+        return con.print("Nada para copiar." if not arquivos else "")
+    raiz = Path(a.destino) if a.destino else backup.pasta_padrao() / backup.nome_seguro(ap.serial)
+    if not Confirm.ask(f"Copiar {len(arquivos)} arquivos para {raiz}?", default=True):
+        return
+    raiz.mkdir(parents=True, exist_ok=True)
+    (raiz / "apps_instalados.txt").write_text(backup.lista_de_apps(ap), encoding="utf-8")
+    with barra() as p:
+        t_id = p.add_task("Copiando", total=len(arquivos))
+        res = backup.copiar(ap, arquivos, raiz, lambda ev: p.update(t_id, completed=ev["atual"]),
+                            verificar_hash=a.verificar)
+    con.print(Panel(f"Copiados agora: {res.copiados} · já estavam no PC: {res.pulados} · falhas: {len(res.falhas)}\n"
+                    f"Pasta: {raiz}\n[dim]Dados pessoais do cliente: entregue e apague do PC depois (LGPD).[/]",
+                    title="Backup", border_style="green" if not res.falhas else "yellow"))
+
+
 def cmd_interface(a):
     from celscan.api import servidor
 
@@ -487,6 +539,22 @@ def main():
     s = sub.add_parser("verificar", help="Confere o código de verificação de um laudo")
     s.add_argument("codigo")
     s.set_defaults(func=cmd_verificar)
+
+    s = sub.add_parser("espelhar", help="Mostra e controla a tela do celular no PC (scrcpy)")
+    s.add_argument("--serial")
+    s.add_argument("--modo", choices=["controlar", "ver", "otg"], default="controlar",
+                   help="otg = mouse/teclado do PC no celular, sem depuração USB (toque quebrado)")
+    s.add_argument("--tela-desligada", action="store_true", help="Desliga a tela do celular enquanto espelha")
+    s.add_argument("--gravar", help="Grava a tela neste arquivo .mp4")
+    s.set_defaults(func=cmd_espelhar)
+
+    s = sub.add_parser("backup", help="Copia fotos, vídeos, documentos e WhatsApp para o PC")
+    s.add_argument("--serial")
+    s.add_argument("--categorias", help="Lista separada por vírgula (padrão: todas menos Telegram)")
+    s.add_argument("--destino")
+    s.add_argument("--verificar", action="store_true", help="Confere o SHA-256 de cada arquivo (mais lento)")
+    s.add_argument("--listar", action="store_true", help="Só mostra quanto há para copiar")
+    s.set_defaults(func=cmd_backup)
 
     s = sub.add_parser("interface", help="Abre a interface gráfica")
     s.add_argument("--navegador", action="store_true", help="Abre no navegador em vez de janela própria")

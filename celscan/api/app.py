@@ -8,8 +8,11 @@ consegue mandar comandos para o celular pela porta local.
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
+import subprocess
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -21,7 +24,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import quarentena
+from celscan.acoes import backup, quarentena
+from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
+from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
 from celscan.api.tarefas import Gerenciador
 from celscan.core import adb, db, log, preferencias
@@ -29,6 +34,7 @@ from celscan.core import adb, db, log, preferencias
 WEB = config.PACOTE / "web" / "dist"
 HOSTS = ("127.0.0.1", "localhost", "testserver")
 MARCAS: dict[str, Any] = yaml.safe_load((config.DADOS / "conexao.yaml").read_text(encoding="utf-8"))
+RESGATE: dict[str, Any] = yaml.safe_load((config.DADOS / "resgate.yaml").read_text(encoding="utf-8"))
 
 
 def marca_de(fabricante: str | None) -> str:
@@ -64,6 +70,25 @@ class PedidoConfig(BaseModel):
     tema: str | None = None
 
 
+class PedidoEspelho(BaseModel):
+    serial: str | None = None
+    modo: str = "controlar"
+    tela_desligada: bool = False
+    acordado: bool = True
+    gravar: bool = False
+
+
+class PedidoBackup(BaseModel):
+    serial: str
+    categorias: list[str] = Field(default_factory=lambda: list(backup.PADRAO))
+    destino: str | None = None
+    verificar: bool = False
+
+
+class PedidoPasta(BaseModel):
+    caminho: str
+
+
 class PedidoWifi(BaseModel):
     endereco: str
     codigo: str | None = None
@@ -79,6 +104,7 @@ class Aparelhos:
         self.lista: dict[str, dict[str, Any]] = {}
         self._info: dict[str, dict[str, str]] = {}
         self.parar = threading.Event()
+        self.pausa = threading.Event()  # modo mouse OTG: deixa a porta USB livre para o scrcpy
 
     def atualizar(self, pares: list[tuple[str, str]]) -> None:
         novos = {}
@@ -110,7 +136,7 @@ class Aparelhos:
                 self.atualizar(adb.dispositivos())
             except adb.AdbErro:
                 pass
-            adb.acompanhar(self.atualizar, self.parar)
+            adb.acompanhar(self.atualizar, self.parar, pausa=self.pausa)
 
         threading.Thread(target=rodar, name="celscan-aparelhos", daemon=True).start()
 
@@ -134,6 +160,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     token = token or secrets.token_urlsafe(24)
     tarefas = Gerenciador()
     aparelhos = Aparelhos(tarefas)
+    espelhos = Espelhos()
     erros = (adb.AdbErro, servicos.ModoIndisponivel, ValueError)
 
     @asynccontextmanager
@@ -144,6 +171,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             aparelhos.iniciar()
         yield
         aparelhos.parar.set()
+        espelhos.parar_todas()
 
     app = FastAPI(title="CelScan", version=__version__, lifespan=ciclo, docs_url=None, redoc_url=None)
     app.state.token, app.state.tarefas, app.state.aparelhos = token, tarefas, aparelhos
@@ -314,6 +342,106 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/wifi/conectar")
     def wifi_conectar(p: PedidoWifi) -> dict[str, str]:
         return {"resposta": adb.conectar(p.endereco)}
+
+    # ---- tela quebrada: espelhar e copiar dados
+    @app.get("/api/resgate")
+    def guia_resgate() -> dict[str, Any]:
+        return RESGATE
+
+    @app.get("/api/espelho")
+    def estado_espelho() -> dict[str, Any]:
+        return {"disponivel": localizar_scrcpy() is not None, "ativas": espelhos.ativas()}
+
+    @app.post("/api/espelho")
+    def abrir_espelho(p: PedidoEspelho) -> dict[str, Any]:
+        if p.modo != "otg":
+            if not p.serial:
+                raise HTTPException(422, "Escolha o aparelho")
+            aparelhos.pronto(p.serial)
+        gravacao = None
+        if p.gravar and p.modo != "otg":
+            nome = backup.nome_seguro(f"tela_{p.serial}_{time.strftime('%Y%m%d_%H%M%S')}.mp4")
+            gravacao = str(backup.pasta_padrao() / "Gravações de tela" / nome)
+        opcoes = OpcoesEspelho(modo=p.modo, tela_desligada=p.tela_desligada, acordado=p.acordado, gravar=gravacao)
+        if p.modo == "otg":
+            aparelhos.pausa.set()  # o adb precisa soltar o celular para o modo mouse funcionar
+            try:
+                adb.run(["kill-server"], timeout=15)
+            except adb.AdbErro:
+                pass
+        try:
+            sessao = espelhos.abrir(p.serial, opcoes)
+        except (EspelhoErro, ValueError) as e:
+            aparelhos.pausa.clear()
+            raise HTTPException(422, str(e))
+        erro = espelhos.erro_inicial(sessao)
+        if p.modo == "otg":
+            def retomar() -> None:
+                sessao.processo.wait()
+                aparelhos.pausa.clear()
+            threading.Thread(target=retomar, daemon=True).start()
+        if erro:
+            raise HTTPException(422, f"O espelhamento não abriu: {erro}")
+        return {"ok": True, "modo": p.modo, "gravacao": gravacao}
+
+    @app.post("/api/espelho/parar")
+    def parar_espelho(p: PedidoEspelho) -> dict[str, bool]:
+        return {"parado": espelhos.parar(p.serial if p.modo != "otg" else None)}
+
+    def destino_backup(serial: str, destino: str | None) -> Path:
+        if destino:
+            return Path(destino).expanduser()
+        d = aparelhos.lista.get(serial, {})
+        nome = backup.nome_seguro(f"{d.get('fabricante', '')} {d.get('modelo', '')} ({serial})".strip())
+        return backup.pasta_padrao() / nome  # mesmo nome sempre: rodar de novo continua de onde parou
+
+    @app.get("/api/backup/categorias")
+    def categorias_backup(serial: str | None = None) -> dict[str, Any]:
+        return {"categorias": {k: v[0] for k, v in backup.CATEGORIAS.items()}, "padrao": list(backup.PADRAO),
+                "destino": str(destino_backup(serial, None)) if serial else str(backup.pasta_padrao())}
+
+    @app.post("/api/backup/listar")
+    def listar_backup(p: PedidoBackup) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "listar", "descricao": "Procurando arquivos no celular", "detalhe": "", "atual": None,
+                       "total": None, "estimativa_s": 20})
+            arquivos = backup.listar(ap, p.categorias)
+            return {"categorias": backup.resumo_listagem(arquivos), "total_arquivos": len(arquivos),
+                    "total_bytes": sum(a.tamanho for a in arquivos),
+                    "destino": str(destino_backup(p.serial, p.destino))}
+        return nova_tarefa("backup_listar", p.serial, rodar)
+
+    @app.post("/api/backup/copiar")
+    def copiar_backup(p: PedidoBackup) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        raiz = destino_backup(p.serial, p.destino)
+
+        def rodar(progresso, cancelar):
+            from dataclasses import asdict
+
+            progresso({"etapa": "listar", "descricao": "Procurando arquivos no celular", "detalhe": "", "atual": None,
+                       "total": None, "estimativa_s": 20})
+            arquivos = backup.listar(ap, p.categorias)
+            raiz.mkdir(parents=True, exist_ok=True)
+            (raiz / "apps_instalados.txt").write_text(backup.lista_de_apps(ap), encoding="utf-8")
+            info = {k: v for k, v in aparelhos.lista.get(p.serial, {}).items() if isinstance(v, str)}
+            return asdict(backup.copiar(ap, arquivos, raiz, progresso, cancelar, p.verificar, info))
+        return nova_tarefa("backup", p.serial, rodar)
+
+    @app.post("/api/abrir-pasta")
+    def abrir_pasta(p: PedidoPasta) -> dict[str, bool]:
+        alvo = Path(p.caminho).expanduser().resolve()
+        permitidas = [backup.pasta_padrao().resolve(), config.DIR.resolve()]
+        if not any(alvo == r or r in alvo.parents for r in permitidas):
+            raise HTTPException(403, "Só abro pastas do CelScan")
+        alvo.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            os.startfile(alvo)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(alvo)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"aberta": True}
 
     # ---- tempo real
     @app.websocket("/api/ws")

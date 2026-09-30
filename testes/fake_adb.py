@@ -19,6 +19,22 @@ APK_REAL = os.getenv("APK_TESTE", "/tmp/fdroid.apk")  # qualquer APK real
 PACOTES = ["com.whatsapp", "com.systemservice", "com.x8bit.bitwarden", "com.exemplo.jogo"]
 
 
+def arquivos_fixture():
+    res = {}
+    caminho = os.path.join(FIXTURES, "arquivos.txt")
+    if os.path.exists(caminho):
+        for linha in open(caminho, encoding="utf-8").read().splitlines():
+            tam, mtime, arq = linha.split("|", 2)
+            res[arq] = (int(tam), mtime)
+    return res
+
+
+def conteudo(arq, tamanho):
+    """Conteúdo determinístico de cada arquivo simulado (para conferir hash e tamanho)."""
+    base = arq.encode("utf-8") or b"x"
+    return (base * (tamanho // len(base) + 1))[:tamanho]
+
+
 def fixture(nome):
     with open(os.path.join(FIXTURES, nome), encoding="utf-8") as f:
         return f.read()
@@ -50,9 +66,12 @@ if a[0] == "push":
     shutil.copy(a[1], os.path.join(EST, "script.sh"))
     fim("1 file pushed")
 if a[0] == "pull":
+    if a[1] == "-a":
+        a = a[1:]
+    arquivos = arquivos_fixture()
     with open(a[2], "wb") as f:
-        f.write(b"APKFAKE")
-    fim("pulled")
+        f.write(conteudo(a[1], arquivos[a[1]][0]) if a[1] in arquivos else b"APKFAKE")
+    fim(f"{a[1]}: 1 file pulled")
 if a[0] in ("install", "install-multiple", "uninstall"):
     fim("Success")
 if a[0] == "exec-out":
@@ -68,6 +87,23 @@ if a[0] == "shell":
         with open(os.path.join(EST, "script.sh"), encoding="utf-8") as f:
             script = f.read()
         fim(fixture("coleta.txt" if "pkgdump" in script else "diag.txt"))
+    if "-exec stat" in c:
+        m = re.search(r"find ('([^']*)'|(\S+)) -type f", c)
+        pasta = (m.group(2) or m.group(3)).rstrip("/") + "/"
+        for arq, (tam, mtime) in arquivos_fixture().items():
+            if arq.startswith(pasta):
+                print(f"{tam}|{mtime}|{arq}")
+        fim()
+    if c.startswith("sha256sum "):
+        import hashlib
+        import shlex
+        arq = shlex.split(c)[1]
+        arquivos = arquivos_fixture()
+        if arq in arquivos:
+            fim(f"{hashlib.sha256(conteudo(arq, arquivos[arq][0])).hexdigest()}  {arq}")
+        fim(f"sha256sum: {arq}: No such file or directory")
+    if c.startswith("pm list packages -3") and "-f" not in c:
+        fim("\n".join(f"package:{p}" for p in PACOTES))
     if c.startswith("getprop "):
         chave = c.split()[1]
         m = re.search(r"^\[" + re.escape(chave) + r"\]: \[(.*)\]$", fixture("coleta.txt"), re.M)

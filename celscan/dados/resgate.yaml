@@ -1,0 +1,61 @@
+# Guia "Tela quebrada ou queimada": o que fazer em cada situação.
+# ferramenta: botão que a interface mostra junto do passo (otg | espelhar | backup).
+
+aviso_consentimento: >
+  Só acesse o celular de um cliente com a autorização dele. Os arquivos copiados são dados pessoais:
+  entregue ao dono e apague do computador depois (LGPD).
+
+limites: >
+  Se a depuração USB nunca foi autorizada neste computador e não dá para ver a tela de jeito nenhum,
+  não existe forma de acessar os dados pelo cabo. É a criptografia do Android protegendo o dono.
+  Nesses casos a saída é devolver a imagem por um caminho físico (HDMI, DeX ou tela de teste).
+
+casos:
+  autorizado:
+    titulo: "O celular aparece como conectado aqui"
+    resumo: "A depuração USB já está autorizada neste computador: dá para ver, controlar e copiar tudo, mesmo com a tela preta."
+    passos:
+      - titulo: "Veja e controle a tela pelo PC"
+        texto: "Use o mouse e o teclado do computador. Marque \"Desligar a tela do celular\" se ela estiver queimada ou esquentando."
+        ferramenta: espelhar
+      - titulo: "Copie os dados para o PC"
+        texto: "Fotos, vídeos, documentos, mídia e backup do WhatsApp. Nada é apagado do celular."
+        ferramenta: backup
+
+  toque:
+    titulo: "A tela mostra imagem, mas o toque não funciona"
+    resumo: "Dá para usar o mouse e o teclado do PC como se estivessem ligados no celular, sem precisar da depuração USB."
+    passos:
+      - titulo: "Controle com o mouse do PC"
+        texto: "Ligue o cabo e clique no botão. Uma janela preta abre: mexa o mouse e clique nela. O ponteiro aparece na tela do celular. Não há imagem no PC nesse modo: olhe para o celular."
+        ferramenta: otg
+      - titulo: "Desbloqueie e ligue a depuração"
+        texto: "Com o mouse: desbloqueie (o dono digita o PIN pelo teclado do PC), vá em Configurações > Sobre o telefone > toque 7 vezes em Número da versão, e depois ative Opções do desenvolvedor > Depuração USB."
+      - titulo: "Toque em Permitir"
+        texto: "Feche a janela do mouse (o modo mouse e a depuração não funcionam juntos no Windows). Reconecte o cabo e, quando aparecer \"Permitir depuração USB?\", marque \"Sempre permitir\" e clique em Permitir com um mouse USB ligado por adaptador OTG, ou abra o modo mouse de novo."
+      - titulo: "Pronto: espelhe e copie"
+        texto: "O celular vai aparecer como conectado. A partir daí você vê a tela no PC e copia os dados."
+    alternativa: "Sem o modo mouse do PC: um mouse USB comum ligado ao celular por um adaptador OTG (USB-C ou micro-USB) também funciona."
+
+  imagem:
+    titulo: "A tela está preta ou quebrada, sem imagem"
+    resumo: "Sem imagem, é preciso fazer o celular mostrar a tela em outro lugar para autorizar a primeira vez."
+    passos:
+      - titulo: "Teste se já está autorizado"
+        texto: "Ligue o cabo com o celular desbloqueado (se possível). Se ele aparecer como conectado aqui, tudo funciona: veja o caso \"O celular aparece como conectado\"."
+      - titulo: "Tente um monitor ou TV"
+        texto: "Muitos Samsung (DeX), alguns Motorola (Ready For), Xiaomi e aparelhos topo de linha mostram a tela por um cabo/adaptador USB-C para HDMI. Com a imagem na TV e um mouse Bluetooth ou por hub USB, desbloqueie e ligue a depuração."
+      - titulo: "Samsung: backup sem tela"
+        texto: "Smart Switch no PC (com o celular desbloqueado) ou \"Encontrar meu celular\" (smartthings.com) permitem desbloquear e fazer backup para a nuvem Samsung."
+      - titulo: "Assistência técnica: tela de teste"
+        texto: "Conectar temporariamente um display compatível resolve a maioria dos casos: autorize a depuração com ele e depois espelhe e copie pelo CelScan."
+    alternativa: "Fotos e contatos podem já estar no Google Fotos e na conta Google: confira em photos.google.com e contacts.google.com com a conta do dono."
+
+  morto:
+    titulo: "O celular não liga ou não é reconhecido de jeito nenhum"
+    resumo: "Aí o problema é de hardware (bateria, placa, conector). Nenhum programa consegue acessar os dados."
+    passos:
+      - titulo: "Confira o básico"
+        texto: "Outro cabo (de dados), outra porta USB, carregar por 30 minutos e segurar o botão de ligar por 20 segundos."
+      - titulo: "Reparo de placa"
+        texto: "Se continuar sem sinal, é caso de bancada: conector de carga, bateria ou placa."

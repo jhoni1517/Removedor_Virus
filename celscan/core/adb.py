@@ -110,13 +110,18 @@ def parse_lista(texto: str) -> list[tuple[str, str]]:
 
 
 def acompanhar(callback: Callable[[list[tuple[str, str]]], None], parar: threading.Event,
-               espera_reinicio: float = 2.0) -> None:
+               espera_reinicio: float = 2.0, pausa: threading.Event | None = None) -> None:
     """Chama `callback(lista)` a cada mudança de aparelhos (adb track-devices). Bloqueia até `parar`.
 
     O track-devices manda quadros "<4 dígitos hex de tamanho><lista>". Se o processo cair
-    (adb reiniciado, cabo, etc.), recomeça depois de `espera_reinicio` segundos.
+    (adb reiniciado, cabo, etc.), recomeça depois de `espera_reinicio` segundos. Enquanto `pausa`
+    estiver ligada, não fala com o adb (ex.: modo mouse OTG do scrcpy precisa da porta USB livre).
     """
+    pausa = pausa or threading.Event()
     while not parar.is_set():
+        if pausa.is_set():
+            parar.wait(0.5)
+            continue
         try:
             p = subprocess.Popen([*_cmd(), "track-devices"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                  creationflags=SEM_JANELA)
@@ -125,10 +130,15 @@ def acompanhar(callback: Callable[[list[tuple[str, str]]], None], parar: threadi
             parar.wait(espera_reinicio * 5)
             continue
         assert p.stdout is not None
-        vigia = threading.Thread(target=lambda proc=p: (parar.wait(), proc.kill()), daemon=True)
+        def vigiar(proc: subprocess.Popen = p) -> None:
+            while not (parar.is_set() or pausa.is_set()) and proc.poll() is None:
+                parar.wait(0.3)
+            proc.kill()
+
+        vigia = threading.Thread(target=vigiar, daemon=True)
         vigia.start()
         try:
-            while not parar.is_set():
+            while not (parar.is_set() or pausa.is_set()):
                 cabecalho = p.stdout.read(4)
                 if len(cabecalho) < 4:
                     break
