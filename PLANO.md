@@ -9,6 +9,24 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b7 (01/10/2026) — o que tinha ficado de fora (sem custo)
+
+| Item | Situação |
+|---|---|
+| Motor: conexão direta com o servidor do adb (adbutils) + leituras em paralelo | ✅ com fallback automático para o modo por processo; nunca liga o adb embutido do adbutils |
+| Atualização automática (canal estável/beta) pelo GitHub Releases, SHA-256 conferido | ✅ substitui o principal motivo do Tauri |
+| CelScan Agente (app Android temporário, 16 KB, sem Gradle) + "Apps esquecidos" | ✅ só leitura, só o shell do adb consulta, removido no fim |
+| Laudo com QR verificável online (Ed25519, página estática no GitHub Pages) | ✅ falta você ligar o Pages (Settings > Pages > Source: GitHub Actions) |
+
+**Decisão sobre o Tauri (minha recomendação: não migrar agora).** O ganho que ele traria
+(instalador nativo e atualização automática) já existe: Inno Setup + atualização pelo Releases. A
+janela continua sendo o WebView2 do Windows nos dois casos. Migrar seria reescrever empacotamento e
+inicialização, com risco, sem função nova para o usuário. Fica como opção futura.
+
+**Continua pendente:** os 3 itens interrompidos pelo filtro de segurança (análise de APK por
+conteúdo, consumo de bateria por app, configuração de rede), testes em aparelho real, e itens com
+custo (assinatura de código).
+
 ## Beta 3.0.0b6 (01/10/2026) — entregue
 
 | Item | Situação |
