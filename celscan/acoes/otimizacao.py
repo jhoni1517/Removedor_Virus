@@ -160,16 +160,31 @@ def lista_uad(forcar=False):
         return {}
 
 
-def sugestoes_debloat(ap):
-    """Apps pré-instalados ativos que a comunidade UAD marca como seguros de remover."""
+# Níveis da comunidade UAD, traduzidos. Cumulativos: "avançado" inclui "recomendado".
+# "Unsafe" (pode deixar o celular sem ligar) NUNCA é oferecido.
+NIVEIS_DEBLOAT = {
+    "recomendado": ("Recommended", 1, "Seguro desativar: propaganda, apps da operadora, duplicados."),
+    "avancado": ("Advanced", 2, "Pode desligar uma função secundária (ex.: tema, widget). Revise um por um."),
+    "especialista": ("Expert", 3, "Só para quem sabe o que o app faz: pode afetar recursos do sistema."),
+}
+_UAD_PARA_NIVEL = {v[0]: (k, v[1]) for k, v in NIVEIS_DEBLOAT.items()}
+
+
+def sugestoes_debloat(ap, nivel="recomendado"):
+    """Apps pré-instalados ativos que a comunidade UAD lista até o nível escolhido (nunca 'Unsafe')."""
+    if nivel not in NIVEIS_DEBLOAT:
+        raise ValueError(f"nível inválido: {nivel}")
+    teto = NIVEIS_DEBLOAT[nivel][1]
     uad = lista_uad()
     ativos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e -s"), re.M))
     res = []
     for pkg in sorted(ativos):
-        e = uad.get(pkg)
-        if e and e.get("removal") == "Recommended":
+        e = uad.get(pkg) or {}
+        nome_nivel, ordem = _UAD_PARA_NIVEL.get(e.get("removal", ""), (None, 99))
+        if nome_nivel and ordem <= teto:
             desc = (e.get("description") or "").strip().split("\n")[0]
-            res.append({"pacote": pkg, "grupo": e.get("list", ""), "descricao": desc[:110]})
+            res.append({"pacote": pkg, "grupo": e.get("list", ""), "descricao": desc[:110], "nivel": nome_nivel})
+    res.sort(key=lambda x: (NIVEIS_DEBLOAT[x["nivel"]][1], x["pacote"]))
     return res
 
 

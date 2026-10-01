@@ -247,16 +247,17 @@ def cmd_otimizar(a):
         con.print(f"[green]✔[/] {feitos[-1]}")
     if a.debloat or Confirm.ask("Procurar apps pré-instalados desnecessários (bloatware)?", default=False):
         with con.status("Consultando lista da comunidade (UAD)..."):
-            sug = ot.sugestoes_debloat(ap)
+            sug = ot.sugestoes_debloat(ap, a.nivel)
         if not sug:
             con.print("Nada recomendado para remover.")
         else:
             tb = Table(header_style="bold")
             tb.add_column("#", justify="right")
             tb.add_column("Pacote")
+            tb.add_column("Nível")
             tb.add_column("O que é", overflow="fold")
             for i, s in enumerate(sug, 1):
-                tb.add_row(str(i), s["pacote"], s["descricao"])
+                tb.add_row(str(i), s["pacote"], s["nivel"], s["descricao"])
             con.print(tb)
             esc = perguntar("Desativar quais? (ex: 1,3,5 · 'todos' · Enter = nenhum)", default="")
             if esc.strip():
@@ -609,6 +610,8 @@ def main():
     s.add_argument("--compilar", action="store_true")
     s.add_argument("--animacoes", type=float, help="Escala das animações (ex: 0.5; 1 = padrão)")
     s.add_argument("--debloat", action="store_true")
+    s.add_argument("--nivel", choices=["recomendado", "avancado", "especialista"], default="recomendado",
+                   help="Até que nível do UAD listar (o nível 'inseguro' nunca aparece)")
     s.set_defaults(func=cmd_otimizar)
 
     s = sub.add_parser("quarentena", help="Lista ou desfaz remoções")

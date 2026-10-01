@@ -78,6 +78,11 @@ class PedidoPrecos(BaseModel):
     precos: dict[str, float]
 
 
+class PedidoDebloat(BaseModel):
+    serial: str
+    pacotes: list[str] = Field(min_length=1)
+
+
 class PedidoLimpeza(BaseModel):
     serial: str
     categorias: list[str] = Field(default_factory=lambda: list(otimizacao.LIXO))
@@ -688,6 +693,32 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                        "atual": None, "total": None, "estimativa_s": 40})
             return {"liberado_mb": otimizacao.limpar_cache(ap)}
         return nova_tarefa("limpeza_cache", p.serial, rodar)
+
+    @app.get("/api/debloat")
+    def debloat_sugestoes(serial: str, nivel: str = "recomendado") -> dict[str, Any]:
+        ap = aparelhos.pronto(serial)
+        try:
+            itens = otimizacao.sugestoes_debloat(ap, nivel)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return {"niveis": {k: v[2] for k, v in otimizacao.NIVEIS_DEBLOAT.items()}, "itens": itens}
+
+    @app.post("/api/debloat")
+    def debloat_desativar(p: PedidoDebloat) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            feitos = []
+            for i, pkg in enumerate(p.pacotes, 1):
+                progresso({"etapa": "debloat", "descricao": "Desativando apps pré-instalados", "detalhe": pkg,
+                           "atual": i, "total": len(p.pacotes), "estimativa_s": 2 * (len(p.pacotes) - i)})
+                feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
+            con = db.conectar()
+            ok = [f["pacote"] for f in feitos if f["ok"]]
+            if ok:
+                db.registrar_acao(con, p.serial, "otimizacao", None, f"{len(ok)} app(s) pré-instalados desativados")
+            return feitos
+        return nova_tarefa("debloat", p.serial, rodar)
 
     @app.post("/api/limpeza/lixo")
     def medir_lixo(p: PedidoSerial) -> dict[str, Any]:

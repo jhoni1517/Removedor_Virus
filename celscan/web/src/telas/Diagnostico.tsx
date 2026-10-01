@@ -136,6 +136,75 @@ function PainelLimpeza({ d }: { d: Dispositivo | undefined }) {
   );
 }
 
+interface ItemDebloat { pacote: string; grupo: string; descricao: string; nivel: string }
+const NOMES_NIVEL: Record<string, string> = { recomendado: "Recomendado", avancado: "Avançado", especialista: "Especialista" };
+
+function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
+  const { esperar, avisar } = useApp();
+  const [nivel, setNivel] = useState("recomendado");
+  const [dados, setDados] = useState<{ niveis: Record<string, string>; itens: ItemDebloat[] } | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [ocupado, setOcupado] = useState(false);
+  const pronto = d?.estado === "device";
+
+  async function buscar(n = nivel) {
+    setOcupado(true);
+    try {
+      const r = await api<{ niveis: Record<string, string>; itens: ItemDebloat[] }>(`/debloat?serial=${encodeURIComponent(d!.serial)}&nivel=${n}`);
+      setDados(r);
+      setEscolhidos(new Set(r.itens.filter((i) => i.nivel === "recomendado").map((i) => i.pacote)));
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+  async function desativar() {
+    setOcupado(true);
+    try {
+      const t = await esperar(await api<Tarefa<{ pacote: string; ok: boolean }[]>>("/debloat", { corpo: { serial: d!.serial, pacotes: [...escolhidos] } }));
+      const ok = (t.resultado ?? []).filter((x) => x.ok).length;
+      avisar({ tipo: ok ? "ok" : "erro", texto: `${ok} app(s) desativado(s). Dá para desfazer pelo Histórico/quarentena.` });
+      await buscar();
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+
+  return (
+    <Cartao className="p-5">
+      <h3 className="flex items-center gap-2 font-semibold"><Trash2 size={18} aria-hidden /> Apps pré-instalados desnecessários</h3>
+      <p className="mt-1 text-sm text-fraco">Lista da comunidade (UAD). Desativa — não apaga — e dá para desfazer. Apps que podem impedir o celular de ligar nunca aparecem.</p>
+      <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Nível">
+        {Object.entries(NOMES_NIVEL).map(([k, nome]) => (
+          <button key={k} role="radio" aria-checked={nivel === k} disabled={!pronto}
+            onClick={() => { setNivel(k); if (dados) buscar(k); }}
+            className={`rounded-full border px-3 py-1 text-sm ${nivel === k ? "border-destaque bg-destaque-suave text-destaque" : "border-linha"}`}>{nome}</button>
+        ))}
+        <Botao onClick={() => buscar()} disabled={!pronto || ocupado}>{ocupado && !dados ? "Procurando..." : "Procurar"}</Botao>
+      </div>
+      {dados && <p className="mt-2 text-xs text-fraco">{dados.niveis[nivel]}</p>}
+      {dados && (dados.itens.length === 0 ? <p className="mt-3 text-sm text-fraco">Nada para desativar neste nível.</p> : (
+        <>
+          <ul className="mt-3 max-h-72 space-y-1 overflow-auto text-sm">
+            {dados.itens.map((i) => (
+              <li key={i.pacote}>
+                <label className="flex items-start gap-2 rounded-md border border-linha p-2">
+                  <input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={escolhidos.has(i.pacote)}
+                    onChange={() => setEscolhidos((x) => { const n = new Set(x); if (n.has(i.pacote)) n.delete(i.pacote); else n.add(i.pacote); return n; })} />
+                  <span className="flex-1"><span className="font-mono text-xs">{i.pacote}</span>
+                    <span className={`ml-2 rounded px-1 text-[10px] ${i.nivel === "recomendado" ? "bg-ok-suave text-ok" : "bg-atencao-suave text-atencao"}`}>{NOMES_NIVEL[i.nivel]}</span>
+                    <span className="block text-fraco">{i.descricao || i.grupo}</span></span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <Botao className="mt-3" variante="primario" onClick={desativar} disabled={ocupado || escolhidos.size === 0}>
+            Desativar {escolhidos.size} app(s)
+          </Botao>
+        </>
+      ))}
+      {!pronto && <p className="mt-2 text-sm text-fraco">Precisa do celular conectado e autorizado.</p>}
+    </Cartao>
+  );
+}
+
 function PainelIPhone() {
   const [dados, setDados] = useState<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string } | null>(null);
   useEffect(() => { api<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string }>("/ios/estado").then(setDados).catch(() => undefined); }, []);
@@ -184,6 +253,7 @@ export default function Diagnostico() {
       )}
       <PainelDiagnostico d={d} />
       <PainelLimpeza d={d} />
+      <PainelDebloat d={d} />
       <PainelIPhone />
     </div>
   );
