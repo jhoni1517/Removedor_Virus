@@ -9,6 +9,20 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b9 (01/10/2026) — pedidos após o teste no Redmi Note 15 Pro 5G
+
+| Item | Situação |
+|---|---|
+| "7 câmeras" exagerado | ✅ agora mostra total de sensores + traseiras/frontais, e explica que inclui macro/profundidade; "Maior foto" com nota sobre junção de pixels |
+| Bateria sem saúde nem ciclos no Redmi | ✅ varre TODOS os medidores do sistema (battery/bms/qg...), não só o padrão; aceita cycle_count e battery_cycle |
+| RAM 7,3 GB / 227 GB de 256 | ✅ conferido: está correto (reserva do sistema e formatação); não era erro |
+| Forçar reiniciar / recovery / fastboot (bootloader) | ✅ com confirmação e aviso honesto de cada modo; não apaga nada nem mexe na senha |
+| Visual "feio" / temas | ✅ profundidade (sombra, brilho, gradiente), medidor com brilho, menu com barra de acento; novo tema **Oficina** (grafite + ciano) de destaque; claro/escuro repaginados |
+
+**Pendente de confirmação sua:** se no Redmi a saúde da bateria e os ciclos passaram a aparecer
+(alguns aparelhos realmente não expõem esses dados por USB sem root — aí continua "não verificado",
+que é o honesto).
+
 ## Beta 3.0.0b8 (01/10/2026) — pedidos após o teste do b7
 
 | Item | Situação |
