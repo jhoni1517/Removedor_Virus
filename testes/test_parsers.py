@@ -102,3 +102,24 @@ def test_identificacao_usa_nomes_curtos():
     assert parsers.identificacao(txt) == {
         "manufacturer": "Xiaomi", "model": "24090RA29G", "marketname": "Redmi Note 14",
         "serial": "ABC123", "release": "16", "security_patch": "2026-07-01"}
+
+
+def test_saude_bateria_varios_medidores():
+    # Xiaomi guarda em 'bms'; os ciclos ficam em 'battery'. Deve juntar os dois.
+    txt = "battery.cycle_count=412\nbms.charge_full=3800000\nbms.charge_full_design=5000000\n"
+    r = parsers.saude_bateria(txt)
+    assert r == {"saude_pct": 76, "capacidade_mah": 3800, "capacidade_projeto_mah": 5000, "ciclos": 412}
+
+
+def test_saude_bateria_formato_antigo_sem_prefixo():
+    r = parsers.saude_bateria("charge_full=4000000\ncharge_full_design=4000000\ncycle_count=10\n")
+    assert r["saude_pct"] == 100 and r["ciclos"] == 10
+
+
+def test_saude_bateria_battery_cycle_alternativo():
+    r = parsers.saude_bateria("battery.battery_cycle=57\n")
+    assert r == {"ciclos": 57}
+
+
+def test_saude_bateria_sem_dados():
+    assert parsers.saude_bateria("") is None

@@ -74,6 +74,8 @@ if a[0] == "pull":
     fim(f"{a[1]}: 1 file pulled")
 if a[0] in ("install", "install-multiple", "uninstall"):
     fim("Success")
+if a[0] == "reboot":
+    fim()  # o aparelho reiniciaria e a conexão cairia; aqui só confirmamos que o comando saiu
 if a[0] == "exec-out" and "screencap" in a[1]:
     print_real = os.getenv("CELSCAN_FAKE_PRINT")  # PNG de verdade para ver a prévia na interface
     if print_real and os.path.isfile(print_real):
@@ -196,8 +198,8 @@ if a[0] == "shell":
     if c == "head -3 /proc/meminfo":
         fim("MemTotal:        7864320 kB\nMemFree:          512000 kB\nMemAvailable:    3145728 kB")
     if c.startswith("dumpsys media.camera"):
-        fim("Camera 0 information:\n  Resolution: 8000x6000\n"
-            "Camera 1 information:\n  Resolution: 4000x3000\n"
-            "Camera 2 information:\n  Resolution: 1920x1080")
+        fim("Camera 0 information:\n  Facing: BACK\n  Resolution: 8000x6000\n"
+            "Camera 1 information:\n  Facing: FRONT\n  Resolution: 4000x3000\n"
+            "Camera 2 information:\n  Facing: BACK\n  Resolution: 1920x1080")
     fim()
 fim()

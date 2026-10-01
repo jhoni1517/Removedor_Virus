@@ -232,18 +232,26 @@ def bateria(txt: str) -> dict[str, str | None] | None:
 
 
 def saude_bateria(txt: str) -> dict[str, int] | None:
-    """Lê charge_full/charge_full_design/cycle_count do /sys: capacidade real e desgaste da bateria."""
-    v: dict[str, int] = {}
-    for k, val in re.findall(r"^(\w+)=(-?\d+)\s*$", txt, re.M):
-        v[k] = int(val)
-    full, design = v.get("charge_full"), v.get("charge_full_design")
+    """Capacidade real e desgaste da bateria a partir de vários medidores do /sys.
+
+    Aceita 'medidor.campo=valor' (ex.: bms.charge_full_design=5000000) e também o formato antigo
+    'campo=valor'. Para a saúde, usa o primeiro medidor que informa a capacidade real E a de fábrica;
+    para os ciclos, o maior valor plausível encontrado (cada fabricante guarda num medidor diferente).
+    """
+    medidores: dict[str, dict[str, int]] = {}
+    for nome, campo, val in re.findall(r"^(?:(\w+)\.)?(\w+)=(-?\d+)\s*$", txt, re.M):
+        medidores.setdefault(nome or "battery", {})[campo] = int(val)
     res: dict[str, int] = {}
-    if full and design and design > 0:
-        res["saude_pct"] = round(full / design * 100)
-        res["capacidade_mah"] = round(full / 1000)
-        res["capacidade_projeto_mah"] = round(design / 1000)
-    if "cycle_count" in v and v["cycle_count"] >= 0:
-        res["ciclos"] = v["cycle_count"]
+    for v in medidores.values():
+        full, design = v.get("charge_full"), v.get("charge_full_design")
+        if full and design and design > 0:
+            res["saude_pct"] = round(full / design * 100)
+            res["capacidade_mah"] = round(full / 1000)
+            res["capacidade_projeto_mah"] = round(design / 1000)
+            break
+    ciclos = [v[c] for v in medidores.values() for c in ("cycle_count", "battery_cycle") if v.get(c, -1) >= 0]
+    if ciclos:
+        res["ciclos"] = max(ciclos)
     return res or None
 
 

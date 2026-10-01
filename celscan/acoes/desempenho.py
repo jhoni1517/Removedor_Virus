@@ -103,17 +103,34 @@ def hardware(ap: Aparelho) -> dict[str, Any]:
 
 # ---- Câmeras (inventário, não "nota de qualidade") -----------------------
 
+_FACE = {"0": "traseira", "back": "traseira", "1": "frontal", "front": "frontal"}
+
+
 def _parse_cameras(dumpsys: str) -> dict[str, Any]:
-    """Conta as câmeras e tenta a maior resolução (megapixels). Qualidade NÃO é medível por USB."""
-    ids = set(re.findall(r"Camera (\d+) information", dumpsys))
-    if not ids:
-        ids = set(re.findall(r"Device (\d+) ", dumpsys))
+    """Inventário das câmeras: total, traseiras/frontais e a maior foto. Qualidade NÃO é medível por USB.
+
+    O sistema conta CADA sensor (principal, ultra-wide, macro, profundidade) e até cópias lógicas —
+    por isso o total costuma ser maior que as "câmeras" que o usuário vê. Separamos por lado e
+    avisamos que inclui sensores auxiliares.
+    """
+    cabecalhos = list(re.finditer(r"(?:Camera|Device)\s+(\d+)\s+(?:information|\()", dumpsys))
+    total = len({m.group(1) for m in cabecalhos})
+    traseiras = frontais = 0
+    for i, m in enumerate(cabecalhos):
+        bloco = dumpsys[m.end():cabecalhos[i + 1].start() if i + 1 < len(cabecalhos) else len(dumpsys)]
+        f = re.search(r"[Ff]acing[:=]?\s*(BACK|FRONT|EXTERNAL|\d)", bloco)
+        lado = _FACE.get(f.group(1).lower()) if f else None
+        traseiras += lado == "traseira"
+        frontais += lado == "frontal"
     mp = None
     pares = re.findall(r"(\d{3,5})\s*[x×]\s*(\d{3,5})", dumpsys)
     if pares:
         mp = round(max(int(w) * int(h) for w, h in pares) / 1_000_000, 1)
-    return {"quantidade": len(ids) or None, "megapixels_max": mp,
-            "obs": "Só o inventário; a qualidade da foto precisa de teste real com a câmera."}
+    return {"total": total or None, "traseiras": traseiras or None, "frontais": frontais or None,
+            "megapixels_max": mp,
+            "obs": "Inclui sensores auxiliares (macro, profundidade) — por isso o total costuma ser maior "
+                   "que o anunciado. A maior foto pode ser menor que o sensor (ex.: 200 MP que tira 12,5 MP "
+                   "por junção de pixels). A qualidade só se avalia com foto real."}
 
 
 def cameras(ap: Aparelho) -> dict[str, Any]:

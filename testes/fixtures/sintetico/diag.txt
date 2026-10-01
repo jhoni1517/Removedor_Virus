@@ -10,9 +10,9 @@ Current Battery Service state:
   temperature: 312
   Charge counter: 3500000
 @@SEC saude
-charge_full=3800000
-charge_full_design=5000000
-cycle_count=412
+battery.cycle_count=412
+bms.charge_full=3800000
+bms.charge_full_design=5000000
 @@SEC ident
 ro.product.manufacturer=Xiaomi
 ro.product.model=24090RA29G

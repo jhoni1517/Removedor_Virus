@@ -21,14 +21,23 @@ PASTAS = {
     "/sdcard/Android/media/org.telegram.messenger": "Mídia do Telegram",
 }
 ANIM = ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
-SAUDE = ("charge_full", "charge_full_design", "cycle_count")  # /sys/class/power_supply/battery/
+# Campos de saúde da bateria procurados em TODOS os medidores (/sys/class/power_supply/*): cada
+# fabricante guarda num lugar (battery, bms, qg...). Saída: "medidor.campo=valor".
+SAUDE_CAMPOS = ("charge_full", "charge_full_design", "cycle_count", "battery_cycle")
 PROPS = ("ro.product.manufacturer", "ro.product.model", "ro.product.marketname",
          "ro.serialno", "ro.build.version.release", "ro.build.version.security_patch")
 
 DIAG = r"""
 sec(){ echo "@@SEC $1"; }
 sec bateria; dumpsys battery
-sec saude; for f in SAUDE; do printf '%s=' "$f"; cat /sys/class/power_supply/battery/$f 2>/dev/null; echo; done
+sec saude
+for d in /sys/class/power_supply/*; do
+  n=${d##*/}
+  for f in SAUDE_CAMPOS; do
+    v=$(cat "$d/$f" 2>/dev/null)
+    [ -n "$v" ] && echo "$n.$f=$v"
+  done
+done
 sec ident; for k in PROPS; do printf '%s=' "$k"; getprop $k; done
 sec imei; service call iphonesubinfo 1 2>/dev/null
 sec df; df -k /data 2>/dev/null
@@ -46,7 +55,7 @@ def livre_kb(ap):
 
 def diagnostico(ap):
     script = (DIAG.replace("PASTAS", " ".join(f'"{p}"' for p in PASTAS)).replace("ANIM", " ".join(ANIM))
-              .replace("SAUDE", " ".join(SAUDE)).replace("PROPS", " ".join(PROPS)))
+              .replace("SAUDE_CAMPOS", " ".join(SAUDE_CAMPOS)).replace("PROPS", " ".join(PROPS)))
     return montar_diagnostico(ap.script(script, timeout=300))
 
 

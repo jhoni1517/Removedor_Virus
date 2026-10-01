@@ -57,6 +57,11 @@ class PedidoSerial(BaseModel):
     serial: str
 
 
+class PedidoReinicio(BaseModel):
+    serial: str
+    modo: str = "normal"
+
+
 class PedidoOrdem(BaseModel):
     servicos: list[str] = Field(min_length=1)
     serial: str | None = None
@@ -735,6 +740,22 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             return desempenho.testar(ap, progresso=progresso)
         return nova_tarefa("desempenho", p.serial, rodar)
+
+    @app.get("/api/energia/modos")
+    def energia_modos() -> list[dict[str, str]]:
+        from celscan.acoes import energia
+
+        return energia.modos()
+
+    @app.post("/api/energia/reiniciar")
+    def energia_reiniciar(p: PedidoReinicio) -> dict[str, Any]:
+        from celscan.acoes import energia
+
+        ap = aparelhos.pronto(p.serial)
+        try:
+            return energia.reiniciar(ap, p.modo)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
 
     @app.post("/api/captura")
     def capturar_tela(p: PedidoSerial) -> dict[str, Any]:

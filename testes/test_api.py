@@ -185,6 +185,20 @@ def test_desempenho_com_pontuacao(cliente):
     assert t["estado"] == "concluida", t
     r = t["resultado"]
     assert r["hardware"] == {"nucleos": 8, "ghz_max": 2.8, "ram_gb": 7.5}
-    assert r["cameras"]["quantidade"] == 3 and r["cameras"]["megapixels_max"] == 48.0
+    assert r["cameras"]["total"] == 3 and r["cameras"]["megapixels_max"] == 48.0
     assert 0 < r["pontuacao"]["total"] <= 1000
     assert all(v is not None for v in r["pontuacao"]["categorias"].values())
+
+
+def test_energia_modos_e_reiniciar(cliente):
+    modos = {m["chave"] for m in cliente.get("/api/energia/modos", headers=H).json()}
+    assert modos == {"normal", "recovery", "bootloader"}
+    r = cliente.post("/api/energia/reiniciar", json={"serial": "ABC123", "modo": "recovery"}, headers=H)
+    assert r.status_code == 200 and r.json()["modo"] == "recovery" and r.json()["enviado"]
+    assert cliente.post("/api/energia/reiniciar", json={"serial": "ABC123", "modo": "x"}, headers=H).status_code == 422
+
+
+def test_desempenho_cameras_separadas(cliente):
+    t = esperar(cliente, cliente.post("/api/desempenho", json={"serial": "ABC123"}, headers=H).json(), limite=120)
+    c = t["resultado"]["cameras"]
+    assert c["total"] == 3 and c["traseiras"] == 2 and c["frontais"] == 1

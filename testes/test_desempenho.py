@@ -58,16 +58,23 @@ def test_parse_cpu_vazio_nao_inventa():
     assert desempenho._parse_cpu("", "") == {"nucleos": None, "ghz_max": None}
 
 
-def test_parse_cameras_conta_e_resolucao():
-    saida = ("Camera 0 information:\n  Resolution: 4000x3000\n"
-             "Camera 1 information:\n  Resolution: 1920x1080\n")
+def test_parse_cameras_separa_traseiras_e_frontais():
+    saida = ("Camera 0 information:\n  Facing: BACK\n  Resolution: 4000x3000\n"
+             "Camera 1 information:\n  Facing: FRONT\n  Resolution: 1920x1080\n"
+             "Camera 2 information:\n  Facing: BACK\n  Resolution: 1280x720\n")
     r = desempenho._parse_cameras(saida)
-    assert r["quantidade"] == 2 and r["megapixels_max"] == 12.0
+    assert r["total"] == 3 and r["traseiras"] == 2 and r["frontais"] == 1 and r["megapixels_max"] == 12.0
+
+
+def test_parse_cameras_facing_numerico():
+    saida = "Camera 0 information:\n  facing=0\nCamera 1 information:\n  facing=1\n"
+    r = desempenho._parse_cameras(saida)
+    assert r["traseiras"] == 1 and r["frontais"] == 1
 
 
 def test_parse_cameras_sem_dados():
     r = desempenho._parse_cameras("")
-    assert r["quantidade"] is None and r["megapixels_max"] is None
+    assert r["total"] is None and r["megapixels_max"] is None
 
 
 def test_pontuar_topo_de_linha_chega_perto_de_1000():
