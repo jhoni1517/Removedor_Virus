@@ -68,3 +68,8 @@ def test_baixar_confere_sha256(monkeypatch, tmp_path):
         at.baixar({**info, "url": "https://evil.example.com/x.exe"}, tmp_path / "x.exe")
     with pytest.raises(at.ErroAtualizacao):
         at.baixar({**info, "sha256": None}, tmp_path / "x.exe")
+
+
+def test_b10_vem_depois_de_b9():
+    # Comparar como texto colocaria "b10" antes de "b9" e quem tem o b9 nunca receberia o b10.
+    assert at.chave_versao("3.0.0b10") > at.chave_versao("3.0.0b9")

@@ -9,6 +9,25 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b10 (01/10/2026) — Correções automáticas (todas as marcas)
+
+Painel no Diagnóstico que procura configurações que causam defeitos comuns e corrige com um clique,
+gravando antes o valor atual (Desfazer tudo). Confere depois de corrigir: se o aparelho não aceitar,
+diz "não aceitou" em vez de fingir que deu certo.
+
+| Detecta | Sintoma para o cliente |
+|---|---|
+| "Não manter atividades" ligado | Apps fecham ou recomeçam ao trocar de app |
+| "Mostrar toques" / "Local do ponteiro" | Bolinhas onde toca / linhas e números no topo |
+| Animações acima de 1x | Celular parece lento |
+| Data/hora ou fuso automáticos desligados | WhatsApp e banco dão erro de conexão |
+| Notificação flutuante desligada | Notificações não aparecem no topo |
+| "Não perturbe" esquecido | Notificações e ligações sem som |
+| Densidade ou resolução da tela alteradas | Tudo pequeno/grande demais, imagem cortada |
+| "Permanecer ativo" e fonte gigante (opcionais, vêm desmarcados) | Tela não apaga carregando / letras enormes |
+
+Também: botão **Otimizar apps** (recompila os apps, 5 a 30 min).
+
 ## Beta 3.0.0b9 (01/10/2026) — pedidos após o teste no Redmi Note 15 Pro 5G
 
 | Item | Situação |
