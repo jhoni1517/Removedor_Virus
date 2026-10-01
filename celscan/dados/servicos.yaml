@@ -1,0 +1,28 @@
+# Pacotes de serviço do balcão. Preço em reais (o técnico ajusta em Configurações; aqui é o padrão).
+# "etapas" é o roteiro que o CelScan sugere ao abrir a ordem de serviço.
+checkup:
+  nome: "Check-up básico"
+  preco: 49.90
+  minutos: 15
+  etapas: ["Varredura rápida", "Diagnóstico de bateria e espaço", "Laudo resumido"]
+limpeza:
+  nome: "Limpeza completa"
+  preco: 89.90
+  minutos: 40
+  etapas: ["Varredura rápida", "Remoção de apps suspeitos (com desfazer)", "Limpeza de cache e lixo seguro",
+           "Laudo com antes/depois"]
+seguranca:
+  nome: "Varredura de segurança completa"
+  preco: 149.90
+  minutos: 60
+  etapas: ["Varredura completa", "Proteção Pix e bancos", "Laudo técnico"]
+seminovo:
+  nome: "Laudo de seminovo"
+  preco: 79.90
+  minutos: 30
+  etapas: ["Diagnóstico completo (bateria, espaço, IMEI)", "Varredura de segurança", "Laudo de seminovo"]
+backup:
+  nome: "Backup para o PC"
+  preco: 59.90
+  minutos: 30
+  etapas: ["Cópia de fotos, vídeos, documentos e WhatsApp", "Relatório de conferência"]

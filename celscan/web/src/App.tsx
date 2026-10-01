@@ -1,8 +1,9 @@
-import { Activity, FileSearch, History, MonitorSmartphone, ScanLine, Settings, Smartphone } from "lucide-react";
+import { Activity, ClipboardList, FileSearch, History, MonitorSmartphone, ScanLine, Settings, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, obterVarredura, type Tarefa, type Varredura } from "./api";
 import { useApp } from "./estado";
 import Configuracoes from "./telas/Configuracoes";
+import Balcao from "./telas/Balcao";
 import Conectar from "./telas/Conectar";
 import Diagnostico from "./telas/Diagnostico";
 import Historico from "./telas/Historico";
@@ -18,10 +19,11 @@ type Fluxo =
   | { tela: "modo"; serial: string }
   | { tela: "varrendo"; tarefa: Tarefa<Varredura>; modo: string }
   | { tela: "resultado"; v: Varredura };
-type Secao = "varredura" | "diagnostico" | "recuperar" | "resgate" | "historico" | "config";
+type Secao = "varredura" | "balcao" | "diagnostico" | "recuperar" | "resgate" | "historico" | "config";
 
 const SECOES: { id: Secao; nome: string; icone: typeof ScanLine }[] = [
   { id: "varredura", nome: "Varredura", icone: ScanLine },
+  { id: "balcao", nome: "Balcão", icone: ClipboardList },
   { id: "diagnostico", nome: "Diagnóstico", icone: Activity },
   { id: "recuperar", nome: "Recuperar", icone: FileSearch },
   { id: "resgate", nome: "Tela quebrada", icone: MonitorSmartphone },
@@ -125,6 +127,7 @@ export default function App() {
             arquivo celscan.log da pasta .celscan\logs.
           </div>
         )}
+        {secao === "balcao" && <Balcao />}
         {secao === "diagnostico" && <Diagnostico />}
         {secao === "recuperar" && <Recuperar />}
         {secao === "resgate" && <Resgate />}

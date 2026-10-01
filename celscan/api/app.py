@@ -29,7 +29,7 @@ from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
 from celscan.api.tarefas import Gerenciador
-from celscan.core import adb, db, log, preferencias
+from celscan.core import adb, balcao, db, log, preferencias
 
 WEB = config.PACOTE / "web" / "dist"
 HOSTS = ("127.0.0.1", "localhost", "testserver")
@@ -55,6 +55,27 @@ class PedidoVarredura(BaseModel):
 
 class PedidoSerial(BaseModel):
     serial: str
+
+
+class PedidoOrdem(BaseModel):
+    servicos: list[str] = Field(min_length=1)
+    serial: str | None = None
+    aparelho: str | None = None
+    imei: str | None = None
+    observacoes: str | None = None
+    valor: float | None = None
+    cliente_nome: str | None = None
+    cliente_telefone: str | None = None
+    consentimento: bool = False  # LGPD: só guarda nome/telefone com consentimento
+
+
+class PedidoStatus(BaseModel):
+    status: str
+    varredura_id: int | None = None
+
+
+class PedidoPrecos(BaseModel):
+    precos: dict[str, float]
 
 
 class PedidoLimpeza(BaseModel):
@@ -560,6 +581,66 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return {"aberto": navegacao.abrir_ajuste(ap, p.ajuste)}
         except ValueError as e:
             raise HTTPException(422, str(e))
+
+    # ---- balcão: ordens de serviço, pacotes e painel da loja
+    @app.get("/api/servicos")
+    def servicos_catalogo() -> dict[str, Any]:
+        return balcao.catalogo()
+
+    @app.post("/api/servicos/precos")
+    def servicos_precos(p: PedidoPrecos) -> dict[str, Any]:
+        cat = balcao.catalogo()
+        desconhecidos = [k for k in p.precos if k not in cat]
+        if desconhecidos or any(v < 0 for v in p.precos.values()):
+            raise HTTPException(422, "Preço inválido ou serviço desconhecido")
+        atuais = preferencias.ler().get("precos_servicos") or {}
+        preferencias.salvar(precos_servicos={**atuais, **p.precos})
+        return balcao.catalogo()
+
+    @app.get("/api/ordens")
+    def listar_ordens(status: str | None = None) -> list[dict[str, Any]]:
+        return balcao.ordens(db.conectar(), status)
+
+    @app.post("/api/ordens")
+    def criar_ordem(p: PedidoOrdem) -> dict[str, Any]:
+        con = db.conectar()
+        cliente_id = None
+        if p.cliente_nome:
+            try:
+                cliente_id = db.criar_cliente(con, p.cliente_nome, p.cliente_telefone, p.consentimento)
+            except db.ConsentimentoNecessario as e:
+                raise HTTPException(422, str(e))
+        try:
+            oid = balcao.criar_ordem(con, p.servicos, cliente_id, p.serial, p.aparelho, p.imei, p.observacoes, p.valor)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return balcao.ordem(con, oid) or {}
+
+    @app.post("/api/ordens/{oid}/status")
+    def status_ordem(oid: int, p: PedidoStatus) -> dict[str, Any]:
+        con = db.conectar()
+        try:
+            if not balcao.mudar_status(con, oid, p.status, p.varredura_id):
+                raise HTTPException(404, "Ordem não encontrada")
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return balcao.ordem(con, oid) or {}
+
+    @app.get("/api/ordens/{oid}/mensagem")
+    def mensagem_ordem(oid: int, loja: str | None = None) -> dict[str, str]:
+        o = balcao.ordem(db.conectar(), oid)
+        if not o:
+            raise HTTPException(404, "Ordem não encontrada")
+        return balcao.mensagem_whatsapp(o, loja or "nossa loja")
+
+    @app.get("/api/painel")
+    def painel_loja() -> dict[str, Any]:
+        return balcao.painel(db.conectar())
+
+    @app.get("/api/painel/ordens.csv")
+    def painel_csv() -> Response:
+        return Response(balcao.csv_ordens(db.conectar()), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="ordens_celscan.csv"'})
 
     # ---- iPhone (leitura por USB via libimobiledevice)
     @app.get("/api/ios/estado")

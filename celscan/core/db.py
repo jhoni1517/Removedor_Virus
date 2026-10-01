@@ -41,6 +41,15 @@ MIGRACOES = [
         hash TEXT PRIMARY KEY, varredura_id INTEGER NOT NULL REFERENCES varreduras(id), criado_em TEXT NOT NULL
     );
     """,
+    """
+    CREATE TABLE ordens (
+        id INTEGER PRIMARY KEY, cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+        serial TEXT, aparelho TEXT, imei TEXT, servicos TEXT NOT NULL, valor_centavos INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'aguardando', observacoes TEXT, varredura_id INTEGER,
+        criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL, entregue_em TEXT
+    );
+    CREATE INDEX ordens_status ON ordens(status, criado_em);
+    """,
 ]
 
 
