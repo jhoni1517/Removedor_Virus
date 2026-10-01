@@ -9,6 +9,18 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b8 (01/10/2026) — pedidos após o teste do b7
+
+| Item | Situação |
+|---|---|
+| Aviso "driver Xiaomi, driver Xiaomi, driver Xiaomi" repetido | ✅ corrigido: um aviso por fabricante (o Windows lista cada interface USB do aparelho) |
+| Print da tela do celular | ✅ botão no Diagnóstico; salva PNG em `Documentos/CelScan Backups/<aparelho>/Prints` |
+| Saúde da bateria: veredito e ciclos restantes até 80% | ✅ estimado pelo desgaste real por ciclo; sem dado, usa 500 ciclos e avisa |
+| Peças originais ou trocadas | ✅ só **indícios** da bateria; tela/câmera não dá por USB e o resultado diz isso |
+| Teste de desempenho com nota 0–1000 (hardware, armazenamento, fluidez) + inventário de câmeras | ✅ estimativa própria, não comparável ao AnTuTu (dito na tela) |
+| Miniatura do celular conectado | ✅ desenho offline com marca e modelo (Conectar e Diagnóstico) |
+| Identificação (modelo, Android, patch, série) não aparecia no Diagnóstico, na CLI e no laudo de seminovo | ✅ corrigido (bug antigo de nome de campo) |
+
 ## Beta 3.0.0b7 (01/10/2026) — o que tinha ficado de fora (sem custo)
 
 | Item | Situação |
