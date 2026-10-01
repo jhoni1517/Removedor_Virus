@@ -45,6 +45,34 @@ function Marca() {
   );
 }
 
+function AvisoAtualizacao() {
+  const { esperar, avisar } = useApp();
+  const [info, setInfo] = useState<{ disponivel: boolean; versao?: string; tamanho_mb?: number; beta?: boolean } | null>(null);
+  const [baixando, setBaixando] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => api<typeof info>("/atualizacao").then(setInfo).catch(() => undefined), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!info?.disponivel) return null;
+  async function atualizar() {
+    setBaixando(true);
+    try {
+      const t = await esperar(await api<Tarefa>("/atualizacao/instalar", { corpo: {} }));
+      if (t.estado === "concluida") avisar({ tipo: "info", texto: "Instalando a nova versão. O CelScan vai fechar e abrir de novo.", duracao: 15000 });
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui atualizar." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setBaixando(false); }
+  }
+  return (
+    <div className="rounded-md border border-destaque/40 bg-destaque-suave p-2 text-tinta" role="status">
+      <p className="font-semibold">Versão {info.versao} disponível{info.beta ? " (beta)" : ""}</p>
+      <button className="mt-1 underline disabled:opacity-50" onClick={atualizar} disabled={baixando}>
+        {baixando ? "Baixando..." : `Atualizar (${info.tamanho_mb ?? "?"} MB)`}
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const { estado, online, dispositivos, avisar, erroBackend } = useApp();
   const [secao, setSecao] = useState<Secao>("varredura");
@@ -116,6 +144,7 @@ export default function App() {
             {online ? "Conectado ao CelScan" : "Reconectando..."}
             {estado?.offline && <span className="rounded bg-superficie-2 px-1">offline</span>}
           </p>
+          <AvisoAtualizacao />
           <p className="font-mono">v{estado?.versao}</p>
         </div>
       </nav>

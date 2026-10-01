@@ -4,7 +4,7 @@ import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 import { aplicarTema, coresDoLogo, lerCoresLoja, salvarCoresLoja, TEMAS } from "../tema";
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string }
 
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar } = useApp();
@@ -112,6 +112,17 @@ export default function Configuracoes() {
             <button key={e} onClick={() => mudarEscala(e)} aria-pressed={escala === e}
               className={`rounded-md border px-2.5 py-1 ${escala === e ? "border-destaque bg-destaque-suave text-destaque" : "border-linha"}`}
               style={{ fontSize: `${e * 0.875}rem` }}>A</button>
+          ))}
+        </div>
+      </Cartao>
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Atualizações</h2>
+        <p className="mt-1 text-sm text-fraco">O CelScan avisa quando sai versão nova e confere o arquivo (SHA-256) antes de instalar.</p>
+        <div className="mt-3 flex gap-2" role="radiogroup" aria-label="Canal de atualização">
+          {[["estavel", "Só versões estáveis"], ["beta", "Receber betas (novidades antes)"]].map(([k, nome]) => (
+            <button key={k} role="radio" aria-checked={(cfg?.canal_atualizacao ?? "beta") === k} onClick={() => salvar({ canal_atualizacao: k })}
+              className={`rounded-full border px-3 py-1 text-sm ${(cfg?.canal_atualizacao ?? "beta") === k ? "border-destaque bg-destaque-suave text-destaque" : "border-linha hover:bg-superficie-2"}`}>{nome}</button>
           ))}
         </div>
       </Cartao>

@@ -15,7 +15,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -111,6 +111,7 @@ class PedidoConfig(BaseModel):
     chave_virustotal: str | None = None
     offline: bool | None = None
     tema: str | None = None
+    canal_atualizacao: Literal["estavel", "beta"] | None = None
 
 
 class PedidoEspelho(BaseModel):
@@ -489,7 +490,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         c = preferencias.ler()
         chave = preferencias.chave_virustotal()
         return {"chave_virustotal": f"…{chave[-4:]}" if chave else None, "offline": config.OFFLINE,
-                "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR)}
+                "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
+                "canal_atualizacao": c.get("canal_atualizacao", "beta")}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:
@@ -652,6 +654,39 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def painel_csv() -> Response:
         return Response(balcao.csv_ordens(db.conectar()), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="ordens_celscan.csv"'})
+
+    # ---- atualização automática (GitHub Releases, SHA-256 conferido)
+    @app.get("/api/atualizacao")
+    def atualizacao_verificar() -> dict[str, Any]:
+        from celscan.core import atualizacao
+
+        canal = preferencias.ler().get("canal_atualizacao", "beta")
+        try:
+            return {"canal": canal, **atualizacao.verificar(canal)}
+        except Exception as e:  # noqa: BLE001 — sem internet etc.: não é erro para o usuário
+            return {"canal": canal, "disponivel": False, "motivo": f"não consegui verificar ({e.__class__.__name__})"}
+
+    @app.post("/api/atualizacao/instalar")
+    def atualizacao_instalar() -> dict[str, Any]:
+        from celscan.core import atualizacao
+
+        canal = preferencias.ler().get("canal_atualizacao", "beta")
+        info = atualizacao.verificar(canal)
+        if not info.get("disponivel"):
+            raise HTTPException(409, "Você já está na versão mais nova.")
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "atualizacao", "descricao": f"Baixando a versão {info['versao']}",
+                       "detalhe": f"{info.get('tamanho_mb', '?')} MB", "atual": None, "total": None,
+                       "estimativa_s": 60})
+            try:
+                arq = atualizacao.baixar(info)
+                atualizacao.instalar(arq)
+            except atualizacao.ErroAtualizacao as e:
+                raise RuntimeError(str(e)) from e
+            threading.Timer(2.0, lambda: os._exit(0)).start()  # fecha para o instalador trocar os arquivos
+            return {"instalando": info["versao"]}
+        return nova_tarefa("atualizacao", None, rodar)
 
     # ---- iPhone (leitura por USB via libimobiledevice)
     @app.get("/api/ios/estado")
