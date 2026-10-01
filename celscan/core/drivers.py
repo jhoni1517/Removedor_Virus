@@ -62,9 +62,11 @@ def analisar(saida: str) -> list[dict[str, object]]:
     return problemas
 
 
-def diagnosticar() -> dict[str, object]:
+def diagnosticar(windows: bool | None = None) -> dict[str, object]:
     """No Windows, procura celular com driver com problema. Devolve {windows, problemas, link_generico}."""
-    if os.name != "nt":
+    if windows is None:
+        windows = os.name == "nt"
+    if not windows:
         return {"windows": False, "problemas": [], "link_generico": FABRICANTES["GENERICO"][1]}
     return {"windows": True, "problemas": analisar(_saida_windows()),
             "link_generico": FABRICANTES["GENERICO"][1]}

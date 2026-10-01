@@ -24,6 +24,12 @@ def test_ignora_ok_e_nao_celular():
 
 
 def test_diagnosticar_fora_do_windows():
-    d = drivers.diagnosticar()
+    d = drivers.diagnosticar(windows=False)
     assert d["windows"] is False and d["problemas"] == []
     assert d["link_generico"].startswith("http")
+
+
+def test_diagnosticar_no_windows(monkeypatch):
+    monkeypatch.setattr(drivers, "_saida_windows", lambda: SAIDA)
+    d = drivers.diagnosticar(windows=True)
+    assert d["windows"] is True and {p["fabricante"] for p in d["problemas"]} == {"Samsung", "Xiaomi"}
