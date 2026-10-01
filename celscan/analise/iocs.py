@@ -1,8 +1,13 @@
-"""Indicadores de ameaça públicos: Stalkerware (Echap) + spyware (MVT/Amnesty)."""
+"""Indicadores de ameaça públicos: Stalkerware (Echap) + spyware (MVT/Amnesty).
+
+Além de pacotes, certificados e hashes, guarda os domínios dos indicadores do MVT (~6,6 mil),
+usados para cruzar com as URLs achadas dentro de um APK e com a configuração de rede.
+"""
 import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -12,13 +17,51 @@ from celscan.core import bases
 ECHAP = "https://raw.githubusercontent.com/AssoEchap/stalkerware-indicators/master/ioc.yaml"
 MVT = "https://raw.githubusercontent.com/mvt-project/mvt-indicators/main/indicators.yaml"
 VALIDADE = 24 * 3600
-RX = re.compile(r"(app:id|app:cert\.sha1|app:cert\.sha256|file:hashes\.sha256)\s*=\s*'([^']+)'")
+RX = re.compile(r"(app:id|app:cert\.sha1|app:cert\.sha256|file:hashes\.sha256|domain-name:value|url:value)"
+                r"\s*=\s*'([^']+)'")
+# Hosts dentro de um texto qualquer (strings de um APK, por exemplo).
+RX_HOST = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,24})(?=[:/\s\"'<>)]|$)", re.I)
+
+
+def normalizar_dominio(valor: str) -> str | None:
+    """'https://X.Evil.com:443/p' ou 'x.evil.com.' -> 'x.evil.com'."""
+    v = valor.strip().lower()
+    if "://" in v:
+        v = urlparse(v).hostname or ""
+    v = v.split("/")[0].split(":")[0].strip(".")
+    return v if "." in v else None
 
 
 class IOCs:
     def __init__(self, d):
         self.pacotes, self.certs, self.hashes = d["pacotes"], d["certs"], d["hashes"]
+        self.dominios = d.get("dominios", {})  # caches antigos não têm
         self.atualizado = d["atualizado"]
+
+    def checar_dominio(self, host):
+        """Confere o host e cada domínio-pai (a.b.evil.com -> b.evil.com -> evil.com)."""
+        h = normalizar_dominio(host or "")
+        if not h:
+            return None
+        partes = h.split(".")
+        for i in range(len(partes) - 1):
+            achado = self.dominios.get(".".join(partes[i:]))
+            if achado:
+                return achado
+        return None
+
+    def dominios_em(self, texto):
+        """Hosts suspeitos que aparecem num texto: [(host, ameaça)], sem repetir."""
+        vistos, res = set(), []
+        for host in RX_HOST.findall(texto or ""):
+            h = host.lower()
+            if h in vistos:
+                continue
+            vistos.add(h)
+            ameaca = self.checar_dominio(h)
+            if ameaca:
+                res.append((h, ameaca))
+        return res
 
     def checar(self, pacote, cert=None, sha256=None):
         if pacote in self.pacotes:
@@ -32,7 +75,7 @@ class IOCs:
         return None
 
     def __len__(self):
-        return len(self.pacotes) + len(self.certs) + len(self.hashes)
+        return len(self.pacotes) + len(self.certs) + len(self.hashes) + len(self.dominios)
 
 
 def _stix(ent):
@@ -47,7 +90,7 @@ def _stix(ent):
 
 
 def _baixar():
-    pac, cer, has = {}, {}, {}
+    pac, cer, has, dom = {}, {}, {}, {}
     for e in yaml.safe_load(requests.get(ECHAP, timeout=30).text) or []:
         nome = f"stalkerware {e.get('name', '?')}"
         for p in e.get("packages") or []:
@@ -68,9 +111,13 @@ def _baixar():
                         pac.setdefault(val, nome)
                     elif tipo.startswith("app:cert"):
                         cer.setdefault(val.upper(), nome)
+                    elif tipo in ("domain-name:value", "url:value"):
+                        d = normalizar_dominio(val)
+                        if d:
+                            dom.setdefault(d, nome)
                     else:
                         has.setdefault(val.lower(), nome)
-    return {"pacotes": pac, "certs": cer, "hashes": has, "atualizado": time.time()}
+    return {"pacotes": pac, "certs": cer, "hashes": has, "dominios": dom, "atualizado": time.time()}
 
 
 BASE = bases.registrar(bases.Base(
