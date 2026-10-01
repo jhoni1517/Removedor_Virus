@@ -326,6 +326,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
             href={urlLaudo(v.varredura_id, "cliente")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo (cliente)</a>
           <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
             href={urlLaudo(v.varredura_id, "tecnico")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo técnico</a>
+          <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
+            href={urlLaudo(v.varredura_id, "seminovo")} target="_blank" rel="noreferrer"
+            title="Bateria, IMEI, espaço, segurança e checklist de hardware (deixe o celular conectado)"><FileText size={15} aria-hidden /> Laudo de seminovo</a>
           <Botao onClick={verTela} disabled={!conectado} title={conectado ? "Abre a tela do celular numa janela" : "Conecte o celular"}>
             <Monitor size={15} aria-hidden /> Ver a tela
           </Botao>

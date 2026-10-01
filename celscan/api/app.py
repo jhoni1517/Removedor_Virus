@@ -435,8 +435,14 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         meta, retrato = db.meta_varredura(con, vid), db.retrato(con, vid)
         if meta is None or retrato is None:
             raise HTTPException(404, "Varredura não encontrada")
+        diag = None
+        if versao == "seminovo":  # diagnóstico de hardware na hora, se o aparelho estiver no cabo
+            try:
+                diag = otimizacao.diagnostico(aparelhos.pronto(meta["serial"]))
+            except Exception:  # noqa: BLE001 — desconectado: o laudo diz "não verificado"
+                diag = None
         try:
-            conteudo, h = pdf.gerar_pdf(meta, retrato, versao, loja, db.acoes_da_varredura(con, vid))
+            conteudo, h = pdf.gerar_pdf(meta, retrato, versao, loja, db.acoes_da_varredura(con, vid), diag)
         except ValueError as e:
             raise HTTPException(422, str(e))
         db.registrar_laudo(con, vid, h)

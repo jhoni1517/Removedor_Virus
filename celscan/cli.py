@@ -402,7 +402,14 @@ def cmd_laudo(a):
     meta, retrato = db.meta_varredura(con_db, a.id), db.retrato(con_db, a.id)
     if not meta:
         sys.exit(f"Varredura {a.id} não encontrada (veja: celscan historico)")
-    conteudo, h = pdf.gerar_pdf(meta, retrato, a.versao, a.loja, db.acoes_da_varredura(con_db, a.id))
+    diag = None
+    if a.versao == "seminovo":
+        from celscan.acoes import otimizacao as ot
+        try:
+            diag = ot.diagnostico(adb.Aparelho(meta["serial"]))
+        except Exception:  # noqa: BLE001 — desconectado: o laudo marca "não verificado"
+            con.print("[yellow]Aparelho não conectado: o laudo sai sem o diagnóstico de bateria/IMEI.[/]")
+    conteudo, h = pdf.gerar_pdf(meta, retrato, a.versao, a.loja, db.acoes_da_varredura(con_db, a.id), diag)
     db.registrar_laudo(con_db, a.id, h)
     arq = Path(a.saida or f"laudo_celscan_{a.id}_{a.versao}.pdf")
     arq.write_bytes(conteudo)
@@ -634,7 +641,7 @@ def main():
 
     s = sub.add_parser("laudo", help="Gera o laudo PDF de uma varredura do histórico")
     s.add_argument("id", type=int)
-    s.add_argument("--versao", choices=["cliente", "tecnico"], default="cliente")
+    s.add_argument("--versao", choices=["cliente", "tecnico", "seminovo"], default="cliente")
     s.add_argument("--loja")
     s.add_argument("--saida")
     s.set_defaults(func=cmd_laudo)

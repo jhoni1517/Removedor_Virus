@@ -1,4 +1,4 @@
-"""Laudo em PDF (versão para o cliente e versão técnica), com QR code de autenticidade.
+"""Laudo em PDF (cliente, técnico e seminovo), com QR code de autenticidade.
 
 Autenticidade: o código do laudo é o SHA-256 dos dados da varredura. O código fica guardado no
 banco local; "Verificar laudo" (ou `celscan verificar CÓDIGO`) confirma que o laudo saiu deste
@@ -105,7 +105,8 @@ def _cor_nota(n: int) -> colors.Color:
 def _cabecalho(meta: dict, retrato: dict, e: dict, versao: str, loja: str | None) -> list:
     ap = retrato.get("aparelho", {})
     data = datetime.fromisoformat(meta["data"]).strftime("%d/%m/%Y às %H:%M")
-    titulo = "Laudo técnico de segurança do celular" if versao == "tecnico" else "Laudo de segurança do celular"
+    titulo = {"tecnico": "Laudo técnico de segurança do celular",
+              "seminovo": "Laudo de seminovo: condições do aparelho"}.get(versao, "Laudo de segurança do celular")
     esquerda = [Paragraph(_t(titulo), e["titulo"]),
                 Paragraph(_t(f"{loja + ' · ' if loja else ''}{data} · varredura nº {meta['id']}"), e["sub"])]
     cor = _cor_nota(meta["nota"])
@@ -173,16 +174,92 @@ def _tabela_apps(apps: list[dict], e: dict) -> Table:
     return t
 
 
+CHECKLIST = ("Tela (manchas, toque em toda a área)", "Câmera traseira", "Câmera frontal", "Alto-falante",
+             "Microfone", "Fone/conector", "Botões (volume, liga)", "Biometria (digital/rosto)", "Carregamento",
+             "Wi-Fi", "Bluetooth", "Chip e sinal", "Vibração", "Sensor de proximidade")
+
+
+def _veredito_bateria(pct: Any) -> tuple[str, colors.Color]:
+    try:
+        p = float(pct)
+    except (TypeError, ValueError):
+        return "não verificado neste aparelho", CINZA
+    if p >= 80:
+        return "boa", VERDE
+    if p >= 60:
+        return "desgastada (dura menos que nova)", AMBAR
+    return "recomenda-se trocar", VERMELHO
+
+
+def _tabela_campos(campos: list[tuple[str, Any]], e: dict) -> Table:
+    t = Table([[Paragraph(_t(k), e["fraco"]), Paragraph(f"<b>{_t(v)}</b>", e["normal"])] for k, v in campos],
+              colWidths=[55 * mm, 117 * mm])
+    t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINHA), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    return t
+
+
+def _secao_seminovo(retrato: dict, diag: dict | None, e: dict) -> list:
+    ap = retrato.get("aparelho", {})
+    d = diag or {}
+    ident, b = d.get("identificacao") or {}, d.get("bateria") or {}
+    arm, ram = d.get("armazenamento"), d.get("ram")
+    h: list = [Paragraph("Identificação", e["h2"]), _tabela_campos([
+        ("Modelo", ident.get("marketname") or f"{ap.get('fabricante', '?')} {ap.get('modelo', '?')}"),
+        ("IMEI", ident.get("imei") or "não disponível por USB (confira em *#06#)"),
+        ("Android / atualização", f"{ap.get('android', '?')} / {ap.get('patch_seguranca', '?')}"),
+        ("Número de série", ident.get("serial") or ap.get("serial")),
+    ], e)]
+    texto, cor = _veredito_bateria(b.get("saude_pct"))
+    capacidade = (f"~{b['saude_pct']}% da original ({b.get('capacidade_mah', '?')} de "
+                  f"{b.get('capacidade_projeto_mah', '?')} mAh)") if b.get("saude_pct") else "não verificado"
+    h += [Paragraph("Bateria", e["h2"]),
+          Paragraph(f'Condição: <font color="{cor.hexval()}"><b>{_t(texto)}</b></font>', e["normal"]), Spacer(1, 3),
+          _tabela_campos([("Capacidade real", capacidade), ("Ciclos de carga", b.get("ciclos") or "não informado"),
+                          ("Saúde informada pelo sistema", b.get("saude") or "não informado"),
+                          ("Temperatura na hora do teste", b.get("temperatura") or "não informado")], e)]
+    h += [Paragraph("Armazenamento e memória", e["h2"]), _tabela_campos([
+        ("Armazenamento", f"{arm['total_gb']:.0f} GB ({arm['livre_gb']:.1f} GB livres)" if arm else "não verificado"),
+        ("Memória RAM", f"{ram['total_gb']:.1f} GB" if ram else "não verificado"),
+    ], e)]
+    if not diag:
+        h.append(Paragraph("Diagnóstico de hardware não disponível: o aparelho não estava conectado ao gerar o laudo.",
+                           e["fraco"]))
+    apps = retrato.get("apps", [])
+    ameacas = [r for r in apps if r.get("ameaca")]
+    risco = sum(1 for r in apps if r.get("nivel") in ("ALTO", "MÉDIO"))
+    h += [Paragraph("Segurança", e["h2"]), _tabela_campos([
+        ("Ameaças conhecidas", f"{len(ameacas)} encontrada(s)" if ameacas else "nenhuma encontrada"),
+        ("Apps com risco médio ou alto", risco), ("Apps analisados", len(apps)),
+    ], e)]
+    caixa = "[   ]"
+    linhas = [[Paragraph("<b>Item conferido pelo técnico</b>", e["fraco"]), Paragraph("<b>OK</b>", e["fraco"]),
+               Paragraph("<b>Problema</b>", e["fraco"]), Paragraph("<b>Não testado</b>", e["fraco"])]]
+    linhas += [[Paragraph(_t(i), e["normal"]), caixa, caixa, caixa] for i in CHECKLIST]
+    t = Table(linhas, colWidths=[100 * mm, 24 * mm, 24 * mm, 24 * mm], repeatRows=1)
+    t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINHA), ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+                           ("FONTNAME", (1, 1), (-1, -1), "Courier")]))
+    h += [Paragraph("Checklist de hardware", e["h2"]), t, Spacer(1, 14),
+          Paragraph("Observações: ______________________________________________________________________", e["normal"]),
+          Spacer(1, 18),
+          Paragraph("Assinatura do técnico: ______________________________    "
+                    "Assinatura do cliente: ______________________________", e["normal"])]
+    return h
+
+
 def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "cliente",
-              loja: str | None = None, acoes: list[dict] | None = None) -> tuple[bytes, str]:
-    """Devolve (bytes do PDF, hash de autenticidade)."""
-    if versao not in ("cliente", "tecnico"):
-        raise ValueError("versao deve ser 'cliente' ou 'tecnico'")
+              loja: str | None = None, acoes: list[dict] | None = None,
+              diagnostico: dict | None = None) -> tuple[bytes, str]:
+    """Devolve (bytes do PDF, hash de autenticidade). 'seminovo' usa o diagnóstico de hardware, se houver."""
+    if versao not in ("cliente", "tecnico", "seminovo"):
+        raise ValueError("versao deve ser 'cliente', 'tecnico' ou 'seminovo'")
     tecnico = versao == "tecnico"
     e = _estilos()
     h = hash_varredura(meta, retrato)
     codigo = codigo_curto(h)
     historia: list = _cabecalho(meta, retrato, e, versao, loja)
+    if versao == "seminovo":
+        historia += _secao_seminovo(retrato, diagnostico, e)
+        return _finalizar(historia, meta, h, codigo, e)
 
     achados = retrato.get("achados_aparelho", [])
     historia.append(Paragraph("Configurações do aparelho", e["h2"]))
@@ -218,6 +295,10 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
                                      f"{duracao:.0f} s · CelScan {__version__} · SHA-256 dos dados: {h}")
                                   if duracao is not None else _t(f"SHA-256 dos dados: {h}"), e["mono"]))
 
+    return _finalizar(historia, meta, h, codigo, e)
+
+
+def _finalizar(historia: list, meta: dict, h: str, codigo: str, e: dict) -> tuple[bytes, str]:
     texto_qr = f"CELSCAN-LAUDO|{meta['id']}|{h}"
     rodape = Table([[QR(texto_qr), [
         Paragraph(f"<b>Código de verificação: {codigo}</b>", e["normal"]),

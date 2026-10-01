@@ -52,3 +52,19 @@ def test_verificar_laudo(tmp_path):
         assert db.verificar_laudo(con, codigo)["varredura_id"] == vid
     assert db.verificar_laudo(con, "0000-0000-0000-0000") is None
     assert db.verificar_laudo(con, "abc") is None
+
+
+def test_laudo_seminovo_com_e_sem_diagnostico():
+    from celscan.relatorio import pdf
+
+    meta = {"id": 9, "data": "2026-10-01T10:00:00", "nota": 90, "veredito": "Excelente", "modo": "rapido"}
+    retrato = {"aparelho": {"fabricante": "Xiaomi", "modelo": "X", "android": "15", "serial": "S1"},
+               "apps": [], "achados_aparelho": []}
+    diag = {"identificacao": {"imei": "864210357912345", "marketname": "Redmi Note 14"},
+            "bateria": {"saude_pct": 76, "capacidade_mah": 3800, "capacidade_projeto_mah": 5000, "ciclos": 412},
+            "armazenamento": {"total_gb": 128, "livre_gb": 40.5}, "ram": {"total_gb": 8}}
+    com, h1 = pdf.gerar_pdf(meta, retrato, "seminovo", diagnostico=diag)
+    sem, h2 = pdf.gerar_pdf(meta, retrato, "seminovo")
+    assert com.startswith(b"%PDF") and sem.startswith(b"%PDF") and h1 == h2
+    assert pdf._veredito_bateria(76)[0].startswith("desgastada")
+    assert pdf._veredito_bateria(None)[0] == "não verificado neste aparelho"

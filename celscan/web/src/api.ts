@@ -142,7 +142,7 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
   return r.json() as Promise<T>;
 }
 
-export function urlLaudo(varreduraId: number, versao: "cliente" | "tecnico"): string {
+export function urlLaudo(varreduraId: number, versao: "cliente" | "tecnico" | "seminovo"): string {
   return `/api/varreduras/${varreduraId}/laudo.pdf?versao=${versao}&t=${encodeURIComponent(TOKEN)}`;
 }
 
