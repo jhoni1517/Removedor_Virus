@@ -684,6 +684,16 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return otimizacao.diagnostico(ap)
         return nova_tarefa("diagnostico", p.serial, rodar)
 
+    @app.post("/api/desempenho")
+    def teste_desempenho(p: PedidoSerial) -> dict[str, Any]:
+        from celscan.acoes import desempenho
+
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            return desempenho.testar(ap, progresso=progresso)
+        return nova_tarefa("desempenho", p.serial, rodar)
+
     @app.post("/api/limpeza/cache")
     def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)

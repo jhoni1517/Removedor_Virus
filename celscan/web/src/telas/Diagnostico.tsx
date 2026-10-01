@@ -205,6 +205,49 @@ function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
   );
 }
 
+interface Desempenho { apps: { pacote: string; ms: number | null; erro: string | null }[]; media_abertura_ms: number | null;
+  armazenamento: { gravacao_mb_s: number | null; leitura_mb_s: number | null; obs: string } }
+
+function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
+  const { esperar, avisar } = useApp();
+  const [r, setR] = useState<Desempenho | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const pronto = d?.estado === "device";
+  async function medir() {
+    setOcupado(true);
+    try {
+      const t = await esperar(await api<Tarefa<Desempenho>>("/desempenho", { corpo: { serial: d!.serial } }));
+      if (t.estado === "concluida" && t.resultado) setR(t.resultado);
+      else avisar({ tipo: "erro", texto: t.erro ?? "O teste não terminou." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+  const s = (v: number | null) => (v == null ? "não medido" : `${v.toLocaleString("pt-BR")} MB/s`);
+  return (
+    <Cartao className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-semibold"><Activity size={18} aria-hidden /> Teste de desempenho</h3>
+        <Botao onClick={medir} disabled={!pronto || ocupado}>{ocupado ? "Medindo..." : "Medir agora"}</Botao>
+      </div>
+      <p className="mt-1 text-sm text-fraco">Abre alguns apps "a frio" e mede o tempo, depois grava e lê 64 MB (arquivo apagado no fim). Use antes e depois da otimização para comparar.</p>
+      {r && (
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          <div>
+            <h4 className="mb-1 text-sm font-semibold text-fraco">Abertura de apps{r.media_abertura_ms != null && ` · média ${(r.media_abertura_ms / 1000).toFixed(2)} s`}</h4>
+            {r.apps.map((a) => <Linha key={a.pacote} rotulo={a.pacote}>{a.ms != null ? `${(a.ms / 1000).toFixed(2)} s` : a.erro}</Linha>)}
+          </div>
+          <div>
+            <h4 className="mb-1 text-sm font-semibold text-fraco">Armazenamento</h4>
+            <Linha rotulo="Gravação">{s(r.armazenamento.gravacao_mb_s)}</Linha>
+            <Linha rotulo="Leitura">{s(r.armazenamento.leitura_mb_s)}</Linha>
+            <p className="mt-1 text-xs text-fraco">{r.armazenamento.obs}</p>
+          </div>
+        </div>
+      )}
+    </Cartao>
+  );
+}
+
 function PainelIPhone() {
   const [dados, setDados] = useState<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string } | null>(null);
   useEffect(() => { api<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string }>("/ios/estado").then(setDados).catch(() => undefined); }, []);
@@ -254,6 +297,7 @@ export default function Diagnostico() {
       <PainelDiagnostico d={d} />
       <PainelLimpeza d={d} />
       <PainelDebloat d={d} />
+      <PainelDesempenho d={d} />
       <PainelIPhone />
     </div>
   );
