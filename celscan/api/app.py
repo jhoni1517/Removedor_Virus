@@ -62,6 +62,11 @@ class PedidoReinicio(BaseModel):
     modo: str = "normal"
 
 
+class PedidoCorrecoes(BaseModel):
+    serial: str
+    ids: list[str]
+
+
 class PedidoOrdem(BaseModel):
     servicos: list[str] = Field(min_length=1)
     serial: str | None = None
@@ -740,6 +745,36 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             return desempenho.testar(ap, progresso=progresso)
         return nova_tarefa("desempenho", p.serial, rodar)
+
+    @app.post("/api/correcoes/verificar")
+    def correcoes_verificar(p: PedidoSerial) -> dict[str, Any]:
+        from celscan.acoes import correcoes
+
+        return correcoes.verificar(aparelhos.pronto(p.serial))
+
+    @app.post("/api/correcoes/aplicar")
+    def correcoes_aplicar(p: PedidoCorrecoes) -> dict[str, Any]:
+        from celscan.acoes import correcoes
+
+        ap = aparelhos.pronto(p.serial)
+        if not p.ids:
+            raise HTTPException(422, "Escolha ao menos uma correção.")
+        try:
+            return correcoes.corrigir(ap, p.ids)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
+    @app.post("/api/otimizar-apps")
+    def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "otimizar", "descricao": "Otimizando os apps (o Android recompila cada um)",
+                       "detalhe": "pode levar de 5 a 30 minutos; o celular pode esquentar um pouco",
+                       "atual": None, "total": None, "estimativa_s": 600})
+            saida = otimizacao.compilar(ap)
+            return {"saida": saida[-400:], "ok": "fail" not in saida.lower() and "error" not in saida.lower()}
+        return nova_tarefa("otimizar_apps", p.serial, rodar)
 
     @app.get("/api/energia/modos")
     def energia_modos() -> list[dict[str, str]]:

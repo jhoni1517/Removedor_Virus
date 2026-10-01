@@ -129,6 +129,13 @@ def _reverter_ajustes(ap, meta):
             certo = "error" not in out.lower() and "exception" not in out.lower()
             msgs.append(f"{a['permissao']} de {a['pacote']}: {'devolvida' if certo else 'não confirmou'}")
             ok &= certo
+        elif a["tipo"] == "wm":  # densidade ou resolução da tela (wm density / wm size)
+            valor = a.get("anterior")
+            ap.sh(f"wm {a['chave']} {shlex.quote(valor) if valor else 'reset'}")
+            msgs.append(f"tela ({a['chave']}): {valor or 'padrão de fábrica'}")
+        elif a["tipo"] == "cmd":  # comando de volta gravado pelo próprio CelScan (ex.: Não perturbe)
+            ap.sh(a["desfazer"])
+            msgs.append(a.get("descricao") or a["desfazer"])
     return ok, msgs
 
 

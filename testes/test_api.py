@@ -202,3 +202,12 @@ def test_desempenho_cameras_separadas(cliente):
     t = esperar(cliente, cliente.post("/api/desempenho", json={"serial": "ABC123"}, headers=H).json(), limite=120)
     c = t["resultado"]["cameras"]
     assert c["total"] == 3 and c["traseiras"] == 2 and c["frontais"] == 1
+
+
+def test_correcoes_api(cliente):
+    r = cliente.post("/api/correcoes/verificar", json={"serial": "ABC123"}, headers=H)
+    assert r.status_code == 200 and r.json()["verificados"] >= 10
+    r = cliente.post("/api/correcoes/aplicar", json={"serial": "ABC123", "ids": ["animacoes_lentas"]}, headers=H)
+    assert r.status_code == 200 and r.json()["resultado"][0]["ok"] and r.json()["desfazer_id"]
+    assert cliente.post("/api/correcoes/aplicar", json={"serial": "ABC123", "ids": []}, headers=H).status_code == 422
+    assert cliente.post("/api/correcoes/aplicar", json={"serial": "ABC123", "ids": ["x"]}, headers=H).status_code == 422

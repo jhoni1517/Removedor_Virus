@@ -159,6 +159,14 @@ if a[0] == "shell":
         fim()
     if c.startswith("pm path"):
         fim("package:/data/app/~~X==/" + c.split()[-1] + "-Y==/base.apk")
+    # CELSCAN_FAKE_SETTINGS="always_finish_activities=1,zen_mode=2": configurações bagunçadas para a demo
+    bagunca = dict(x.split("=", 1) for x in os.getenv("CELSCAN_FAKE_SETTINGS", "").split(",") if "=" in x)
+    if c.startswith("settings get ") and c.split()[-1] in bagunca:
+        fim(bagunca[c.split()[-1]])
+    if c in ("wm density", "wm size") and os.getenv("CELSCAN_FAKE_WM_" + c.split()[1].upper()):
+        tipo = c.split()[1]
+        fis = "440" if tipo == "density" else "1080x2400"
+        fim(f"Physical {tipo}: {fis}\nOverride {tipo}: {os.getenv('CELSCAN_FAKE_WM_' + tipo.upper())}")
     if c.startswith("settings get secure enabled_accessibility"):
         fim("com.systemservice/com.systemservice.Acc:com.x8bit.bitwarden/com.x8bit.bitwarden.Acc")
     if c.startswith("settings get global") and c.endswith("_scale"):

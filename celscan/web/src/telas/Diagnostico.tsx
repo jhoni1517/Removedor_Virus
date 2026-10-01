@@ -1,4 +1,4 @@
-import { Activity, Apple, BatteryCharging, Camera, Cpu, FolderOpen, Gauge, HardDrive, Power, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Activity, Apple, BatteryCharging, Camera, Check, Cpu, FolderOpen, Gauge, HardDrive, Power, Rocket, Sparkles, Stethoscope, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
@@ -34,6 +34,115 @@ const COR_PECA: Record<Peca["nivel"], string> = {
   medio: "border-atencao/40 bg-atencao-suave",
   baixo: "border-linha bg-superficie-2",
 };
+
+interface Problema { id: string; titulo: string; sintoma: string; opcional: boolean; detalhe: string }
+interface Corrigido { id: string; titulo: string; ok: boolean }
+
+function PainelCorrecoes({ d }: { d: Dispositivo | undefined }) {
+  const { esperar, avisar } = useApp();
+  const [lista, setLista] = useState<{ problemas: Problema[]; verificados: number } | null>(null);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [feito, setFeito] = useState<{ resultado: Corrigido[]; desfazer_id: string } | null>(null);
+  const [ocupado, setOcupado] = useState<"" | "procurar" | "corrigir" | "desfazer" | "otimizar">("");
+  const pronto = d?.estado === "device";
+
+  async function procurar() {
+    setOcupado("procurar"); setFeito(null);
+    try {
+      const r = await api<{ problemas: Problema[]; verificados: number }>("/correcoes/verificar", { corpo: { serial: d!.serial } });
+      setLista(r);
+      setMarcados(new Set(r.problemas.filter((p) => !p.opcional).map((p) => p.id)));
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(""); }
+  }
+
+  async function corrigir() {
+    setOcupado("corrigir");
+    try {
+      const r = await api<{ resultado: Corrigido[]; desfazer_id: string }>("/correcoes/aplicar", { corpo: { serial: d!.serial, ids: [...marcados] } });
+      setFeito(r);
+      const falhas = r.resultado.filter((x) => !x.ok).length;
+      avisar(falhas ? { tipo: "erro", texto: `${falhas} correção(ões) o aparelho não aceitou.` } : { tipo: "ok", texto: "Correções aplicadas. Dá para desfazer." });
+      setLista((l) => l && { ...l, problemas: l.problemas.filter((p) => !r.resultado.some((x) => x.ok && x.id === p.id)) });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(""); }
+  }
+
+  async function desfazer() {
+    if (!feito) return;
+    setOcupado("desfazer");
+    try {
+      const t = await esperar(await api<Tarefa>("/desfazer", { corpo: { serial: d!.serial, quarentena_id: feito.desfazer_id } }));
+      if (t.estado === "concluida") { avisar({ tipo: "ok", texto: "Tudo voltou como estava." }); setFeito(null); await procurar(); }
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui desfazer." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(""); }
+  }
+
+  async function otimizar() {
+    setOcupado("otimizar");
+    try {
+      const t = await esperar(await api<Tarefa<{ ok: boolean }>>("/otimizar-apps", { corpo: { serial: d!.serial } }));
+      avisar(t.estado === "concluida" && t.resultado?.ok
+        ? { tipo: "ok", texto: "Apps otimizados. Rode o teste de desempenho para comparar." }
+        : { tipo: "erro", texto: t.erro ?? "O Android não confirmou a otimização." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(""); }
+  }
+
+  const alternar = (id: string) => setMarcados((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  return (
+    <Cartao className="p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-semibold"><Stethoscope size={18} aria-hidden /> Correções automáticas</h3>
+        <div className="flex gap-2">
+          <Botao onClick={otimizar} disabled={!pronto || !!ocupado} title="Recompila os apps; pode levar de 5 a 30 minutos">
+            <Rocket size={15} aria-hidden /> {ocupado === "otimizar" ? "Otimizando..." : "Otimizar apps"}
+          </Botao>
+          <Botao variante="primario" onClick={procurar} disabled={!pronto || !!ocupado}>{ocupado === "procurar" ? "Procurando..." : "Procurar problemas"}</Botao>
+        </div>
+      </div>
+      <p className="mt-1 text-sm text-fraco">Acha configurações que causam defeitos comuns (apps fechando, hora errada, tela com zoom, notificação sem som...) em qualquer marca. Tudo pode ser desfeito; nada é apagado.</p>
+
+      {lista && lista.problemas.length === 0 && !feito && (
+        <p className="mt-3 flex items-center gap-2 text-sm text-ok"><Check size={16} aria-hidden /> Nenhum problema de configuração ({lista.verificados} verificações). Se o defeito continua, pode ser app ou peça.</p>
+      )}
+      {lista && lista.problemas.length > 0 && (
+        <>
+          <ul className="mt-3 space-y-2">
+            {lista.problemas.map((p) => (
+              <li key={p.id}>
+                <label className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm transition ${marcados.has(p.id) ? "border-destaque/50 bg-destaque-suave" : "border-linha bg-superficie-2"}`}>
+                  <input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={marcados.has(p.id)} onChange={() => alternar(p.id)} />
+                  <span>
+                    <strong>{p.titulo}</strong>{p.opcional && <span className="ml-2 rounded bg-atencao-suave px-1.5 text-xs text-atencao">opcional</span>}
+                    <span className="mt-0.5 block text-fraco">{p.sintoma}</span>
+                    {p.detalhe && <span className="mt-0.5 block font-mono text-xs text-fraco">{p.detalhe}</span>}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <Botao variante="primario" className="mt-3" onClick={corrigir} disabled={!marcados.size || !!ocupado}>
+            <Wrench size={15} aria-hidden /> {ocupado === "corrigir" ? "Corrigindo..." : `Corrigir ${marcados.size} selecionado(s)`}
+          </Botao>
+        </>
+      )}
+      {feito && (
+        <div className="mt-3 rounded-lg border border-linha bg-superficie-2 p-3 text-sm">
+          {feito.resultado.map((x) => (
+            <p key={x.id} className={`flex items-center gap-2 ${x.ok ? "text-ok" : "text-perigo"}`}>
+              {x.ok ? <Check size={15} aria-hidden /> : <X size={15} aria-hidden />} {x.titulo}{!x.ok && " — o aparelho não aceitou"}
+            </p>
+          ))}
+          <Botao className="mt-2" onClick={desfazer} disabled={!!ocupado}><Undo2 size={15} aria-hidden /> {ocupado === "desfazer" ? "Desfazendo..." : "Desfazer tudo"}</Botao>
+        </div>
+      )}
+      {!pronto && <p className="mt-2 text-sm text-fraco">Precisa do celular conectado e autorizado.</p>}
+    </Cartao>
+  );
+}
 
 interface ModoEnergia { chave: string; nome: string; descricao: string; aviso: string }
 
@@ -551,6 +660,7 @@ export default function Diagnostico() {
         </div>
       )}
       <PainelDiagnostico d={d} />
+      <PainelCorrecoes d={d} />
       <PainelPrint d={d} />
       <PainelEnergia d={d} />
       <PainelLimpeza d={d} />
