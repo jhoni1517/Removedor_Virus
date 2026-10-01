@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { api, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
+import { aplicarTema, coresDoLogo, lerCoresLoja, salvarCoresLoja, TEMAS } from "../tema";
 
 interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string }
 
 export default function Configuracoes() {
-  const { avisar, recarregar, tema, mudarTema, estado, dispositivos, esperar } = useApp();
+  const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar } = useApp();
   const pronto = dispositivos.find((d) => d.estado === "device");
 
   async function registrarCertificados() {
@@ -75,12 +76,42 @@ export default function Configuracoes() {
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Aparência</h2>
-        <div className="mt-3 flex gap-2" role="radiogroup" aria-label="Tema">
-          {[["sistema", "Igual ao sistema"], ["claro", "Claro"], ["escuro", "Escuro"]].map(([k, nome]) => (
-            <button key={k} role="radio" aria-checked={tema === k} onClick={() => mudarTema(k)}
-              className={`rounded-full border px-3 py-1 text-sm ${tema === k ? "border-destaque bg-destaque-suave text-destaque" : "border-linha hover:bg-superficie-2"}`}>
-              {nome}
+        <p className="mt-1 text-sm text-fraco">Muda na hora — passe por cada um para ver.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Tema">
+          {TEMAS.map((t) => (
+            <button key={t.id} role="radio" aria-checked={tema === t.id} onClick={() => mudarTema(t.id)}
+              className={`flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition ${tema === t.id ? "border-destaque bg-destaque-suave" : "border-linha hover:bg-superficie-2"}`}>
+              <span className="flex overflow-hidden rounded-md border border-linha" aria-hidden>
+                {(t.id === "loja" && lerCoresLoja() ? ["#f3f2ee", lerCoresLoja()!.destaque, "#17191b"] : t.amostra).map((c) => (
+                  <span key={c} className="h-6 w-4" style={{ background: c }} />
+                ))}
+              </span>
+              <span className={tema === t.id ? "font-semibold" : ""}>{t.nome}</span>
             </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+          <label className="cursor-pointer rounded-md border border-linha px-3 py-2 hover:bg-superficie-2">
+            Enviar logo da loja
+            <input type="file" accept="image/*" className="sr-only" onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const cores = await coresDoLogo(f).catch(() => null);
+              if (!cores) { avisar({ tipo: "erro", texto: "Não achei uma cor marcante nesse logo. Tente uma imagem colorida." }); return; }
+              salvarCoresLoja(cores);
+              mudarTema("loja");
+              aplicarTema("loja", escala);
+              avisar({ tipo: "ok", texto: `Tema da loja criado com a cor ${cores.destaque}.` });
+            }} />
+          </label>
+          <span className="text-fraco">A cor sai do próprio logo e é ajustada para ficar legível. Nada sai do computador.</span>
+        </div>
+        <div className="mt-4 flex items-center gap-2 text-sm" role="group" aria-label="Tamanho do texto">
+          <span className="text-fraco">Tamanho do texto</span>
+          {[0.9, 1, 1.15, 1.3].map((e) => (
+            <button key={e} onClick={() => mudarEscala(e)} aria-pressed={escala === e}
+              className={`rounded-md border px-2.5 py-1 ${escala === e ? "border-destaque bg-destaque-suave text-destaque" : "border-linha"}`}
+              style={{ fontSize: `${e * 0.875}rem` }}>A</button>
           ))}
         </div>
       </Cartao>

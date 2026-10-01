@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urlWebSocket, type Dispositivo, type Estado, type Tarefa } from "./api";
+import { aplicarTema } from "./tema";
 
 export interface Toast {
   id: number;
@@ -21,6 +22,8 @@ interface Contexto {
   avisos: Toast[];
   tema: string;
   mudarTema: (t: string) => void;
+  escala: number;
+  mudarEscala: (e: number) => void;
   erroBackend: string | null;
 }
 
@@ -32,11 +35,6 @@ export function useApp(): Contexto {
   return c;
 }
 
-function aplicarTema(tema: string) {
-  const escuro = tema === "escuro" || (tema === "sistema" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("escuro", escuro);
-}
-
 export function ProvedorApp({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [online, setOnline] = useState(false);
@@ -44,6 +42,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [tarefas, setTarefas] = useState<Record<string, Tarefa>>({});
   const [avisos, setAvisos] = useState<Toast[]>([]);
   const [tema, setTema] = useState(() => localStorage.getItem("celscan-tema") ?? "sistema");
+  const [escala, setEscala] = useState(() => Number(localStorage.getItem("celscan-escala")) || 1);
   const proximo = useRef(1);
 
   const [erroBackend, setErroBackend] = useState<string | null>(null);
@@ -112,13 +111,14 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   }, [recarregar]);
 
   useEffect(() => {
-    aplicarTema(tema);
+    aplicarTema(tema, escala);
     localStorage.setItem("celscan-tema", tema);
+    localStorage.setItem("celscan-escala", String(escala));
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const ouvir = () => aplicarTema(tema);
+    const ouvir = () => aplicarTema(tema, escala);
     mq.addEventListener("change", ouvir);
     return () => mq.removeEventListener("change", ouvir);
-  }, [tema]);
+  }, [tema, escala]);
 
   const esperar = useCallback(<R,>(t: Tarefa<R>) => {
     setTarefas((ts) => ({ ...ts, [t.id]: t as Tarefa }));
@@ -154,7 +154,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema, erroBackend }}
+      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema, escala, mudarEscala: setEscala, erroBackend }}
     >
       {children}
     </Ctx.Provider>

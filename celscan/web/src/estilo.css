@@ -48,6 +48,58 @@
   color-scheme: dark;
 }
 
+/* Terminal: monoespaçado, verde/âmbar sobre preto, para técnicos. */
+:root[data-tema="terminal"] {
+  --papel: #050705;
+  --superficie: #0a0f0a;
+  --superficie-2: #0f160f;
+  --tinta: #b8f5b0;
+  --fraco: #6fa86a;
+  --linha: #1f3a1d;
+  --grade: rgba(120, 255, 120, 0.05);
+  --destaque: #5df26b;
+  --destaque-suave: #10260f;
+  --ok: #5df26b;
+  --ok-suave: #10260f;
+  --atencao: #ffb84d;
+  --atencao-suave: #2b1f08;
+  --perigo: #ff6b5a;
+  --perigo-suave: #2e0f0b;
+  --foco: #ffb84d;
+  color-scheme: dark;
+}
+:root[data-tema="terminal"] body { font-family: var(--font-mono); }
+
+/* Alto contraste: acessibilidade máxima (WCAG AAA nas cores de texto). */
+:root[data-tema="contraste"] {
+  --papel: #000000;
+  --superficie: #000000;
+  --superficie-2: #111111;
+  --tinta: #ffffff;
+  --fraco: #e6e6e6;
+  --linha: #ffffff;
+  --grade: transparent;
+  --destaque: #ffd400;
+  --destaque-suave: #262000;
+  --ok: #6bff8f;
+  --ok-suave: #002a0c;
+  --atencao: #ffd400;
+  --atencao-suave: #262000;
+  --perigo: #ff7b7b;
+  --perigo-suave: #2e0000;
+  --foco: #ffd400;
+  color-scheme: dark;
+}
+:root[data-tema="contraste"] :focus-visible { outline-width: 3px; }
+
+/* Tamanho de fonte ajustável (Configurações) */
+html { font-size: calc(16px * var(--escala, 1)); }
+
+/* Respeita "reduzir movimento" do sistema */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
 @theme {
   --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
