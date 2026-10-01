@@ -178,6 +178,52 @@ function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes:
   );
 }
 
+interface Mudanca { pacote: string; nome: string; nivel?: string; de?: string; para?: string; alertas?: string[] }
+interface Diferencas {
+  primeira_visita: boolean; anterior_data?: string; sem_mudancas?: boolean;
+  nota?: { antes: number | null; depois: number | null };
+  apps_novos?: Mudanca[]; apps_removidos?: Mudanca[]; risco_subiu?: Mudanca[]; risco_caiu?: Mudanca[];
+  alertas_novos?: Mudanca[]; certificado_trocado?: Mudanca[]; aparelho_novos?: string[]; aparelho_resolvidos?: string[];
+}
+
+function DesdeUltimaVisita({ vid }: { vid: number }) {
+  const [d, setD] = useState<Diferencas | null>(null);
+  useEffect(() => { api<Diferencas>(`/varreduras/${vid}/diferencas`).then(setD).catch(() => undefined); }, [vid]);
+  if (!d || d.primeira_visita) return null;
+  const data = d.anterior_data ? new Date(d.anterior_data).toLocaleDateString("pt-BR") : "a anterior";
+  const linhas: [string, string, Mudanca[] | string[] | undefined][] = [
+    ["perigo", "Certificado trocado (app pode ter sido substituído por cópia)", d.certificado_trocado],
+    ["perigo", "Risco subiu", d.risco_subiu],
+    ["atencao", "Apps novos", d.apps_novos],
+    ["atencao", "Alertas novos em apps que já existiam", d.alertas_novos],
+    ["atencao", "Problemas novos no aparelho", d.aparelho_novos],
+    ["ok", "Risco caiu", d.risco_caiu],
+    ["ok", "Problemas resolvidos no aparelho", d.aparelho_resolvidos],
+    ["fraco", "Apps que saíram", d.apps_removidos],
+  ];
+  const nome = (x: Mudanca | string) => typeof x === "string" ? x
+    : `${x.nome}${x.de && x.para ? ` (${x.de} → ${x.para})` : ""}${x.alertas ? `: ${x.alertas.join(", ")}` : ""}`;
+  return (
+    <Cartao className="mb-6 p-5">
+      <h2 className="font-semibold">Desde a última visita <span className="text-sm font-normal text-fraco">({data})</span></h2>
+      {d.nota && d.nota.antes != null && d.nota.depois != null && (
+        <p className="numeros mt-1 text-sm">Nota: {d.nota.antes} → <strong>{d.nota.depois}</strong></p>
+      )}
+      {d.sem_mudancas ? <p className="mt-2 text-sm text-fraco">Nada mudou desde a última varredura.</p> : (
+        <ul className="mt-3 space-y-2 text-sm">
+          {linhas.filter(([, , itens]) => itens && itens.length).map(([cor, titulo, itens]) => (
+            <li key={titulo}>
+              <span className={`font-medium text-${cor}`}>{titulo}:</span>{" "}
+              {(itens as (Mudanca | string)[]).slice(0, 6).map(nome).join(" · ")}
+              {itens!.length > 6 && ` e mais ${itens!.length - 6}`}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Cartao>
+  );
+}
+
 export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => void }) {
   const { dispositivos, esperar, avisar } = useApp();
   const [filtro, setFiltro] = useState<Filtro>("alerta");
@@ -286,6 +332,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           <Botao variante="fantasma" onClick={onNova}>Nova varredura</Botao>
         </div>
       </Cartao>
+
+      <DesdeUltimaVisita vid={v.varredura_id} />
 
       {v.avisos.length > 0 && (
         <details className="mb-6 rounded-lg border border-atencao/40 bg-atencao-suave p-4 text-sm text-atencao">

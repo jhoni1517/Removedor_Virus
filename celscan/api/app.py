@@ -311,6 +311,24 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                            (vid,)).fetchone()
         return {**dict(meta), **retrato}
 
+    @app.get("/api/varreduras/{vid}/diferencas")
+    def diferencas_varredura(vid: int) -> dict[str, Any]:
+        """O que mudou desde a varredura anterior do mesmo aparelho."""
+        from celscan.analise import diferencas
+
+        con = db.conectar()
+        meta = db.meta_varredura(con, vid)
+        if meta is None:
+            raise HTTPException(404, "Varredura não encontrada")
+        anterior = db.varredura_anterior(con, meta["serial"], vid)
+        if anterior is None:
+            return {"primeira_visita": True}
+        meta_ant = db.meta_varredura(con, anterior)
+        dif = diferencas.comparar(db.retrato(con, anterior) or {}, db.retrato(con, vid) or {},
+                                  meta_ant.get("nota") if meta_ant else None, meta.get("nota"))
+        return {"primeira_visita": False, "anterior_id": anterior,
+                "anterior_data": meta_ant.get("data") if meta_ant else None, **dif}
+
     # ---- ações
     @app.post("/api/remover")
     def remover(p: PedidoRemocao) -> dict[str, Any]:
