@@ -9,6 +9,27 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b6 (01/10/2026) — entregue
+
+| Item | Situação |
+|---|---|
+| Domínios dos indicadores do MVT (dívida 4) | ✅ usados, com checagem de subdomínio |
+| Temas Bancada, Noite, Terminal, Alto contraste, Minha Loja (cor do logo) + tamanho de texto | ✅ com Vitest no CI |
+| Modo proteção à vítima de stalkerware (documentar antes, contatos de apoio, confirmação) | ✅ |
+| Histórico: o que mudou desde a última visita (inclui certificado trocado) | ✅ |
+| Balcão: ordem de serviço, pacotes de 1 clique, WhatsApp, painel do dia/mês, CSV | ✅ |
+| Laudo de seminovo (bateria com veredito, IMEI, checklist de hardware, assinaturas) | ✅ |
+| Debloat com níveis Recomendado/Avançado/Especialista (nunca "inseguro") | ✅ |
+| Teste de desempenho real (abertura de apps, gravação/leitura) | ✅ |
+
+**Pendências (para revisar juntos ou depender de você):**
+- Interrompidos por um filtro automático de segurança, não retomados por conta própria: análise de
+  APK por conteúdo, painel de consumo de bateria por app e leitura da configuração de rede.
+- Depende do celular real: confirmar tudo acima, conexão Wi-Fi/USB, bateria/IMEI por fabricante,
+  keyring e aviso de driver no Windows.
+- Reescritas grandes: adbutils + vários aparelhos em paralelo, Tauri, Agente Android, Nuvem.
+- Custo seu (pergunto na hora): assinatura de código e hospedagem da nuvem.
+
 ## Decisões que eu preciso de você (com minha recomendação)
 
 Antes de começar, preciso destas respostas — algumas têm custo:
