@@ -6,7 +6,7 @@ import time
 
 import requests
 
-from celscan.acoes import quarentena
+from celscan.acoes import quarentena, saude
 from celscan.core import bases, parsers
 
 UAD = ("https://raw.githubusercontent.com/Universal-Debloater-Alliance/"
@@ -54,9 +54,14 @@ def montar_diagnostico(s):
     """Seções brutas -> diagnóstico. Itens que não puderam ser lidos viram avisos visíveis."""
     avisos = []
     bateria = parsers.bateria(s.get("bateria", ""))
-    saude = parsers.saude_bateria(s.get("saude", ""))
-    if bateria and saude:
-        bateria = {**bateria, **saude}
+    saude_sys = parsers.saude_bateria(s.get("saude", ""))
+    if bateria and saude_sys:
+        bateria = {**bateria, **saude_sys}
+    pecas: list[dict[str, str]] = []
+    if bateria:
+        aval = saude.avaliar(bateria)
+        bateria = {**bateria, **aval["bateria_extra"]}
+        pecas = aval["pecas"]
     armaz = parsers.df(s.get("df", ""))
     ram = parsers.meminfo(s.get("mem", ""))
     dias = parsers.uptime_dias(s.get("uptime", ""))
@@ -74,7 +79,8 @@ def montar_diagnostico(s):
               for p, kb in parsers.tamanhos_pastas(s.get("pastas", "")).items() if kb > 0]
     anim = [linha.strip() for linha in s.get("anim", "").splitlines()]
     return {"bateria": bateria or {}, "armazenamento": armaz, "pastas": sorted(pastas, key=lambda x: -x["gb"]),
-            "ram": ram, "ligado_dias": dias, "animacoes": anim, "identificacao": ident, "avisos": avisos}
+            "ram": ram, "ligado_dias": dias, "animacoes": anim, "identificacao": ident,
+            "pecas": pecas, "avisos": avisos}
 
 
 def limpar_cache(ap):

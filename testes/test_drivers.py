@@ -23,6 +23,17 @@ def test_ignora_ok_e_nao_celular():
     assert p == []
 
 
+def test_mesmo_fabricante_em_varias_interfaces_vira_um_aviso():
+    # O Xiaomi aparece em 3 interfaces USB (ADB, MTP, hub): deve virar UM aviso, não três.
+    saida = ("USB\\VID_2717&PID_FF48\\ADB;Error\n"
+             "USB\\VID_2717&PID_FF40\\MTP;Unknown\n"
+             "USB\\VID_2717&PID_FF10\\HUB;Error\n")
+    p = drivers.analisar(saida)
+    assert len(p) == 1
+    assert p[0]["fabricante"] == "Xiaomi"
+    assert p[0]["interfaces"] == 3
+
+
 def test_diagnosticar_fora_do_windows():
     d = drivers.diagnosticar(windows=False)
     assert d["windows"] is False and d["problemas"] == []

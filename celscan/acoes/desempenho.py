@@ -13,6 +13,7 @@ import re
 import shlex
 from typing import Any
 
+from celscan.core import parsers
 from celscan.core.adb import AdbErro, Aparelho
 
 ARQ_TESTE = "/sdcard/Download/.celscan_teste_desempenho"
@@ -74,6 +75,80 @@ def testar(ap: Aparelho, pacotes: list[str] | None = None, progresso=None) -> di
     if progresso:
         progresso({"etapa": "desempenho", "descricao": "Medindo a velocidade do armazenamento", "detalhe": "",
                    "atual": len(alvos) + 1, "total": len(alvos) + 1, "estimativa_s": 10})
+    arm = armazenamento(ap)
+    hw = hardware(ap)
+    cams = cameras(ap)
     medidos = [a["ms"] for a in apps if a["ms"]]
-    return {"apps": apps, "media_abertura_ms": round(sum(medidos) / len(medidos)) if medidos else None,
-            "armazenamento": armazenamento(ap)}
+    media_ms = round(sum(medidos) / len(medidos)) if medidos else None
+    return {"apps": apps, "media_abertura_ms": media_ms, "armazenamento": arm,
+            "hardware": hw, "cameras": cams, "pontuacao": pontuar(hw, arm, media_ms)}
+
+
+# ---- Hardware (CPU, RAM) --------------------------------------------------
+
+def _parse_cpu(cpuinfo: str, freqs: str) -> dict[str, Any]:
+    """Núcleos de /proc/cpuinfo e maior clock de cpufreq/cpuinfo_max_freq (em kHz)."""
+    nucleos = len(re.findall(r"^processor\s*:", cpuinfo, re.M)) or None
+    khz = [int(x) for x in re.findall(r"\d+", freqs)]
+    ghz_max = round(max(khz) / 1_000_000, 2) if khz else None
+    return {"nucleos": nucleos, "ghz_max": ghz_max}
+
+
+def hardware(ap: Aparelho) -> dict[str, Any]:
+    cpu = _parse_cpu(ap.sh("cat /proc/cpuinfo", erro=True),
+                     ap.sh("cat /sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq 2>/dev/null", erro=True))
+    mem = parsers.meminfo(ap.sh("head -3 /proc/meminfo", erro=True))
+    return {**cpu, "ram_gb": round(mem["total_gb"], 1) if mem else None}
+
+
+# ---- Câmeras (inventário, não "nota de qualidade") -----------------------
+
+def _parse_cameras(dumpsys: str) -> dict[str, Any]:
+    """Conta as câmeras e tenta a maior resolução (megapixels). Qualidade NÃO é medível por USB."""
+    ids = set(re.findall(r"Camera (\d+) information", dumpsys))
+    if not ids:
+        ids = set(re.findall(r"Device (\d+) ", dumpsys))
+    mp = None
+    pares = re.findall(r"(\d{3,5})\s*[x×]\s*(\d{3,5})", dumpsys)
+    if pares:
+        mp = round(max(int(w) * int(h) for w, h in pares) / 1_000_000, 1)
+    return {"quantidade": len(ids) or None, "megapixels_max": mp,
+            "obs": "Só o inventário; a qualidade da foto precisa de teste real com a câmera."}
+
+
+def cameras(ap: Aparelho) -> dict[str, Any]:
+    return _parse_cameras(ap.sh("dumpsys media.camera", timeout=30, erro=True))
+
+
+# ---- Pontuação (estimativa própria do CelScan, 0 a 1000) -----------------
+
+def _nota(valor: float | None, referencia: float) -> int | None:
+    """Quanto o valor atinge de uma referência de aparelho topo de linha (0 a 100)."""
+    if valor is None:
+        return None
+    return max(0, min(100, round(valor / referencia * 100)))
+
+
+def pontuar(hw: dict[str, Any], arm: dict[str, Any], media_abertura_ms: int | None) -> dict[str, Any]:
+    """Nota 0–1000 por categoria. É ESTIMATIVA interna do CelScan, não comparável ao AnTuTu."""
+    ghz_nucleo = hw["nucleos"] * hw["ghz_max"] if hw.get("nucleos") and hw.get("ghz_max") else None
+    cpu = _nota(ghz_nucleo, 24)        # ref.: 8 núcleos a 3,0 GHz
+    ram = _nota(hw.get("ram_gb"), 12)  # ref.: 12 GB
+    hardware_nota = _media([cpu, ram])
+    arm_nota = _media([_nota(arm.get("leitura_mb_s"), 1000), _nota(arm.get("gravacao_mb_s"), 500)])
+    fluidez = None
+    if media_abertura_ms:  # 300 ms (rápido) -> 100; 2000 ms (lento) -> 0
+        fluidez = max(0, min(100, round((2000 - media_abertura_ms) / (2000 - 300) * 100)))
+    categorias = {"hardware": hardware_nota, "armazenamento": arm_nota, "fluidez": fluidez}
+    pesos = {"hardware": 0.4, "armazenamento": 0.3, "fluidez": 0.3}
+    validos = {k: v for k, v in categorias.items() if v is not None}
+    total = None
+    if validos:
+        total = round(sum(validos[k] * pesos[k] for k in validos) / sum(pesos[k] for k in validos) * 10)
+    return {"total": total, "categorias": categorias,
+            "obs": "Pontuação própria do CelScan (0 a 1000), estimativa — não comparável ao AnTuTu."}
+
+
+def _media(valores: list[int | None]) -> int | None:
+    v = [x for x in valores if x is not None]
+    return round(sum(v) / len(v)) if v else None

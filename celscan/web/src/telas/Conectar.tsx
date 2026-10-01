@@ -1,8 +1,8 @@
-import { Cable, Download, RefreshCw, Smartphone, Wifi } from "lucide-react";
+import { Cable, Download, RefreshCw, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ErroApi, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
-import { Barra, Botao, Cartao, Titulo } from "../ui";
+import { Barra, Botao, Cartao, Miniatura, Titulo } from "../ui";
 
 interface Passo {
   titulo: string;
@@ -115,7 +115,7 @@ function ModalWifi({ ajuda, fechar }: { ajuda: Ajuda; fechar: () => void }) {
 function CartaoAparelho({ d, escolher }: { d: Dispositivo; escolher: () => void }) {
   return (
     <Cartao className="entrar flex items-center gap-4 p-4">
-      <Smartphone className="text-destaque" aria-hidden />
+      <Miniatura fabricante={d.fabricante} modelo={d.modelo} wifi={d.wifi} />
       <div className="flex-1">
         <p className="font-semibold">{d.fabricante ? `${d.fabricante} ${d.modelo}` : "Android"}</p>
         <p className="font-mono text-xs text-fraco">

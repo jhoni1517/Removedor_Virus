@@ -247,9 +247,18 @@ def saude_bateria(txt: str) -> dict[str, int] | None:
     return res or None
 
 
+# Nome curto que a interface, a CLI e o laudo usam para cada propriedade do Android.
+_IDENT_CURTO = {
+    "ro.product.manufacturer": "manufacturer", "ro.product.model": "model",
+    "ro.product.marketname": "marketname", "ro.serialno": "serial",
+    "ro.build.version.release": "release", "ro.build.version.security_patch": "security_patch",
+}
+
+
 def identificacao(txt: str) -> dict[str, str]:
-    """Pares chave=valor da seção 'ident' (getprop rotulado)."""
-    return {k: val.strip() for k, val in re.findall(r"^([\w.]+)=(.*)$", txt, re.M) if val.strip()}
+    """Pares chave=valor da seção 'ident' (getprop rotulado), com nomes curtos (model, release...)."""
+    return {_IDENT_CURTO.get(k, k): val.strip() for k, val in re.findall(r"^([\w.]+)=(.*)$", txt, re.M)
+            if val.strip()}
 
 
 def imei(txt: str) -> str | None:

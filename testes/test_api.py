@@ -167,3 +167,24 @@ def test_token_injetado_no_index(cliente):
         pytest.skip("interface não compilada (celscan/web/dist)")
     r = cliente.get("/", headers={"Host": "127.0.0.1"})
     assert r.status_code == 200 and f'window.__CELSCAN_TOKEN__="{TOKEN}"' in r.text
+
+
+def test_diagnostico_bateria_pecas_e_identificacao(cliente):
+    t = esperar(cliente, cliente.post("/api/diagnostico", json={"serial": "ABC123"}, headers=H).json())
+    assert t["estado"] == "concluida", t
+    d = t["resultado"]
+    assert d["identificacao"]["marketname"] == "Redmi Note 14" and d["identificacao"]["release"] == "16"
+    b = d["bateria"]
+    assert b["saude_pct"] == 76 and b["veredito"].startswith("Desgastada")
+    assert b["ciclos_restantes"]["restantes"] == 0  # já abaixo de 80%: honesto, não inventa sobrevida
+    assert {p["peca"] for p in d["pecas"]} == {"Bateria", "Tela, câmera e outras peças"}
+
+
+def test_desempenho_com_pontuacao(cliente):
+    t = esperar(cliente, cliente.post("/api/desempenho", json={"serial": "ABC123"}, headers=H).json(), limite=120)
+    assert t["estado"] == "concluida", t
+    r = t["resultado"]
+    assert r["hardware"] == {"nucleos": 8, "ghz_max": 2.8, "ram_gb": 7.5}
+    assert r["cameras"]["quantidade"] == 3 and r["cameras"]["megapixels_max"] == 48.0
+    assert 0 < r["pontuacao"]["total"] <= 1000
+    assert all(v is not None for v in r["pontuacao"]["categorias"].values())

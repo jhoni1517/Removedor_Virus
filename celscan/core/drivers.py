@@ -44,8 +44,12 @@ def _saida_windows() -> str:
 
 
 def analisar(saida: str) -> list[dict[str, object]]:
-    """Parser da saída (InstanceId;Status). Devolve os dispositivos de celular com problema de driver."""
-    problemas = []
+    """Parser da saída (InstanceId;Status). Devolve os dispositivos de celular com problema de driver.
+
+    Um mesmo celular aparece em várias interfaces USB (ADB, MTP, hub...), cada uma com seu VID.
+    Para não mostrar "driver Xiaomi" três vezes, juntamos por fabricante: um aviso por fabricante.
+    """
+    por_fabricante: dict[str, dict[str, object]] = {}
     for linha in saida.splitlines():
         if ";" not in linha:
             continue
@@ -58,8 +62,10 @@ def analisar(saida: str) -> list[dict[str, object]]:
             continue
         if status.strip().upper() not in ("OK", ""):  # Error, Unknown, Degraded... = driver ruim
             nome, link = FABRICANTES[vid]
-            problemas.append({"fabricante": nome, "vid": vid, "status": status.strip(), "link": link})
-    return problemas
+            problemas = por_fabricante.setdefault(
+                nome, {"fabricante": nome, "vid": vid, "status": status.strip(), "link": link, "interfaces": 0})
+            problemas["interfaces"] = int(problemas["interfaces"]) + 1
+    return list(por_fabricante.values())
 
 
 def diagnosticar(windows: bool | None = None) -> dict[str, object]:

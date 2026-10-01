@@ -736,6 +736,18 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return desempenho.testar(ap, progresso=progresso)
         return nova_tarefa("desempenho", p.serial, rodar)
 
+    @app.post("/api/captura")
+    def capturar_tela(p: PedidoSerial) -> dict[str, Any]:
+        from celscan.acoes import captura
+
+        ap = aparelhos.pronto(p.serial)
+        try:
+            return captura.capturar(ap, destino_backup(p.serial, None) / "Prints")
+        except captura.CapturaErro as e:
+            raise HTTPException(422, str(e)) from e
+        except adb.AdbErro as e:
+            raise HTTPException(502, f"Não foi possível tirar o print: {e}") from e
+
     @app.post("/api/limpeza/cache")
     def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)

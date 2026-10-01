@@ -1,12 +1,20 @@
-import { Activity, Apple, BatteryCharging, HardDrive, Sparkles, Trash2 } from "lucide-react";
+import { Activity, Apple, BatteryCharging, Camera, Cpu, FolderOpen, Gauge, HardDrive, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
-import { Botao, Cartao, Titulo } from "../ui";
+import { Botao, Cartao, corNota, Miniatura, Titulo } from "../ui";
 import { tamanho } from "./Resgate";
 
+interface Bateria {
+  nivel?: string; saude?: string; situacao?: string; temperatura?: string; tensao?: string;
+  ciclos?: string | number; saude_pct?: number; capacidade_mah?: number; capacidade_projeto_mah?: number;
+  veredito?: string;
+  ciclos_restantes?: { restantes: number; base: "medido" | "referencia"; ate_pct: number; obs: string };
+}
+interface Peca { peca: string; nivel: "alto" | "medio" | "baixo"; texto: string }
 interface Diag {
-  bateria: Record<string, string | number>;
+  bateria: Bateria;
+  pecas?: Peca[];
   armazenamento: { total_gb: number; livre_gb: number } | null;
   ram: { total_gb: number; disponivel_gb: number } | null;
   pastas: { pasta: string; gb: number }[];
@@ -16,6 +24,53 @@ interface Diag {
 }
 interface Lixo { itens: { chave: string; nome: string; kb: number }[]; total_mb: number }
 interface IPhone { udid: string; nome?: string; modelo?: string; ios?: string; imei?: string; erro?: string; bateria?: { saude_pct?: number; ciclos?: number } }
+
+// Bateria tem escala própria: abaixo de 80% de saúde a troca já começa a valer a pena.
+const corBateria = (pct?: number) =>
+  pct == null ? "inherit" : pct >= 80 ? "var(--ok)" : pct >= 70 ? "var(--atencao)" : "var(--perigo)";
+
+const COR_PECA: Record<Peca["nivel"], string> = {
+  alto: "border-perigo/40 bg-perigo-suave",
+  medio: "border-atencao/40 bg-atencao-suave",
+  baixo: "border-linha bg-superficie-2",
+};
+
+function PainelPrint({ d }: { d: Dispositivo | undefined }) {
+  const { avisar } = useApp();
+  const [print, setPrint] = useState<{ caminho: string; pasta: string; png_b64: string } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const pronto = d?.estado === "device";
+
+  async function tirar() {
+    setOcupado(true);
+    try {
+      setPrint(await api<{ caminho: string; pasta: string; png_b64: string }>("/captura", { corpo: { serial: d!.serial } }));
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+
+  return (
+    <Cartao className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-semibold"><Camera size={18} aria-hidden /> Print da tela do celular</h3>
+        <Botao variante="primario" onClick={tirar} disabled={!pronto || ocupado}>{ocupado ? "Tirando..." : "Tirar print"}</Botao>
+      </div>
+      <p className="mt-1 text-sm text-fraco">Salva uma imagem da tela no computador, para documentar um defeito ou mandar para alguém. Apps de banco e a tela bloqueada podem sair pretos (proteção do Android).</p>
+      {print && (
+        <div className="mt-3 flex flex-wrap items-start gap-4">
+          <img src={`data:image/png;base64,${print.png_b64}`} alt="Print da tela do celular"
+            className="max-h-72 rounded-md border border-linha" />
+          <div className="space-y-2 text-sm">
+            <p className="break-all font-mono text-xs text-fraco">{print.caminho}</p>
+            <Botao onClick={() => api("/abrir-pasta", { corpo: { caminho: print.pasta } }).catch((e) => avisar({ tipo: "erro", texto: (e as Error).message }))}>
+              <FolderOpen size={15} aria-hidden /> Abrir pasta
+            </Botao>
+          </div>
+        </div>
+      )}
+    </Cartao>
+  );
+}
 
 function Linha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return <div className="flex justify-between gap-4 border-b border-linha/60 py-1.5 text-sm last:border-0">
@@ -62,8 +117,14 @@ function PainelDiagnostico({ d }: { d: Dispositivo | undefined }) {
           <div>
             <h4 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-fraco"><BatteryCharging size={14} aria-hidden /> Bateria e memória</h4>
             {b.nivel !== undefined && <Linha rotulo="Nível / situação">{b.nivel}% · {b.situacao ?? b.saude}</Linha>}
-            {b.saude_pct !== undefined && <Linha rotulo="Capacidade real">~{b.saude_pct}% ({b.capacidade_mah}/{b.capacidade_projeto_mah} mAh)</Linha>}
-            {b.ciclos !== undefined && <Linha rotulo="Ciclos">{b.ciclos}</Linha>}
+            {b.saude_pct !== undefined && <Linha rotulo="Saúde da bateria">~{b.saude_pct}%{b.capacidade_projeto_mah ? ` (${b.capacidade_mah}/${b.capacidade_projeto_mah} mAh)` : ""}</Linha>}
+            {b.veredito && <Linha rotulo="Situação da bateria"><span style={{ color: corBateria(b.saude_pct) }}>{b.veredito}</span></Linha>}
+            {b.ciclos !== undefined && <Linha rotulo="Ciclos usados">{b.ciclos}</Linha>}
+            {b.ciclos_restantes && (
+              <Linha rotulo={`Ciclos restantes (até ${b.ciclos_restantes.ate_pct}%)`}>
+                <span title={b.ciclos_restantes.obs}>~{b.ciclos_restantes.restantes.toLocaleString("pt-BR")}{b.ciclos_restantes.base === "referencia" ? " *" : ""}</span>
+              </Linha>
+            )}
             {b.temperatura && <Linha rotulo="Temperatura">{b.temperatura}</Linha>}
             {arm && <Linha rotulo="Armazenamento">{arm.livre_gb.toFixed(1)} GB livres de {arm.total_gb.toFixed(0)} GB</Linha>}
             {diag.ram && <Linha rotulo="RAM">{diag.ram.disponivel_gb.toFixed(1)} de {diag.ram.total_gb.toFixed(1)} GB livres</Linha>}
@@ -74,6 +135,22 @@ function PainelDiagnostico({ d }: { d: Dispositivo | undefined }) {
               <h4 className="mb-1 text-sm font-semibold text-fraco">O que mais ocupa espaço</h4>
               {diag.pastas.slice(0, 6).map((p) => <Linha key={p.pasta} rotulo={p.pasta}>{p.gb.toFixed(1)} GB</Linha>)}
             </div>
+          )}
+          {diag.pecas && diag.pecas.length > 0 && (
+            <div className="md:col-span-2">
+              <h4 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-fraco"><Wrench size={14} aria-hidden /> Peças originais ou trocadas</h4>
+              <p className="mb-2 text-xs text-fraco">Por USB só dá para ver <strong>indícios</strong>, nunca prova. Confirme com inspeção física.</p>
+              <ul className="space-y-2">
+                {diag.pecas.map((p) => (
+                  <li key={p.peca} className={`rounded-md border p-2.5 text-sm ${COR_PECA[p.nivel]}`}>
+                    <strong>{p.peca}:</strong> {p.texto}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {b.ciclos_restantes?.base === "referencia" && (
+            <p className="md:col-span-2 text-xs text-fraco">* Estimativa pela vida típica de uma bateria; este aparelho não informou o desgaste real.</p>
           )}
           {diag.avisos.map((a) => <p key={a} className="md:col-span-2 text-xs text-atencao">{a}</p>)}
         </div>
@@ -206,7 +283,39 @@ function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
 }
 
 interface Desempenho { apps: { pacote: string; ms: number | null; erro: string | null }[]; media_abertura_ms: number | null;
-  armazenamento: { gravacao_mb_s: number | null; leitura_mb_s: number | null; obs: string } }
+  armazenamento: { gravacao_mb_s: number | null; leitura_mb_s: number | null; obs: string };
+  hardware?: { nucleos: number | null; ghz_max: number | null; ram_gb: number | null };
+  cameras?: { quantidade: number | null; megapixels_max: number | null; obs: string };
+  pontuacao?: { total: number | null; categorias: Record<"hardware" | "armazenamento" | "fluidez", number | null>; obs: string } }
+
+const NOME_CATEGORIA = { hardware: "Hardware (processador e RAM)", armazenamento: "Armazenamento", fluidez: "Fluidez (abertura de apps)" } as const;
+
+function Pontuacao({ p }: { p: NonNullable<Desempenho["pontuacao"]> }) {
+  if (p.total == null) return <p className="text-sm text-fraco">Não deu para calcular a pontuação neste aparelho.</p>;
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="text-center">
+        <p className="numeros font-mono text-5xl font-semibold" style={{ color: corNota(p.total / 10) }}>{p.total}</p>
+        <p className="text-xs uppercase tracking-wider text-fraco">pontos de 1000</p>
+      </div>
+      <div className="min-w-56 flex-1 space-y-2">
+        {(Object.keys(NOME_CATEGORIA) as (keyof typeof NOME_CATEGORIA)[]).map((k) => {
+          const v = p.categorias[k];
+          return (
+            <div key={k}>
+              <div className="flex justify-between text-xs"><span className="text-fraco">{NOME_CATEGORIA[k]}</span>
+                <span className="numeros font-medium">{v == null ? "não medido" : `${v}/100`}</span></div>
+              <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-linha">
+                <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${v ?? 0}%`, background: corNota(v ?? 0) }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="w-full text-xs text-fraco">{p.obs}</p>
+    </div>
+  );
+}
 
 function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
   const { esperar, avisar } = useApp();
@@ -226,10 +335,31 @@ function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
   return (
     <Cartao className="p-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 font-semibold"><Activity size={18} aria-hidden /> Teste de desempenho</h3>
+        <h3 className="flex items-center gap-2 font-semibold"><Gauge size={18} aria-hidden /> Teste de desempenho (pontuação)</h3>
         <Botao onClick={medir} disabled={!pronto || ocupado}>{ocupado ? "Medindo..." : "Medir agora"}</Botao>
       </div>
-      <p className="mt-1 text-sm text-fraco">Abre alguns apps "a frio" e mede o tempo, depois grava e lê 64 MB (arquivo apagado no fim). Use antes e depois da otimização para comparar.</p>
+      <p className="mt-1 text-sm text-fraco">Lê processador, RAM e câmeras, abre alguns apps "a frio" e mede o tempo, depois grava e lê 64 MB (arquivo apagado no fim). Dá uma nota de 0 a 1000 — use antes e depois da otimização para comparar.</p>
+      {r?.pontuacao && <div className="mt-4"><Pontuacao p={r.pontuacao} /></div>}
+      {r && (r.hardware || r.cameras) && (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {r.hardware && (
+            <div>
+              <h4 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-fraco"><Cpu size={14} aria-hidden /> Hardware</h4>
+              <Linha rotulo="Núcleos do processador">{r.hardware.nucleos ?? "não verificado"}</Linha>
+              <Linha rotulo="Clock máximo">{r.hardware.ghz_max != null ? `${r.hardware.ghz_max.toLocaleString("pt-BR")} GHz` : "não verificado"}</Linha>
+              <Linha rotulo="RAM">{r.hardware.ram_gb != null ? `${r.hardware.ram_gb.toLocaleString("pt-BR")} GB` : "não verificado"}</Linha>
+            </div>
+          )}
+          {r.cameras && (
+            <div>
+              <h4 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-fraco"><Camera size={14} aria-hidden /> Câmeras</h4>
+              <Linha rotulo="Quantidade">{r.cameras.quantidade ?? "não verificado"}</Linha>
+              <Linha rotulo="Maior resolução">{r.cameras.megapixels_max != null ? `${r.cameras.megapixels_max.toLocaleString("pt-BR")} MP` : "não verificado"}</Linha>
+              <p className="mt-1 text-xs text-fraco">{r.cameras.obs}</p>
+            </div>
+          )}
+        </div>
+      )}
       {r && (
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <div>
@@ -357,7 +487,17 @@ export default function Diagnostico() {
           ))}
         </div>
       )}
+      {d && (
+        <div className="flex items-center gap-4">
+          <Miniatura fabricante={d.fabricante} modelo={d.modelo} wifi={d.wifi} tamanho="lg" />
+          <div>
+            <p className="text-lg font-semibold">{d.fabricante ? `${d.fabricante} ${d.modelo}` : "Android"}</p>
+            <p className="font-mono text-xs text-fraco">{d.android ? `Android ${d.android} · ` : ""}{d.serial}{d.wifi ? " · Wi-Fi" : " · USB"}</p>
+          </div>
+        </div>
+      )}
       <PainelDiagnostico d={d} />
+      <PainelPrint d={d} />
       <PainelLimpeza d={d} />
       <PainelDebloat d={d} />
       <PainelDesempenho d={d} />

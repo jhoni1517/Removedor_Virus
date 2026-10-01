@@ -34,6 +34,25 @@ export function Cartao({ children, className = "" }: { children: ReactNode; clas
   return <section className={`rounded-lg border border-linha bg-superficie ${className}`}>{children}</section>;
 }
 
+/** Miniatura do celular conectado: moldura desenhada (sem internet) com a marca e o modelo na tela. */
+export function Miniatura({ fabricante, modelo, wifi = false, tamanho = "md" }:
+  { fabricante?: string; modelo?: string; wifi?: boolean; tamanho?: "md" | "lg" }) {
+  const dim = tamanho === "lg" ? "h-36 w-[4.5rem]" : "h-24 w-12";
+  const marca = (fabricante || "Android").trim();
+  return (
+    <div className={`relative shrink-0 ${dim} rounded-[0.9rem] border-2 border-zinc-600 bg-zinc-900 p-[3px] shadow-sm`}
+      role="img" aria-label={`Celular ${marca} ${modelo ?? ""}`.trim()}>
+      <div className="flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[0.65rem] bg-superficie-2 bg-gradient-to-b from-destaque/30 to-transparent px-0.5 text-center">
+        <span className="absolute top-[5px] h-[3px] w-3 rounded-full bg-zinc-500" aria-hidden />
+        <span className={`font-semibold leading-tight text-tinta ${tamanho === "lg" ? "text-xs" : "text-[0.55rem]"}`}>{marca}</span>
+        {modelo && <span className={`mt-0.5 line-clamp-2 leading-tight text-fraco ${tamanho === "lg" ? "text-[0.6rem]" : "text-[0.45rem]"}`}>{modelo}</span>}
+      </div>
+      <span className={`absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-superficie ${wifi ? "bg-destaque" : "bg-ok"}`}
+        title={wifi ? "Conectado por Wi-Fi" : "Conectado por USB"} aria-hidden />
+    </div>
+  );
+}
+
 const COR_NIVEL: Record<string, string> = {
   ALTO: "bg-perigo-suave text-perigo border-perigo/30",
   "MÉDIO": "bg-atencao-suave text-atencao border-atencao/30",

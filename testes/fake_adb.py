@@ -75,7 +75,12 @@ if a[0] == "pull":
 if a[0] in ("install", "install-multiple", "uninstall"):
     fim("Success")
 if a[0] == "exec-out" and "screencap" in a[1]:
-    sys.stdout.buffer.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 32)
+    print_real = os.getenv("CELSCAN_FAKE_PRINT")  # PNG de verdade para ver a prévia na interface
+    if print_real and os.path.isfile(print_real):
+        with open(print_real, "rb") as f:
+            sys.stdout.buffer.write(f.read())
+    else:
+        sys.stdout.buffer.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 32)
     sys.exit(0)
 if a[0] == "exec-out":
     m = re.search(r"dd if=(\S+) bs=(\d+) skip=(\d+) count=(\d+)", a[1])
@@ -173,5 +178,26 @@ if a[0] == "shell":
         fim("Package x new state: enabled")
     if c.startswith("dpm remove-active-admin"):
         fim("Success: Admin removed ComponentInfo{" + c.split()[-1] + "}")
+    # ---- teste de desempenho (pontuação): apps, disco, CPU, RAM e câmeras
+    if c == "pm list packages":
+        fim("\n".join(f"package:{p}" for p in ["com.android.settings", *PACOTES]))
+    if c.startswith("cmd package resolve-activity"):
+        fim(f"priority=0 preferredOrder=0\n{c.split()[-1]}/.Principal")
+    if c.startswith("am start -W"):
+        fim("Status: ok\nLaunchState: COLD\nTotalTime: 720\nWaitTime: 740\nComplete")
+    if c.startswith("dd if=/dev/zero"):
+        fim("67108864 bytes (64 M) copied, 0.6 s, 106 M/s")
+    if c.startswith("dd if="):
+        fim("67108864 bytes (64 M) copied, 0.2 s, 320 M/s")
+    if c == "cat /proc/cpuinfo":
+        fim("\n".join(f"processor\t: {i}" for i in range(8)))
+    if c.startswith("cat /sys/devices/system/cpu/"):
+        fim("1800000\n1800000\n2400000\n2400000\n2400000\n2400000\n2800000\n2800000")
+    if c == "head -3 /proc/meminfo":
+        fim("MemTotal:        7864320 kB\nMemFree:          512000 kB\nMemAvailable:    3145728 kB")
+    if c.startswith("dumpsys media.camera"):
+        fim("Camera 0 information:\n  Resolution: 8000x6000\n"
+            "Camera 1 information:\n  Resolution: 4000x3000\n"
+            "Camera 2 information:\n  Resolution: 1920x1080")
     fim()
 fim()

@@ -92,3 +92,13 @@ def test_diagnostico_variantes():
     assert round(parsers.df(ler_fixture("sintetico/variantes/df_quebrado.txt"))["livre_gb"], 1) == 11.7
     assert parsers.bateria("Error: can't find service") is None
     assert parsers.df("") is None and parsers.meminfo("") is None
+
+
+def test_identificacao_usa_nomes_curtos():
+    # A tela, a CLI e o laudo leem "model", "release"... — não o nome cru da propriedade.
+    txt = ("ro.product.manufacturer=Xiaomi\nro.product.model=24090RA29G\nro.product.marketname=Redmi Note 14\n"
+           "ro.serialno=ABC123\nro.build.version.release=16\nro.build.version.security_patch=2026-07-01\n"
+           "ro.vazio=\n")
+    assert parsers.identificacao(txt) == {
+        "manufacturer": "Xiaomi", "model": "24090RA29G", "marketname": "Redmi Note 14",
+        "serial": "ABC123", "release": "16", "security_patch": "2026-07-01"}
