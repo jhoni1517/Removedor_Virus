@@ -4,7 +4,7 @@ import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 import { aplicarTema, coresDoLogo, lerCoresLoja, salvarCoresLoja, TEMAS } from "../tema";
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean }
 
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar } = useApp();
@@ -115,6 +115,18 @@ export default function Configuracoes() {
           ))}
         </div>
       </Cartao>
+
+      {cfg?.agente_disponivel && (
+        <Cartao className="p-5">
+          <h2 className="font-semibold">CelScan Agente</h2>
+          <label className="mt-2 flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--destaque)]" checked={cfg.usar_agente}
+              onChange={(e) => salvar({ usar_agente: e.target.checked })} />
+            <span>Usar na varredura para mostrar o nome e o ícone de todos os apps mais rápido. Ele é instalado
+              só durante a análise (sem ícone, sem internet, só leitura) e removido no fim.</span>
+          </label>
+        </Cartao>
+      )}
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Atualizações</h2>

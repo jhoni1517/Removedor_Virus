@@ -121,6 +121,14 @@ if a[0] == "shell":
         if kb > 0:
             print(f"{kb}\t{alvo.rstrip('/')}")
         fim()
+    if c.startswith("content query --uri"):
+        if "/versao" in c:
+            fim("Row: 0 versao=1")
+        if "/apps" in c:
+            fim(fixture("agente_apps.txt"))
+        if "/uso" in c:
+            fim(fixture("agente_uso.txt"))
+        fim("No result found.")
     if c.startswith("pm trim-caches") or c.startswith("rm -rf") or "rm -rf" in c:
         fim()
     if c.startswith("sha256sum "):

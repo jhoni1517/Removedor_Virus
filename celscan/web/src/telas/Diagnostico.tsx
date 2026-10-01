@@ -248,6 +248,69 @@ function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
   );
 }
 
+interface Esquecido { pacote: string; nome: string; icone: string | null; instalado: string | null; ultimo_uso: string | null }
+
+function PainelEsquecidos({ d }: { d: Dispositivo | undefined }) {
+  const { esperar, avisar } = useApp();
+  const [dados, setDados] = useState<{ dias: number; apps: Esquecido[]; total_usuario: number } | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [ocupado, setOcupado] = useState(false);
+  const pronto = d?.estado === "device";
+  const data = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+
+  async function procurar() {
+    setOcupado(true);
+    try {
+      const t = await esperar(await api<Tarefa<{ dias: number; apps: Esquecido[]; total_usuario: number }>>("/apps-esquecidos", { corpo: { serial: d!.serial, dias: 90 } }));
+      if (t.estado === "concluida" && t.resultado) { setDados(t.resultado); setEscolhidos(new Set()); }
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui ler o uso dos apps." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+  async function remover() {
+    setOcupado(true);
+    try {
+      const t = await esperar(await api<Tarefa<{ pacote: string; ok: boolean }[]>>("/apps-esquecidos/remover", { corpo: { serial: d!.serial, pacotes: [...escolhidos] } }));
+      const ok = (t.resultado ?? []).filter((x) => x.ok).map((x) => x.pacote);
+      avisar({ tipo: ok.length ? "ok" : "erro", texto: `${ok.length} app(s) removido(s), com cópia na quarentena (dá para desfazer).` });
+      setDados((x) => x && { ...x, apps: x.apps.filter((a) => !ok.includes(a.pacote)) });
+      setEscolhidos(new Set());
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+
+  return (
+    <Cartao className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-semibold"><HardDrive size={18} aria-hidden /> Apps esquecidos</h3>
+        <Botao onClick={procurar} disabled={!pronto || ocupado}>{ocupado && !dados ? "Lendo..." : "Procurar"}</Botao>
+      </div>
+      <p className="mt-1 text-sm text-fraco">Apps que você instalou e não abre há 90 dias. Para ler o uso, o CelScan instala um app auxiliar temporário (sem ícone, sem internet) e o remove no fim.</p>
+      {dados && (dados.apps.length === 0 ? <p className="mt-3 text-sm text-fraco">Nenhum app esquecido. Todos os {dados.total_usuario} apps foram usados recentemente.</p> : (
+        <>
+          <p className="mt-3 text-sm"><strong>{dados.apps.length}</strong> de {dados.total_usuario} apps não foram abertos nos últimos {dados.dias} dias.</p>
+          <ul className="mt-2 max-h-80 space-y-1 overflow-auto">
+            {dados.apps.map((a) => (
+              <li key={a.pacote}>
+                <label className="flex items-center gap-3 rounded-md border border-linha p-2 text-sm">
+                  <input type="checkbox" className="accent-[var(--destaque)]" checked={escolhidos.has(a.pacote)}
+                    onChange={() => setEscolhidos((x) => { const n = new Set(x); if (n.has(a.pacote)) n.delete(a.pacote); else n.add(a.pacote); return n; })} />
+                  {a.icone ? <img src={a.icone} alt="" className="h-8 w-8 rounded" /> : <span className="h-8 w-8 rounded bg-superficie-2" />}
+                  <span className="flex-1"><span className="font-medium">{a.nome}</span>
+                    <span className="block text-xs text-fraco">Instalado em {data(a.instalado)} · último uso: {a.ultimo_uso ? data(a.ultimo_uso) : "não usado no período"}</span></span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <Botao className="mt-3" variante="perigo" onClick={remover} disabled={ocupado || escolhidos.size === 0}>
+            Remover {escolhidos.size} app(s)
+          </Botao>
+        </>
+      ))}
+    </Cartao>
+  );
+}
+
 function PainelIPhone() {
   const [dados, setDados] = useState<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string } | null>(null);
   useEffect(() => { api<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string }>("/ios/estado").then(setDados).catch(() => undefined); }, []);
@@ -298,6 +361,7 @@ export default function Diagnostico() {
       <PainelLimpeza d={d} />
       <PainelDebloat d={d} />
       <PainelDesempenho d={d} />
+      <PainelEsquecidos d={d} />
       <PainelIPhone />
     </div>
   );

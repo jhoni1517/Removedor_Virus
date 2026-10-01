@@ -7,6 +7,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  agente:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar o CelScan Agente (Android)
+        run: bash agente/construir.sh
+
   interface:
     runs-on: ubuntu-latest
     steps:

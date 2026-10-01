@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CelScan Agente: app auxiliar temporário (instalado pelo CelScan via adb e removido no fim).
+  Só lê nome, ícone, datas e tempo de uso dos apps. Não tem ícone, não acessa a internet e só
+  responde ao shell do adb (permissão DUMP + conferência do UID no código).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.celscan.agente"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+
+    <!-- Android 11+: sem isto o app só "enxerga" alguns pacotes. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Concedida pelo CelScan com "appops set ... GET_USAGE_STATS allow" (nada para o usuário tocar). -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
+    <application
+        android:label="CelScan Agente"
+        android:allowBackup="false"
+        android:hasCode="true">
+        <provider
+            android:name=".Dados"
+            android:authorities="com.celscan.agente.dados"
+            android:exported="true"
+            android:readPermission="android.permission.DUMP" />
+    </application>
+</manifest>

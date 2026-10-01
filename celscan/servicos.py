@@ -18,6 +18,7 @@ from celscan.analise import iocs as iocs_mod
 from celscan.analise.pontuacao import nota
 from celscan.analise.virustotal import VirusTotal
 from celscan.core import adb, bases, db, log, preferencias
+from celscan.core import agente as agente_mod
 from celscan.core.adb import AdbErro, Aparelho
 from celscan.varredura import Varredura
 
@@ -174,8 +175,19 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         cands = sc.candidatos()
         with log.etapa("assinaturas"):
             _em_paralelo(cands, sc.ler_certificado, lambda i, pkg: passos.etapa("assinaturas", i, len(cands), pkg))
+        sem_nome = cands
+        if preferencias.ler().get("usar_agente") and agente_mod.disponivel():
+            passos.etapa("rotulos", 0, len(cands), "CelScan Agente")
+            try:
+                with log.etapa("agente"), agente_mod.Agente(ap) as ag:
+                    for pkg, dados in ag.apps(icones=True).items():
+                        if pkg in sc.apps:
+                            sc.apps[pkg].nome, sc.apps[pkg].icone = dados["nome"], dados["icone"]
+                sem_nome = [p for p in cands if not sc.apps[p].nome]
+            except AdbErro as e:  # inclui AgenteIndisponivel: cai para a leitura do APK
+                avisos.append(f"CelScan Agente indisponível ({e}); nomes lidos direto dos APKs.")
         with log.etapa("rotulos"):
-            _em_paralelo(cands, sc.ler_rotulo, lambda i, pkg: passos.etapa("rotulos", i, len(cands), pkg))
+            _em_paralelo(sem_nome, sc.ler_rotulo, lambda i, pkg: passos.etapa("rotulos", i, len(sem_nome), pkg))
 
         if vt:
             alvo = sc.candidatos(todos=opcoes.vt_todos)

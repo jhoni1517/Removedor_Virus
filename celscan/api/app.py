@@ -29,7 +29,7 @@ from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
 from celscan.api.tarefas import Gerenciador
-from celscan.core import adb, balcao, db, log, preferencias
+from celscan.core import adb, agente, balcao, db, log, preferencias
 
 WEB = config.PACOTE / "web" / "dist"
 HOSTS = ("127.0.0.1", "localhost", "testserver")
@@ -78,6 +78,11 @@ class PedidoPrecos(BaseModel):
     precos: dict[str, float]
 
 
+class PedidoEsquecidos(BaseModel):
+    serial: str
+    dias: int = Field(default=90, ge=7, le=365)
+
+
 class PedidoDebloat(BaseModel):
     serial: str
     pacotes: list[str] = Field(min_length=1)
@@ -112,6 +117,7 @@ class PedidoConfig(BaseModel):
     offline: bool | None = None
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
+    usar_agente: bool | None = None
 
 
 class PedidoEspelho(BaseModel):
@@ -491,7 +497,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         chave = preferencias.chave_virustotal()
         return {"chave_virustotal": f"…{chave[-4:]}" if chave else None, "offline": config.OFFLINE,
                 "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
-                "canal_atualizacao": c.get("canal_atualizacao", "beta")}
+                "canal_atualizacao": c.get("canal_atualizacao", "beta"),
+                "usar_agente": bool(c.get("usar_agente", False)), "agente_disponivel": agente.disponivel()}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:
@@ -738,6 +745,40 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                        "atual": None, "total": None, "estimativa_s": 40})
             return {"liberado_mb": otimizacao.limpar_cache(ap)}
         return nova_tarefa("limpeza_cache", p.serial, rodar)
+
+    # ---- apps esquecidos (CelScan Agente: instalado só durante a leitura)
+    @app.post("/api/apps-esquecidos")
+    def apps_esquecidos(p: PedidoEsquecidos) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        if not agente.disponivel():
+            raise HTTPException(409, "O CelScan Agente não veio nesta instalação.")
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "agente", "descricao": "Instalando o Agente temporário e lendo o uso dos apps",
+                       "detalhe": "ele é removido no fim", "atual": None, "total": None, "estimativa_s": 20})
+            try:
+                return agente.apps_esquecidos(ap, p.dias)
+            except agente.AgenteIndisponivel as e:
+                raise RuntimeError(str(e)) from e
+        return nova_tarefa("apps_esquecidos", p.serial, rodar)
+
+    @app.post("/api/apps-esquecidos/remover")
+    def remover_esquecidos(p: PedidoDebloat) -> dict[str, Any]:
+        from celscan.acoes import remocao
+
+        ap = aparelhos.pronto(p.serial)
+
+        def rodar(progresso, cancelar):
+            feitos = []
+            for i, pkg in enumerate(p.pacotes, 1):
+                progresso({"etapa": "remocao", "descricao": "Removendo apps esquecidos (cópia na quarentena)",
+                           "detalhe": pkg, "atual": i, "total": len(p.pacotes),
+                           "estimativa_s": 5 * (len(p.pacotes) - i)})
+                r = {"pacote": pkg, "motivos": ["app esquecido (não usado há muito tempo)"]}
+                ok, msg = remocao.remover(ap, r)
+                feitos.append({"pacote": pkg, "ok": ok, "mensagem": msg, "quarentena_id": r.get("quarentena_id")})
+            return feitos
+        return nova_tarefa("remocao", p.serial, rodar)
 
     @app.get("/api/debloat")
     def debloat_sugestoes(serial: str, nivel: str = "recomendado") -> dict[str, Any]:

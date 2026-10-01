@@ -1,0 +1,4 @@
+Row: 0 pacote=com.whatsapp, nome=V2hhdHNBcHA=, icone=iVBORw0KGgpmYWtl, sistema=0, instalado=1700000000000, atualizado=1759000000000
+Row: 1 pacote=com.exemplo.jogo, nome=Sm9nbyBkYXMgRnJ1dGFzLCBFZGnDp8OjbyAy, icone=iVBORw0KGgpmYWtl, sistema=0, instalado=1690000000000, atualizado=1690000000000
+Row: 2 pacote=com.android.settings, nome=Q29uZmlndXJhw6fDtWVz, icone=NULL, sistema=1, instalado=0, atualizado=0
+Row: 3 pacote=com.celscan.agente, nome=Q2VsU2NhbiBBZ2VudGU=, icone=NULL, sistema=0, instalado=0, atualizado=0

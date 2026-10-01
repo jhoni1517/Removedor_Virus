@@ -1,0 +1,2 @@
+Row: 0 pacote=com.whatsapp, ultimo_uso=1790850247753, frente_ms=5400000
+Row: 1 pacote=com.exemplo.jogo, ultimo_uso=0, frente_ms=0
