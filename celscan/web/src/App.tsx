@@ -33,14 +33,16 @@ const SECOES: { id: Secao; nome: string; icone: typeof ScanLine }[] = [
 
 function Marca() {
   return (
-    <div className="flex items-center gap-2 px-2">
-      <svg viewBox="0 0 32 32" className="h-8 w-8" aria-hidden>
-        <rect x="8" y="3" width="16" height="26" rx="3" fill="none" stroke="var(--tinta)" strokeWidth="2" />
-        <path d="M4 16h24" stroke="var(--destaque)" strokeWidth="2" strokeLinecap="round" />
-        <path d="M4 10V6a2 2 0 0 1 2-2h2M28 10V6a2 2 0 0 0-2-2h-2M4 22v4a2 2 0 0 0 2 2h2M28 22v4a2 2 0 0 1-2 2h-2"
-          fill="none" stroke="var(--destaque)" strokeWidth="1.5" />
-      </svg>
-      <span className="font-mono text-lg font-semibold tracking-tight">CelScan</span>
+    <div className="flex items-center gap-2.5 px-2">
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-[image:var(--grad-destaque)] shadow-[var(--brilho)]">
+        <svg viewBox="0 0 32 32" className="h-6 w-6" aria-hidden>
+          <rect x="8" y="3" width="16" height="26" rx="3" fill="none" stroke="var(--superficie)" strokeWidth="2" />
+          <path d="M4 16h24" stroke="var(--superficie)" strokeWidth="2" strokeLinecap="round" />
+          <path d="M4 10V6a2 2 0 0 1 2-2h2M28 10V6a2 2 0 0 0-2-2h-2M4 22v4a2 2 0 0 0 2 2h2M28 22v4a2 2 0 0 1-2 2h-2"
+            fill="none" stroke="var(--superficie)" strokeWidth="1.5" opacity="0.85" />
+        </svg>
+      </span>
+      <span className="marca-grad font-mono text-xl font-bold tracking-tight">CelScan</span>
     </div>
   );
 }
@@ -112,7 +114,7 @@ export default function App() {
   return (
     <div className="flex h-full">
       <a href="#conteudo" className="pular-link">Pular para o conteúdo</a>
-      <nav className="flex w-60 shrink-0 flex-col border-r border-linha bg-superficie py-5" aria-label="Seções">
+      <nav className="flex w-60 shrink-0 flex-col border-r border-linha bg-superficie py-5 shadow-[var(--sombra)]" aria-label="Seções">
         <Marca />
         <ul className="mt-8 space-y-1 px-3">
           {SECOES.map((s, i) => {
@@ -121,8 +123,8 @@ export default function App() {
             return (
               <li key={s.id}>
                 <button onClick={() => setSecao(s.id)} aria-current={ativo ? "page" : undefined}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                    ativo ? "bg-destaque-suave font-semibold text-destaque" : "text-fraco hover:bg-superficie-2 hover:text-tinta"}`}>
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+                    ativo ? "nav-ativo font-semibold text-destaque" : "text-fraco hover:bg-superficie-2 hover:text-tinta"}`}>
                   <Icone size={17} aria-hidden /> <span className="flex-1 text-left">{s.nome}</span>
                   <kbd className="font-mono text-[10px] text-fraco">Alt {i + 1}</kbd>
                 </button>

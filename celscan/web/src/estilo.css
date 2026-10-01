@@ -7,44 +7,84 @@
 @import "@fontsource/ibm-plex-mono/latin-500.css";
 @import "@fontsource/ibm-plex-mono/latin-600.css";
 
-/* Tokens da "bancada técnica". O tema escuro troca só os valores. */
+/* Tokens da "bancada técnica". Cada tema troca só os valores.
+   --sombra/--brilho/--grad-* dão profundidade; os temas escuros ganham brilho de acento. */
 :root {
-  --papel: #f3f2ee;
+  --papel: #eef0f4;
   --superficie: #ffffff;
-  --superficie-2: #f8f7f4;
-  --tinta: #17191b;
-  --fraco: #5d646c;
-  --linha: #dad7cf;
-  --grade: rgba(23, 25, 27, 0.055);
-  --destaque: #24578a;
-  --destaque-suave: #e3ecf5;
-  --ok: #1e7a4c;
-  --ok-suave: #e1f1e8;
-  --atencao: #a86a12;
-  --atencao-suave: #fbf0dc;
-  --perigo: #b3261e;
-  --perigo-suave: #fbe4e1;
-  --foco: #24578a;
+  --superficie-2: #f5f7fa;
+  --tinta: #141a22;
+  --fraco: #5a6472;
+  --linha: #dde2ea;
+  --grade: rgba(20, 26, 34, 0.045);
+  --destaque: #1f6feb;
+  --destaque-2: #4aa3ff;
+  --destaque-suave: #e4eefb;
+  --ok: #1a7f4b;
+  --ok-suave: #e1f3e9;
+  --atencao: #9a6410;
+  --atencao-suave: #fbf0da;
+  --perigo: #c22a22;
+  --perigo-suave: #fce3e1;
+  --foco: #1f6feb;
+  --sombra: 0 1px 2px rgba(20, 26, 34, 0.06), 0 6px 20px rgba(20, 26, 34, 0.05);
+  --sombra-forte: 0 12px 34px rgba(20, 26, 34, 0.14);
+  --brilho: none;
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 42%);
+  --grad-destaque: linear-gradient(135deg, var(--destaque), var(--destaque-2, var(--destaque)));
+  --grad-barra: linear-gradient(90deg, var(--papel), var(--superficie-2));
   color-scheme: light;
 }
 
 :root.escuro {
-  --papel: #0f1113;
-  --superficie: #171a1d;
-  --superficie-2: #1d2124;
-  --tinta: #e8e6e1;
-  --fraco: #9aa1a8;
-  --linha: #2c3135;
-  --grade: rgba(232, 230, 225, 0.04);
-  --destaque: #7fb2e5;
-  --destaque-suave: #1b2a38;
-  --ok: #4fc289;
-  --ok-suave: #15291f;
-  --atencao: #e8b04a;
-  --atencao-suave: #2d2413;
-  --perigo: #f07366;
-  --perigo-suave: #321816;
-  --foco: #7fb2e5;
+  --papel: #0b0e12;
+  --superficie: #141922;
+  --superficie-2: #1b212c;
+  --tinta: #e9edf3;
+  --fraco: #93a0b2;
+  --linha: #272f3b;
+  --grade: rgba(120, 200, 255, 0.045);
+  --destaque: #3cc6ff;
+  --destaque-2: #6ad7ff;
+  --destaque-suave: #0e2634;
+  --ok: #41d392;
+  --ok-suave: #0f2a1e;
+  --atencao: #f0b84c;
+  --atencao-suave: #2c2412;
+  --perigo: #ff6f61;
+  --perigo-suave: #2e1512;
+  --foco: #3cc6ff;
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.4);
+  --sombra-forte: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --brilho: 0 0 0 1px rgba(60, 198, 255, 0.12), 0 0 22px rgba(60, 198, 255, 0.14);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 36%);
+  color-scheme: dark;
+}
+
+/* Oficina: bancada high-tech (grafite profundo + acento ciano com brilho), inspirado nos
+   painéis de overclock. Visual de destaque do CelScan. */
+:root[data-tema="oficina"] {
+  --papel: #0a0c10;
+  --superficie: #12161d;
+  --superficie-2: #171c25;
+  --tinta: #eaf2f7;
+  --fraco: #8b97a8;
+  --linha: #232a35;
+  --grade: rgba(0, 224, 198, 0.05);
+  --destaque: #00e0c6;
+  --destaque-2: #39ff8b;
+  --destaque-suave: #06231f;
+  --ok: #39ff8b;
+  --ok-suave: #06231a;
+  --atencao: #ffc24b;
+  --atencao-suave: #2a2210;
+  --perigo: #ff5d6c;
+  --perigo-suave: #2c1013;
+  --foco: #00e0c6;
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --sombra-forte: 0 18px 44px rgba(0, 0, 0, 0.6);
+  --brilho: 0 0 0 1px rgba(0, 224, 198, 0.16), 0 0 26px rgba(0, 224, 198, 0.16);
+  --sheen: linear-gradient(180deg, rgba(0, 224, 198, 0.08), transparent 40%);
   color-scheme: dark;
 }
 
@@ -58,6 +98,7 @@
   --linha: #1f3a1d;
   --grade: rgba(120, 255, 120, 0.05);
   --destaque: #5df26b;
+  --destaque-2: #a8ff7a;
   --destaque-suave: #10260f;
   --ok: #5df26b;
   --ok-suave: #10260f;
@@ -66,6 +107,8 @@
   --perigo: #ff6b5a;
   --perigo-suave: #2e0f0b;
   --foco: #ffb84d;
+  --brilho: 0 0 0 1px rgba(93, 242, 107, 0.14), 0 0 20px rgba(93, 242, 107, 0.12);
+  --sheen: linear-gradient(180deg, rgba(93, 242, 107, 0.06), transparent 40%);
   color-scheme: dark;
 }
 :root[data-tema="terminal"] body { font-family: var(--font-mono); }
@@ -80,6 +123,7 @@
   --linha: #ffffff;
   --grade: transparent;
   --destaque: #ffd400;
+  --destaque-2: #ffd400;
   --destaque-suave: #262000;
   --ok: #6bff8f;
   --ok-suave: #002a0c;
@@ -88,6 +132,10 @@
   --perigo: #ff7b7b;
   --perigo-suave: #2e0000;
   --foco: #ffd400;
+  --sombra: none;
+  --sombra-forte: none;
+  --brilho: none;
+  --sheen: none;
   color-scheme: dark;
 }
 :root[data-tema="contraste"] :focus-visible { outline-width: 3px; }
@@ -110,6 +158,7 @@ html { font-size: calc(16px * var(--escala, 1)); }
   --color-fraco: var(--fraco);
   --color-linha: var(--linha);
   --color-destaque: var(--destaque);
+  --color-destaque-2: var(--destaque-2, var(--destaque));
   --color-destaque-suave: var(--destaque-suave);
   --color-ok: var(--ok);
   --color-ok-suave: var(--ok-suave);
@@ -194,3 +243,29 @@ body {
 
 .qr svg { width: 100%; height: auto; display: block; }
 .qr svg path { fill: #000; }
+
+/* Brilho de topo (sheen) em cartões e painéis, some em alto contraste (--sheen: none) */
+.realce { position: relative; isolation: isolate; }
+.realce::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sheen);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Cabeçalho da barra lateral com leve gradiente do acento */
+.marca-grad {
+  background: var(--grad-destaque);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Item ativo do menu: barra de acento + leve brilho */
+.nav-ativo {
+  background: var(--destaque-suave);
+  box-shadow: inset 3px 0 0 0 var(--destaque), var(--brilho);
+}

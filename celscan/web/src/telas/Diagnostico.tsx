@@ -1,4 +1,4 @@
-import { Activity, Apple, BatteryCharging, Camera, Cpu, FolderOpen, Gauge, HardDrive, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Activity, Apple, BatteryCharging, Camera, Cpu, FolderOpen, Gauge, HardDrive, Power, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
@@ -34,6 +34,58 @@ const COR_PECA: Record<Peca["nivel"], string> = {
   medio: "border-atencao/40 bg-atencao-suave",
   baixo: "border-linha bg-superficie-2",
 };
+
+interface ModoEnergia { chave: string; nome: string; descricao: string; aviso: string }
+
+function PainelEnergia({ d }: { d: Dispositivo | undefined }) {
+  const { avisar } = useApp();
+  const [modos, setModos] = useState<ModoEnergia[]>([]);
+  const [confirmar, setConfirmar] = useState<ModoEnergia | null>(null);
+  const pronto = d?.estado === "device";
+
+  useEffect(() => { api<ModoEnergia[]>("/energia/modos").then(setModos).catch(() => undefined); }, []);
+
+  async function reiniciar(m: ModoEnergia) {
+    setConfirmar(null);
+    try {
+      const r = await api<{ nome: string; aviso: string }>("/energia/reiniciar", { corpo: { serial: d!.serial, modo: m.chave } });
+      avisar({ tipo: "ok", texto: `${r.nome} enviado. ${r.aviso}`, duracao: 12000 });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
+
+  return (
+    <Cartao className="p-5">
+      <h3 className="flex items-center gap-2 font-semibold"><Power size={18} aria-hidden /> Reiniciar e modos de manutenção</h3>
+      <p className="mt-1 text-sm text-fraco">Reiniciar não apaga nada nem mexe na senha — é o mesmo que segurar o botão de ligar.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {modos.map((m) => (
+          <button key={m.chave} onClick={() => setConfirmar(m)} disabled={!pronto}
+            className="realce rounded-lg border border-linha bg-superficie-2 p-3 text-left text-sm transition hover:border-destaque/50 disabled:cursor-not-allowed disabled:opacity-45">
+            <span className="font-semibold">{m.nome}</span>
+            <span className="mt-1 block text-xs text-fraco">{m.descricao}</span>
+          </button>
+        ))}
+      </div>
+      {!pronto && <p className="mt-2 text-sm text-fraco">Precisa do celular conectado e autorizado.</p>}
+      {confirmar && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" onClick={() => setConfirmar(null)}>
+          <Cartao className="max-w-md p-5" >
+            <div onClick={(e) => e.stopPropagation()}>
+              <h4 className="flex items-center gap-2 font-semibold"><Power size={16} aria-hidden /> {confirmar.nome}?</h4>
+              <p className="mt-2 text-sm">{confirmar.aviso}</p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Botao onClick={() => setConfirmar(null)}>Cancelar</Botao>
+                <Botao variante={confirmar.chave === "bootloader" ? "perigo" : "primario"} onClick={() => reiniciar(confirmar)}>
+                  {confirmar.nome}
+                </Botao>
+              </div>
+            </div>
+          </Cartao>
+        </div>
+      )}
+    </Cartao>
+  );
+}
 
 function PainelPrint({ d }: { d: Dispositivo | undefined }) {
   const { avisar } = useApp();
@@ -285,7 +337,7 @@ function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
 interface Desempenho { apps: { pacote: string; ms: number | null; erro: string | null }[]; media_abertura_ms: number | null;
   armazenamento: { gravacao_mb_s: number | null; leitura_mb_s: number | null; obs: string };
   hardware?: { nucleos: number | null; ghz_max: number | null; ram_gb: number | null };
-  cameras?: { quantidade: number | null; megapixels_max: number | null; obs: string };
+  cameras?: { total: number | null; traseiras: number | null; frontais: number | null; megapixels_max: number | null; obs: string };
   pontuacao?: { total: number | null; categorias: Record<"hardware" | "armazenamento" | "fluidez", number | null>; obs: string } }
 
 const NOME_CATEGORIA = { hardware: "Hardware (processador e RAM)", armazenamento: "Armazenamento", fluidez: "Fluidez (abertura de apps)" } as const;
@@ -353,8 +405,10 @@ function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
           {r.cameras && (
             <div>
               <h4 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-fraco"><Camera size={14} aria-hidden /> Câmeras</h4>
-              <Linha rotulo="Quantidade">{r.cameras.quantidade ?? "não verificado"}</Linha>
-              <Linha rotulo="Maior resolução">{r.cameras.megapixels_max != null ? `${r.cameras.megapixels_max.toLocaleString("pt-BR")} MP` : "não verificado"}</Linha>
+              <Linha rotulo="Sensores (total)">{r.cameras.total ?? "não verificado"}</Linha>
+              {r.cameras.traseiras != null && <Linha rotulo="Traseiras">{r.cameras.traseiras}</Linha>}
+              {r.cameras.frontais != null && <Linha rotulo="Frontais">{r.cameras.frontais}</Linha>}
+              <Linha rotulo="Maior foto">{r.cameras.megapixels_max != null ? `${r.cameras.megapixels_max.toLocaleString("pt-BR")} MP` : "não verificado"}</Linha>
               <p className="mt-1 text-xs text-fraco">{r.cameras.obs}</p>
             </div>
           )}
@@ -498,6 +552,7 @@ export default function Diagnostico() {
       )}
       <PainelDiagnostico d={d} />
       <PainelPrint d={d} />
+      <PainelEnergia d={d} />
       <PainelLimpeza d={d} />
       <PainelDebloat d={d} />
       <PainelDesempenho d={d} />

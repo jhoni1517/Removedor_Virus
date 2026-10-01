@@ -6,8 +6,8 @@ import { useApp } from "./estado";
 type Variante = "primario" | "secundario" | "perigo" | "fantasma";
 
 const VARIANTES: Record<Variante, string> = {
-  primario: "bg-destaque text-superficie hover:brightness-110 border-transparent",
-  secundario: "bg-superficie text-tinta border-linha hover:bg-superficie-2",
+  primario: "bg-[image:var(--grad-destaque)] text-superficie border-transparent shadow-[var(--brilho)] hover:brightness-110",
+  secundario: "bg-superficie text-tinta border-linha shadow-[var(--sombra)] hover:bg-superficie-2",
   perigo: "bg-perigo text-superficie hover:brightness-110 border-transparent",
   fantasma: "bg-transparent text-fraco border-transparent hover:text-tinta hover:bg-superficie-2",
 };
@@ -31,7 +31,7 @@ export function Botao({
 }
 
 export function Cartao({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-linha bg-superficie ${className}`}>{children}</section>;
+  return <section className={`realce rounded-xl border border-linha bg-superficie shadow-[var(--sombra)] ${className}`}>{children}</section>;
 }
 
 /** Miniatura do celular conectado: moldura desenhada (sem internet) com a marca e o modelo na tela. */
@@ -83,19 +83,27 @@ export function Medidor({ nota, veredito }: { nota: number; veredito: string }) 
     const id = requestAnimationFrame(() => setValor(nota));
     return () => cancelAnimationFrame(id);
   }, [nota]);
+  const cor = corNota(nota);
+  const gid = `g-medidor-${Math.round(nota)}`;
   return (
     <div className="relative h-36 w-36 shrink-0" role="img" aria-label={`Nota ${nota} de 100: ${veredito}`}>
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={cor} stopOpacity="0.65" />
+            <stop offset="100%" stopColor={cor} />
+          </linearGradient>
+        </defs>
         <circle cx="60" cy="60" r={r} fill="none" stroke="var(--linha)" strokeWidth="9" />
         <circle
-          cx="60" cy="60" r={r} fill="none" stroke={corNota(nota)} strokeWidth="9" strokeLinecap="round"
+          cx="60" cy="60" r={r} fill="none" stroke={`url(#${gid})`} strokeWidth="9" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - valor / 100)}
-          style={{ transition: "stroke-dashoffset 0.9s ease-out" }}
+          style={{ transition: "stroke-dashoffset 0.9s ease-out", filter: `drop-shadow(0 0 5px ${cor}66)` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="numeros font-mono text-4xl font-semibold" style={{ color: corNota(nota) }}>{nota}</span>
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: corNota(nota) }}>{veredito}</span>
+        <span className="numeros font-mono text-4xl font-semibold" style={{ color: cor }}>{nota}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: cor }}>{veredito}</span>
       </div>
     </div>
   );

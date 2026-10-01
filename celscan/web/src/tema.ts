@@ -1,13 +1,17 @@
 // Temas do CelScan: tokens vêm do estilo.css; aqui só se escolhe qual vale e se aplica a marca da loja.
 
 export const TEMAS: { id: string; nome: string; amostra: [string, string, string] }[] = [
-  { id: "sistema", nome: "Igual ao sistema", amostra: ["#f3f2ee", "#24578a", "#0f1113"] },
-  { id: "claro", nome: "Bancada", amostra: ["#f3f2ee", "#24578a", "#17191b"] },
-  { id: "escuro", nome: "Noite", amostra: ["#0f1113", "#7fb2e5", "#e8e6e1"] },
+  { id: "oficina", nome: "Oficina (destaque)", amostra: ["#0a0c10", "#00e0c6", "#39ff8b"] },
+  { id: "sistema", nome: "Igual ao sistema", amostra: ["#eef0f4", "#1f6feb", "#0b0e12"] },
+  { id: "claro", nome: "Bancada", amostra: ["#eef0f4", "#1f6feb", "#141a22"] },
+  { id: "escuro", nome: "Noite", amostra: ["#0b0e12", "#3cc6ff", "#e9edf3"] },
   { id: "terminal", nome: "Terminal", amostra: ["#050705", "#5df26b", "#ffb84d"] },
   { id: "contraste", nome: "Alto contraste", amostra: ["#000000", "#ffd400", "#ffffff"] },
-  { id: "loja", nome: "Minha loja", amostra: ["#f3f2ee", "#888888", "#17191b"] },
+  { id: "loja", nome: "Minha loja", amostra: ["#eef0f4", "#888888", "#141a22"] },
 ];
+
+// Temas que usam o atributo data-tema (em vez da classe .escuro)
+const TEMAS_ATRIBUTO = new Set(["terminal", "contraste", "oficina"]);
 
 export interface CoresLoja { destaque: string; suave: string }
 const CHAVE_LOJA = "celscan-cores-loja";
@@ -24,12 +28,13 @@ export function aplicarTema(tema: string, escala = 1) {
   const raiz = document.documentElement;
   const sistemaEscuro = window.matchMedia("(prefers-color-scheme: dark)").matches;
   raiz.classList.toggle("escuro", tema === "escuro" || (tema === "sistema" && sistemaEscuro));
-  if (tema === "terminal" || tema === "contraste") raiz.setAttribute("data-tema", tema);
+  if (TEMAS_ATRIBUTO.has(tema)) raiz.setAttribute("data-tema", tema);
   else raiz.removeAttribute("data-tema");
-  for (const k of ["--destaque", "--destaque-suave", "--foco"]) raiz.style.removeProperty(k);
+  for (const k of ["--destaque", "--destaque-2", "--destaque-suave", "--foco"]) raiz.style.removeProperty(k);
   const loja = tema === "loja" ? lerCoresLoja() : null;
   if (loja) {
     raiz.style.setProperty("--destaque", loja.destaque);
+    raiz.style.setProperty("--destaque-2", loja.destaque);
     raiz.style.setProperty("--foco", loja.destaque);
     raiz.style.setProperty("--destaque-suave", loja.suave);
   }
