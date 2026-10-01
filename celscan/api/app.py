@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, navegacao, otimizacao, quarentena, recuperacao
+from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -66,6 +66,14 @@ class PedidoRemocao(BaseModel):
     serial: str
     varredura_id: int
     pacotes: list[str] = Field(min_length=1)
+    ciente_vitima: bool = False  # a pessoa leu o aviso de que remover app espião pode alertar quem instalou
+
+
+class PedidoEvidencias(BaseModel):
+    serial: str
+    varredura_id: int
+    pacotes: list[str] = Field(min_length=1)
+    print_tela: bool = True
 
 
 class PedidoDesfazer(BaseModel):
@@ -315,10 +323,38 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         if faltando:
             raise HTTPException(422, f"Apps fora desta varredura: {', '.join(faltando)}")
         alvos = [dict(por_pacote[x]) for x in p.pacotes]
+        espioes = [a["pacote"] for a in alvos if evidencias.eh_vigilancia(a)]
+        if espioes and not p.ciente_vitima:
+            raise HTTPException(409, "MODO_VITIMA: remover app espião pode alertar quem instalou. "
+                                     "Mostre o aviso e confirme (ciente_vitima) antes. Apps: " + ", ".join(espioes))
 
         def rodar(progresso, cancelar):
             return servicos.remover_apps(ap, alvos, progresso, cancelar)
         return nova_tarefa("remocao", p.serial, rodar)
+
+    # ---- proteção à vítima de stalkerware
+    @app.get("/api/apoio")
+    def apoio() -> dict[str, Any]:
+        return evidencias.APOIO
+
+    @app.post("/api/evidencias")
+    def documentar(p: PedidoEvidencias) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        retrato = db.retrato(db.conectar(), p.varredura_id)
+        if retrato is None:
+            raise HTTPException(404, "Varredura não encontrada")
+        por_pacote = {r["pacote"]: r for r in retrato["apps"]}
+        achados = [dict(por_pacote[x]) for x in p.pacotes if x in por_pacote]
+        if not achados:
+            raise HTTPException(422, "Nenhum desses apps está nesta varredura")
+        destino = destino_backup(p.serial, None)
+        info = {k: v for k, v in aparelhos.lista.get(p.serial, {}).items() if isinstance(v, str)}
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "evidencias", "descricao": "Guardando as provas (sem mexer no celular)",
+                       "detalhe": "", "atual": None, "total": None, "estimativa_s": 15})
+            return evidencias.documentar(ap, achados, destino, info, p.print_tela)
+        return nova_tarefa("evidencias", p.serial, rodar)
 
     @app.get("/api/permissoes/acoes")
     def permissoes_acoes() -> dict[str, Any]:

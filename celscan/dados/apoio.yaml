@@ -1,0 +1,35 @@
+# Orientação e contatos para quem encontrou um app espião (stalkerware) no celular.
+# Texto revisável: mantenha linguagem acolhedora, sem julgar e sem dizer o que a pessoa "deve" fazer.
+
+aviso: >-
+  Encontramos um app que pode estar vigiando este celular. Antes de remover, saiba: quem
+  instalou pode perceber que o app parou de funcionar. Se você se sente em risco, pense primeiro
+  na sua segurança — remover agora pode não ser o melhor momento.
+
+passos:
+  - titulo: "Documente antes de mexer"
+    texto: "O CelScan pode guardar as provas (qual app, quando foi instalado, permissões, hashes e um print da tela) num relatório no computador. Isso ajuda num boletim de ocorrência."
+  - titulo: "Planeje com alguém de confiança"
+    texto: "Se a pessoa que instalou convive com você, converse com um serviço de apoio antes de remover."
+  - titulo: "Use outro aparelho para pedir ajuda"
+    texto: "Se possível, faça contatos de ajuda de um celular ou computador que essa pessoa não acessa."
+  - titulo: "A decisão é sua"
+    texto: "Você pode remover agora, depois, ou só documentar. O CelScan não remove nada sem sua confirmação."
+
+contatos:
+  - nome: "Ligue 180"
+    descricao: "Central de Atendimento à Mulher. Gratuito, 24 horas, sigiloso. Também atende por WhatsApp."
+    contato: "180"
+  - nome: "Polícia Militar"
+    descricao: "Em caso de perigo imediato."
+    contato: "190"
+  - nome: "Delegacia da Mulher (DEAM)"
+    descricao: "Registre o boletim de ocorrência. Muitos estados aceitam boletim pela internet (delegacia online)."
+    contato: "Procure a DEAM ou a delegacia online do seu estado"
+  - nome: "SaferNet — canal de ajuda"
+    descricao: "Orientação gratuita sobre violência e segurança na internet."
+    contato: "https://new.safernet.org.br/helpline"
+
+lgpd: >-
+  O relatório de evidências contém dados pessoais. Ele fica só neste computador. Entregue à
+  pessoa (pendrive ou e-mail dela) e apague daqui depois.

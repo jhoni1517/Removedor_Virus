@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
 import { Botao, Cartao, Medidor, Selo, Vazio } from "../ui";
@@ -98,20 +98,80 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
   );
 }
 
-function Confirmar({ pacotes, confirmar, cancelar }: { pacotes: string[]; confirmar: () => void; cancelar: () => void }) {
+interface Apoio { aviso: string; passos: { titulo: string; texto: string }[]; contatos: { nome: string; descricao: string; contato: string }[]; lgpd: string }
+
+export function ehVigilancia(ameaca: string | null | undefined): boolean {
+  const a = (ameaca ?? "").toLowerCase();
+  return !!a && ["stalkerware", "spyware", "pegasus", "predator", "espião"].some((p) => a.includes(p));
+}
+
+function PainelVitima({ v, espioes }: { v: Varredura; espioes: AppResultado[] }) {
+  const { esperar, avisar } = useApp();
+  const [apoio, setApoio] = useState<Apoio | null>(null);
+  const [documentando, setDocumentando] = useState(false);
+  const [pasta, setPasta] = useState<string | null>(null);
+  useEffect(() => { api<Apoio>("/apoio").then(setApoio).catch(() => undefined); }, []);
+
+  async function documentar() {
+    setDocumentando(true);
+    try {
+      const t = await esperar(await api<Tarefa<{ pasta: string }>>("/evidencias", {
+        corpo: { serial: v.info.serial, varredura_id: v.varredura_id, pacotes: espioes.map((e) => e.pacote) } }));
+      if (t.estado === "concluida" && t.resultado) {
+        setPasta(t.resultado.pasta);
+        avisar({ tipo: "ok", texto: "Provas guardadas no computador, com o hash de cada arquivo.", duracao: 9000 });
+      } else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui guardar as provas." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setDocumentando(false); }
+  }
+
+  if (!apoio) return null;
+  return (
+    <div className="my-3 space-y-3 rounded-lg border border-atencao/50 bg-atencao-suave p-4 text-sm" role="alert">
+      <p className="flex items-start gap-2 font-semibold"><ShieldAlert size={18} className="mt-0.5 shrink-0 text-atencao" aria-hidden />{apoio.aviso}</p>
+      <ol className="list-decimal space-y-1 pl-5">
+        {apoio.passos.map((p) => <li key={p.titulo}><strong>{p.titulo}.</strong> {p.texto}</li>)}
+      </ol>
+      <div className="flex flex-wrap items-center gap-2">
+        <Botao variante="primario" onClick={documentar} disabled={documentando || !!pasta}>
+          {pasta ? "Provas guardadas" : documentando ? "Guardando..." : "Documentar antes de remover"}
+        </Botao>
+        {pasta && <span className="break-all font-mono text-xs">{pasta}</span>}
+      </div>
+      <details>
+        <summary className="cursor-pointer font-medium">Onde buscar ajuda</summary>
+        <ul className="mt-2 space-y-1">
+          {apoio.contatos.map((c) => <li key={c.nome}><strong>{c.nome}</strong> ({c.contato}): {c.descricao}</li>)}
+        </ul>
+      </details>
+    </div>
+  );
+}
+
+function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes: string[]; confirmar: (ciente: boolean) => void; cancelar: () => void }) {
+  const espioes = v.resultados.filter((r) => pacotes.includes(r.pacote) && ehVigilancia(r.ameaca));
+  const [ciente, setCiente] = useState(false);
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-confirmar"
       onKeyDown={(e) => e.key === "Escape" && cancelar()}>
-      <Cartao className="entrar w-full max-w-lg p-6 shadow-xl">
+      <Cartao className="entrar max-h-[90vh] w-full max-w-xl overflow-auto p-6 shadow-xl">
         <h2 id="titulo-confirmar" className="text-lg font-semibold">Remover {pacotes.length} app(s)?</h2>
         <ul className="my-3 max-h-40 overflow-auto font-mono text-sm">{pacotes.map((p) => <li key={p}>{p}</li>)}</ul>
+        {espioes.length > 0 && <PainelVitima v={v} espioes={espioes} />}
         <p className="text-sm text-fraco">
           Antes de remover, o CelScan guarda uma cópia de cada app na quarentena e tira as permissões perigosas.
           Você pode desfazer logo em seguida ou depois, pelo Histórico.
         </p>
+        {espioes.length > 0 && (
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={ciente} onChange={(e) => setCiente(e.target.checked)} />
+            <span>Li o aviso e a pessoa dona do celular decidiu remover agora.</span>
+          </label>
+        )}
         <div className="mt-5 flex justify-end gap-2">
-          <Botao onClick={cancelar}>Cancelar</Botao>
-          <Botao variante="perigo" onClick={confirmar} autoFocus>Remover</Botao>
+          <Botao onClick={cancelar} autoFocus={espioes.length > 0}>Cancelar</Botao>
+          <Botao variante="perigo" onClick={() => confirmar(espioes.length > 0)} disabled={espioes.length > 0 && !ciente}
+            autoFocus={espioes.length === 0}>Remover</Botao>
         </div>
       </Cartao>
     </div>
@@ -146,12 +206,12 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     }
   }
 
-  async function executarRemocao(pacotes: string[]) {
+  async function executarRemocao(pacotes: string[], cienteVitima = false) {
     setConfirmando(null);
     setOcupado(true);
     try {
       const t = await esperar(await api<Tarefa<Remocao[]>>("/remover", {
-        corpo: { serial: v.info.serial, varredura_id: v.varredura_id, pacotes } }));
+        corpo: { serial: v.info.serial, varredura_id: v.varredura_id, pacotes, ciente_vitima: cienteVitima } }));
       if (t.estado !== "concluida" || !t.resultado) throw new Error(t.erro ?? "A remoção não terminou.");
       const feitos = t.resultado;
       const ok = feitos.filter((f) => f.ok);
@@ -281,7 +341,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           </div>
         </div>
       )}
-      {confirmando && <Confirmar pacotes={confirmando} confirmar={() => executarRemocao(confirmando)} cancelar={() => setConfirmando(null)} />}
+      {confirmando && <Confirmar v={v} pacotes={confirmando} confirmar={(ciente) => executarRemocao(confirmando, ciente)} cancelar={() => setConfirmando(null)} />}
     </div>
   );
 }

@@ -74,6 +74,9 @@ if a[0] == "pull":
     fim(f"{a[1]}: 1 file pulled")
 if a[0] in ("install", "install-multiple", "uninstall"):
     fim("Success")
+if a[0] == "exec-out" and "screencap" in a[1]:
+    sys.stdout.buffer.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 32)
+    sys.exit(0)
 if a[0] == "exec-out":
     m = re.search(r"dd if=(\S+) bs=(\d+) skip=(\d+) count=(\d+)", a[1])
     bs, sk, ct = int(m.group(2)), int(m.group(3)), int(m.group(4))
