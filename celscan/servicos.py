@@ -5,9 +5,11 @@ Cada operação informa o progresso por eventos e pode ser cancelada entre um pa
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -111,6 +113,31 @@ class _Passos:
                         "estimativa_s": estimativa})
 
 
+TRABALHADORES = int(os.getenv("CELSCAN_PARALELO", "4"))
+
+
+def _em_paralelo(pacotes: list[str], tarefa: Callable[[str], Any], avancar: Callable[[int, str], None]) -> None:
+    """Roda `tarefa(pacote)` em paralelo (cada leitura é uma conexão separada com o adb).
+
+    O progresso e o cancelamento continuam no fio principal: `avancar` é chamado a cada app concluído.
+    """
+    if TRABALHADORES <= 1 or len(pacotes) < 2:
+        for i, pkg in enumerate(pacotes, 1):
+            avancar(i, pkg)
+            tarefa(pkg)
+        return
+    with ThreadPoolExecutor(max_workers=TRABALHADORES, thread_name_prefix="celscan-leitura") as ex:
+        futuros = {ex.submit(tarefa, pkg): pkg for pkg in pacotes}
+        try:
+            for i, f in enumerate(as_completed(futuros), 1):
+                avancar(i, futuros[f])
+                f.result()
+        except BaseException:
+            for f in futuros:
+                f.cancel()
+            raise
+
+
 def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, progresso: Progresso = _nada,
                        cancelar: threading.Event | None = None, conexao=None) -> ResultadoVarredura:
     opcoes = opcoes or OpcoesVarredura()
@@ -146,13 +173,9 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
 
         cands = sc.candidatos()
         with log.etapa("assinaturas"):
-            for i, pkg in enumerate(cands, 1):
-                passos.etapa("assinaturas", i, len(cands), pkg)
-                sc.ler_certificado(pkg)
+            _em_paralelo(cands, sc.ler_certificado, lambda i, pkg: passos.etapa("assinaturas", i, len(cands), pkg))
         with log.etapa("rotulos"):
-            for i, pkg in enumerate(cands, 1):
-                passos.etapa("rotulos", i, len(cands), pkg)
-                sc.ler_rotulo(pkg)
+            _em_paralelo(cands, sc.ler_rotulo, lambda i, pkg: passos.etapa("rotulos", i, len(cands), pkg))
 
         if vt:
             alvo = sc.candidatos(todos=opcoes.vt_todos)

@@ -170,10 +170,26 @@ class Aparelho:
         return ((r.stdout or "") + ((r.stderr or "") if erro else "")).strip()
 
     def sh(self, comando: str, timeout: int = 120, erro: bool = False) -> str:
+        from celscan.core import adb_direto
+
+        try:
+            return adb_direto.shell(self.serial, comando, timeout, erro)
+        except adb_direto.Timeout as e:
+            raise AdbErro(f"'adb shell {comando[:40]}' excedeu {timeout}s") from e
+        except adb_direto.Indisponivel:
+            pass  # sem conexão direta: usa um processo adb (modo antigo)
         return self.adb("shell", comando, timeout=timeout, erro=erro)
 
     def bytes(self, comando: str, timeout: int = 60) -> bytes:
         """Saída binária sem conversão de quebra de linha (exec-out)."""
+        from celscan.core import adb_direto
+
+        try:
+            return adb_direto.binario(self.serial, comando, timeout)
+        except adb_direto.Timeout as e:
+            raise AdbErro(f"leitura binária excedeu {timeout}s") from e
+        except adb_direto.Indisponivel:
+            pass
         inicio = time.perf_counter()
         try:
             r = subprocess.run([*_cmd(), "-s", self.serial, "exec-out", comando],
@@ -194,9 +210,14 @@ class Aparelho:
             local = f.name
         remoto = "/data/local/tmp/celscan.sh"
         try:
-            r = run(["-s", self.serial, "push", local, remoto], timeout=60)
-            if r.returncode != 0:
-                raise AdbErro(f"falha ao enviar script: {r.stderr.strip()}")
+            from celscan.core import adb_direto
+
+            try:
+                adb_direto.enviar(self.serial, local, remoto)
+            except adb_direto.Indisponivel:
+                r = run(["-s", self.serial, "push", local, remoto], timeout=60)
+                if r.returncode != 0:
+                    raise AdbErro(f"falha ao enviar script: {r.stderr.strip()}") from None
             saida = self.sh(f"sh {remoto}", timeout=timeout)
             self.sh(f"rm -f {remoto}")
         finally:
@@ -205,6 +226,13 @@ class Aparelho:
 
     def linhas(self, comando: str) -> Iterator[str]:
         """Executa e entrega a saída linha a linha (para barra de progresso)."""
+        from celscan.core import adb_direto
+
+        try:
+            yield from adb_direto.linhas(self.serial, comando)
+            return
+        except adb_direto.Indisponivel:
+            pass
         inicio, n = time.perf_counter(), 0
         p = subprocess.Popen([*_cmd(), "-s", self.serial, "shell", comando],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

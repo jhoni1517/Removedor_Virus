@@ -37,6 +37,11 @@ janela = Analysis([str(raiz / "instalador" / "celscan_app.py")], pathex=[str(rai
 cli = Analysis([str(raiz / "instalador" / "celscan_cli.py")], pathex=[str(raiz)], datas=datas,
                hiddenimports=ocultos, excludes=excluir)
 
+# O adbutils traz um adb próprio (outra versão, ~8 MB). O CelScan usa só o adb oficial do platform-tools:
+# tiramos o dele do pacote para não haver dois servidores de versões diferentes brigando pela porta.
+for a in (janela, cli):
+    a.datas = [d for d in a.datas if not ("adbutils" in d[0] and "binaries" in d[0])]
+
 exe_janela = EXE(PYZ(janela.pure), janela.scripts, [], exclude_binaries=True, name="CelScan", console=False,
                  icon=icone, upx=False)
 exe_cli = EXE(PYZ(cli.pure), cli.scripts, [], exclude_binaries=True, name="celscan-cli", console=True,
