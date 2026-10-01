@@ -29,6 +29,8 @@ jobs:
           npm ci
           npm test
           npm run build
+      - name: Página de verificação de laudos
+        run: node site/v/teste.mjs
 
   testes:
     strategy:

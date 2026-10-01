@@ -259,7 +259,7 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
     historia: list = _cabecalho(meta, retrato, e, versao, loja)
     if versao == "seminovo":
         historia += _secao_seminovo(retrato, diagnostico, e)
-        return _finalizar(historia, meta, h, codigo, e)
+        return _finalizar(historia, meta, h, codigo, e, retrato)
 
     achados = retrato.get("achados_aparelho", [])
     historia.append(Paragraph("Configurações do aparelho", e["h2"]))
@@ -295,19 +295,36 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
                                      f"{duracao:.0f} s · CelScan {__version__} · SHA-256 dos dados: {h}")
                                   if duracao is not None else _t(f"SHA-256 dos dados: {h}"), e["mono"]))
 
-    return _finalizar(historia, meta, h, codigo, e)
+    return _finalizar(historia, meta, h, codigo, e, retrato)
 
 
-def _finalizar(historia: list, meta: dict, h: str, codigo: str, e: dict) -> tuple[bytes, str]:
-    texto_qr = f"CELSCAN-LAUDO|{meta['id']}|{h}"
-    rodape = Table([[QR(texto_qr), [
+def _qr_verificacao(meta: dict, h: str, retrato: dict) -> tuple[str, str | None]:
+    """URL assinada (Ed25519) para a página de verificação; se a assinatura falhar, o QR antigo (local)."""
+    try:
+        from celscan.core import assinatura
+
+        ap = retrato.get("aparelho", {})
+        modelo = f"{ap.get('fabricante', '')} {ap.get('modelo', '')}".strip()
+        dados = assinatura.assinar_laudo(meta["id"], meta["data"], modelo, meta["nota"], meta["veredito"], h)
+        return assinatura.url_verificacao(dados), assinatura.impressao_digital()
+    except Exception:  # noqa: BLE001 — sem cofre/cripto: segue com a verificação local
+        return f"CELSCAN-LAUDO|{meta['id']}|{h}", None
+
+
+def _finalizar(historia: list, meta: dict, h: str, codigo: str, e: dict, retrato: dict) -> tuple[bytes, str]:
+    texto_qr, digital = _qr_verificacao(meta, h, retrato)
+    online = digital is not None
+    rodape = Table([[QR(texto_qr, 32 * mm), [
         Paragraph(f"<b>Código de verificação: {codigo}</b>", e["normal"]),
-        Paragraph("Para conferir a autenticidade, abra o CelScan no computador que emitiu este laudo e use "
-                  "\"Verificar laudo\" (ou o comando <font face='Courier'>celscan verificar " + codigo + "</font>).",
-                  e["fraco"]),
+        Paragraph(("Aponte a câmera do celular para o QR code: a página confere a assinatura digital deste laudo "
+                   "no seu navegador (nada é enviado). " if online else "")
+                  + "No computador que emitiu, use \"Verificar laudo\" (ou <font face='Courier'>celscan verificar "
+                  + codigo + "</font>).", e["fraco"]),
+        *([Paragraph(f"Assinado pela chave <font face='Courier'>{digital}</font> (peça à loja para conferir).",
+                     e["fraco"])] if online else []),
         Paragraph("A análise combina indicadores públicos de ameaças (Amnesty/MVT, Echap), VirusTotal quando "
                   "disponível e regras de permissões. Nenhuma ferramenta garante 100% de detecção.", e["fraco"]),
-    ]]], colWidths=[30 * mm, 142 * mm])
+    ]]], colWidths=[36 * mm, 136 * mm])
     rodape.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEABOVE", (0, 0), (-1, 0), 0.5, LINHA),
                                 ("TOPPADDING", (0, 0), (-1, -1), 8)]))
     historia += [Spacer(1, 12), KeepTogether([rodape])]

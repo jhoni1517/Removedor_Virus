@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Verificar laudo · CelScan</title>
+<style>
+  :root { --papel:#f3f2ee; --sup:#fff; --tinta:#17191b; --fraco:#5d646c; --linha:#dad7cf; --ok:#1e7a4c; --okS:#e1f1e8; --mal:#b3261e; --malS:#fbe4e1; }
+  @media (prefers-color-scheme: dark) { :root { --papel:#0f1113; --sup:#171a1d; --tinta:#e8e6e1; --fraco:#9aa1a8; --linha:#2c3135; --ok:#4fc289; --okS:#15291f; --mal:#f07366; --malS:#321816; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--papel); color:var(--tinta); font: 16px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.1rem; margin: 0 0 16px; letter-spacing: .02em; }
+  .selo { border-radius: 12px; padding: 18px; border: 2px solid; }
+  .selo.ok { border-color: var(--ok); background: var(--okS); }
+  .selo.mal { border-color: var(--mal); background: var(--malS); }
+  .selo strong { display:block; font-size: 1.35rem; }
+  dl { display:grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 18px 0 0; background:var(--sup); border:1px solid var(--linha); border-radius:12px; padding:16px; }
+  dt { color: var(--fraco); } dd { margin:0; font-weight:600; overflow-wrap:anywhere; }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  p.nota { color: var(--fraco); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CelScan · verificação de laudo</h1>
+  <div id="resultado" class="selo" aria-live="polite">Conferindo a assinatura…</div>
+  <dl id="dados" hidden></dl>
+  <p class="nota">A conferência acontece neste aparelho: os dados do laudo estão no próprio link e não são enviados a
+    nenhum servidor. "Autêntico" quer dizer que nada foi alterado desde que o laudo foi emitido pela chave mostrada
+    abaixo — compare a chave com a que a loja divulga.</p>
+</main>
+<script type="module">
+  import { verificar } from "./verificar.js";
+  const r = await verificar(location.hash);
+  const caixa = document.getElementById("resultado");
+  caixa.className = "selo " + (r.ok ? "ok" : "mal");
+  caixa.innerHTML = r.ok ? "<strong>✓ Laudo autêntico</strong>Os dados abaixo são os mesmos de quando o laudo foi emitido."
+                         : "<strong>✗ Não foi possível confirmar</strong>" + r.erro;
+  if (r.dados) {
+    const d = r.dados, campos = [["Laudo nº", d.i], ["Emitido em", (d.d || "").replace("T", " às ")], ["Aparelho", d.m],
+      ["Nota", d.n], ["Resultado", d.v], ["Chave da loja", r.digital || "—"]];
+    const dl = document.getElementById("dados");
+    for (const [k, v] of campos) {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v ?? "—";
+      if (k === "Chave da loja") dd.className = "mono";
+      dl.append(dt, dd);
+    }
+    dl.hidden = false;
+  }
+</script>
+</body>
+</html>
