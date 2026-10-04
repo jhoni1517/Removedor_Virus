@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import { Barra, Botao, Cartao, Titulo } from "../ui";
+import { PainelMtp } from "./ResgateMtp";
 
 interface Passo { titulo: string; texto: string; ferramenta?: "otg" | "espelhar" | "backup" }
 interface Caso { titulo: string; resumo: string; passos: Passo[]; alternativa?: string }
@@ -302,6 +303,8 @@ export default function Resgate() {
         </ol>
         {c.alternativa && <p className="mt-5 rounded-md bg-superficie-2 p-3 text-sm"><strong>Outra saída: </strong>{c.alternativa}</p>}
       </Cartao>
+
+      {casoAtual !== "autorizado" && <PainelMtp />}
 
       {casoAtual === "autorizado" && (
         <div className="space-y-4">

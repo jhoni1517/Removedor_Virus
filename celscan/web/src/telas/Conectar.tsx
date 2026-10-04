@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ErroApi, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import { Barra, Botao, Cartao, Miniatura, Titulo } from "../ui";
+import { PainelMtp } from "./ResgateMtp";
 
 interface Passo {
   titulo: string;
@@ -233,6 +234,8 @@ export default function Conectar({ onEscolher }: { onEscolher: (serial: string) 
           <a className="underline" href={driver.link_generico} target="_blank" rel="noreferrer">driver genérico do Google</a>.
         </div>
       )}
+
+      {prontos.length === 0 && <div className="mb-6"><PainelMtp /></div>}
 
       {ajuda && (
         <Cartao className="p-6">

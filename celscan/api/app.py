@@ -67,6 +67,12 @@ class PedidoCorrecoes(BaseModel):
     ids: list[str]
 
 
+class PedidoMtp(BaseModel):
+    aparelho: str
+    armazenamento: str
+    pastas: list[str]
+
+
 class PedidoOrdem(BaseModel):
     servicos: list[str] = Field(min_length=1)
     serial: str | None = None
@@ -745,6 +751,36 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             return desempenho.testar(ap, progresso=progresso)
         return nova_tarefa("desempenho", p.serial, rodar)
+
+    # ---- resgate sem depuração (modo Transferência de arquivos / MTP, só Windows)
+    @app.get("/api/mtp/aparelhos")
+    def mtp_aparelhos() -> dict[str, Any]:
+        from celscan.acoes import mtp
+
+        try:
+            return mtp.listar()
+        except mtp.MtpErro as e:
+            raise HTTPException(504, str(e)) from e
+
+    @app.post("/api/mtp/copiar")
+    def mtp_copiar(p: PedidoMtp) -> dict[str, Any]:
+        from celscan.acoes import mtp
+
+        if not mtp.disponivel():
+            raise HTTPException(409, "A cópia por Transferência de arquivos só funciona no Windows.")
+        invalidas = [x for x in p.pastas if x not in mtp.PASTAS]
+        if invalidas or not p.pastas:
+            raise HTTPException(422, "Escolha ao menos uma das pastas listadas.")
+        destino = backup.pasta_padrao() / backup.nome_seguro(f"{p.aparelho} (Transferência de arquivos)")
+
+        def rodar(progresso, cancelar):
+            progresso({"etapa": "mtp", "descricao": "Contando os arquivos no celular", "detalhe": "",
+                       "atual": None, "total": None, "estimativa_s": None})
+            try:
+                return mtp.copiar(p.aparelho, p.armazenamento, p.pastas, destino, progresso, cancelar)
+            except mtp.MtpErro as e:
+                raise ValueError(str(e)) from e  # erro esperado: a mensagem aparece limpa para o usuário
+        return nova_tarefa("mtp", None, rodar)
 
     @app.post("/api/correcoes/verificar")
     def correcoes_verificar(p: PedidoSerial) -> dict[str, Any]:
