@@ -9,6 +9,16 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.0.0b11 (04/10/2026) — Resgate de fotos sem depuração (MTP)
+
+Para quando a depuração não dá para ligar: com o celular desbloqueado em "Transferência de
+arquivos", o CelScan usa o próprio Windows (Shell do Explorer) para copiar DCIM, Imagens, Vídeos,
+Downloads, Documentos e mídia do WhatsApp/Telegram para `Documentos/CelScan Backups/<aparelho>
+(Transferência de arquivos)`. Só leitura, pula o que já foi copiado (dá para pausar e continuar),
+avisa quando o celular está "só carregando". Aparece em Conectar (sem aparelho) e em Tela quebrada.
+Limite honesto: conversas e dados de apps não passam por MTP. Só Windows.
+Fica de fora, de propósito: ligar a depuração à força ou passar por bloqueio/conta Google.
+
 ## Beta 3.0.0b10 (01/10/2026) — Correções automáticas (todas as marcas)
 
 Painel no Diagnóstico que procura configurações que causam defeitos comuns e corrige com um clique,
