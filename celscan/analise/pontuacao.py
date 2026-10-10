@@ -12,8 +12,8 @@ from celscan.analise import certificados as certificados_mod
 from celscan.analise import pix, rotulos
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
-from celscan.core import seguranca
 from celscan.config import LOJAS, SMS_CONHECIDOS
+from celscan.core import seguranca
 from celscan.core.coleta import AppBruto, DadosAparelho
 
 Achado = dict[str, Any]

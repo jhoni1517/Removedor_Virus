@@ -28,9 +28,8 @@ from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena,
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
-from celscan.core import seguranca
 from celscan.api.tarefas import Gerenciador
-from celscan.core import adb, agente, balcao, db, log, preferencias
+from celscan.core import adb, agente, balcao, db, log, preferencias, seguranca
 
 WEB = config.PACOTE / "web" / "dist"
 HOSTS = ("127.0.0.1", "localhost")
