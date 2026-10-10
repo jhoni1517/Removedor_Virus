@@ -51,9 +51,23 @@ def test_pontuacao_igual_ao_v2():
     assert res[0]["pacote"] == "com.systemservice"
     assert por["com.systemservice"]["score"] == 100 and por["com.systemservice"]["nivel"] == "ALTO"
     assert por["com.x8bit.bitwarden"]["nivel"] == "PERMITIDO"
-    assert por["com.exemplo.jogo"]["nivel"] == "OK"
-    assert [a["chave"] for a in achados] == ["patch_muito_antigo"]
-    assert pontuacao.nota(achados, res) == (45, "Crítico")
+    # v3.1: o jogo abriu anúncio por cima da tela inicial (pop-up) -> deixou de ser "OK"
+    assert por["com.exemplo.jogo"]["nivel"] == "ALTO"
+    assert por["com.exemplo.jogo"]["anuncios"]["fora_do_app"] == 2
+    assert [a["chave"] for a in achados] == ["patch_muito_antigo", "popups", "dns_privado"]
+    assert pontuacao.nota(achados, res) == (5, "Crítico")
+
+
+def test_origem_sensores_e_datas():
+    _, res = pontuacao.pontuar(dados_sinteticos(), permitidos=permitidos(), agora=AGORA)
+    por = {r["pacote"]: r for r in res}
+    ss = por["com.systemservice"]
+    assert ss["origem"] == "arquivo baixado pelo Chrome"
+    assert any(m.startswith("Usou microfone") for m in ss["motivos"])
+    assert ss["atualizado"].startswith("2026-09-27")
+    assert por["com.whatsapp"]["sensores"]["câmera"] == 3600
+    assert por["com.whatsapp"]["ultimo_uso"].startswith("2026-09-29")
+    assert por["com.whatsapp"]["origem"] is None  # veio da loja
 
 
 def test_achados_tem_texto_leigo():

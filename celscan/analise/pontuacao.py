@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from celscan.analise import certificados as certificados_mod
-from celscan.analise import pix
+from celscan.analise import pix, rotulos
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
 from celscan.config import LOJAS, SMS_CONHECIDOS
@@ -35,6 +35,45 @@ def _oficiais() -> dict:
 
 
 _certs: dict | None = None
+
+# Quem abriu o instalador do APK, em linguagem de gente
+ORIGEM = {
+    "com.android.chrome": "arquivo baixado pelo Chrome", "org.mozilla.firefox": "arquivo baixado pelo Firefox",
+    "com.sec.android.app.sbrowser": "arquivo baixado pelo navegador Samsung",
+    "com.whatsapp": "arquivo recebido pelo WhatsApp", "com.whatsapp.w4b": "arquivo recebido pelo WhatsApp Business",
+    "org.telegram.messenger": "arquivo recebido pelo Telegram", "com.google.android.gm": "anexo de e-mail",
+    "com.android.bluetooth": "arquivo recebido por Bluetooth", "com.google.android.apps.nbu.files": "aberto no Files",
+    "com.mi.android.globalFileexplorer": "aberto no gerenciador de arquivos",
+    "com.sec.android.app.myfiles": "aberto no Meus Arquivos", "com.android.shell": "instalado por computador (adb)",
+}
+INSTALADORES = {
+    "com.google.android.packageinstaller": "arquivo APK instalado à mão",
+    "com.android.packageinstaller": "arquivo APK instalado à mão",
+    "com.android.shell": "instalado por computador (adb)",
+}
+# Apps que naturalmente mandam muitas notificações (não contam como excesso)
+MENSAGEIROS = {"com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "com.google.android.apps.messaging",
+               "com.samsung.android.messaging", "com.google.android.gm", "com.microsoft.teams", "com.slack",
+               "com.instagram.android", "com.facebook.orca", "com.discord", "org.thoughtcrime.securesms"}
+SENSORES_SUSPEITOS = ("câmera", "microfone", "localização", "SMS")
+
+
+def quando(seg: float | None) -> str:
+    if seg is None:
+        return "—"
+    if seg < 120:
+        return "agora há pouco"
+    if seg < 3600:
+        return f"há {int(seg // 60)} min"
+    if seg < 86400:
+        return f"há {int(seg // 3600)} h"
+    return f"há {int(seg // 86400)} dia(s)"
+
+
+def origem_legivel(app: AppBruto) -> str:
+    if app.origem:
+        return ORIGEM.get(app.origem, f"aberto pelo app {app.origem}")
+    return INSTALADORES.get(app.instalador or "", app.instalador or "origem desconhecida")
 
 
 def nivel(score: int, regras: Regras | None = None) -> str:
@@ -71,6 +110,17 @@ def achados_aparelho(dados: DadosAparelho, regras: Regras | None = None,
         a.append(ra["gerenciado"].achado(o))
     if dados.sms and dados.sms not in SMS_CONHECIDOS:
         a.append(ra["sms_incomum"].achado(dados.sms))
+    pop = sorted(p for p, an in dados.anuncios.items() if an["fora_do_app"] and p in dados.apps)
+    if pop:
+        a.append(ra["popups"].achado(f"{len(pop)} app(s)"))
+    rede = dados.rede or {}
+    if rede.get("vpn_sempre"):
+        app_vpn = dados.apps.get(str(rede["vpn_sempre"]))
+        a.append(ra["vpn_sempre"].achado(app_vpn.nome if app_vpn and app_vpn.nome else rede["vpn_sempre"]))
+    elif rede.get("vpn_ativa"):
+        a.append(ra["vpn_ativa"].achado())
+    if rede.get("dns_modo") == "hostname" and rede.get("dns_servidor"):
+        a.append(ra["dns_privado"].achado(rede["dns_servidor"]))
     bancos = pix.bancarios_instalados(dados.apps)
     suspeitos = sorted(p for p, app in dados.apps.items() if not app.sistema
                        and LOJAS.get(app.instalador or "") is None and pix.padrao_trojan(p, dados.acess, app.appops))
@@ -98,13 +148,45 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         a.append(ra["device_owner"].achado())
     if pkg in dados.notif:
         a.append(ra["leitor_notificacoes"].achado())
+    sem_icone = not app.sistema and dados.icones is not None and pkg not in dados.icones
     if not app.sistema:
-        if dados.icones is not None and pkg not in dados.icones:
+        if sem_icone:
             a.append(ra["sem_icone"].achado())
         if not loja:
-            a.append(ra["fora_da_loja"].achado(app.instalador or "origem desconhecida"))
-    if not app.sistema and not loja and (imitado := pix.imitacao(pkg)):
+            a.append(ra["fora_da_loja"].achado(origem_legivel(app)))
+    imitado = pix.imitacao(pkg) if not app.sistema and not loja else None
+    if imitado:
         a.append(ra["imita_app_conhecido"].achado(imitado))
+    if not app.sistema and not loja and not imitado and (pelo_nome := pix.imitacao_por_nome(pkg, app.nome)):
+        a.append(ra["imita_pelo_nome"].achado(pelo_nome))
+    if not app.sistema and not loja and (finge := pix.finge_sistema(pkg, app.nome)):
+        a.append(ra["finge_sistema"].achado(finge))
+    for disf in app.disfarces[:1]:
+        a.append((ra["disfarce_escondido"] if sem_icone else ra["disfarce"]).achado(disf))
+    # anúncios: pop-ups vistos no histórico do Android e apps preparados para isso
+    an = dados.anuncios.get(pkg) or {}
+    if an.get("fora_do_app"):
+        ultimo = f", o último em {an['ultimo']:%d/%m às %H:%M}" if an.get("ultimo") else ""
+        a.append(ra["anuncio_popup"].achado(f"{an['fora_do_app']} anúncio(s) fora do app{ultimo}"))
+    elif an.get("tela_cheia"):
+        a.append(ra["anuncio_tela_cheia"].achado(f"{an['tela_cheia']} anúncio(s) em tela cheia dentro do app"))
+    gatilhos = [g for g in app.gatilhos if g in rotulos.GATILHOS_POPUP]
+    if (not app.sistema and not an.get("fora_do_app") and app.sdks_anuncio and "SYSTEM_ALERT_WINDOW" in app.appops
+            and (gatilhos or sem_icone)):
+        a.append(ra["anuncio_gatilho"].achado("(" + ", ".join(gatilhos[:3] or ["sem ícone na tela inicial"]) + ")"))
+    if app.anuncio_escondido and not app.sistema:
+        a.append(ra["anuncio_escondido"].achado())
+    if not app.sistema and (sem_icone or not loja):
+        limite = par.get("sensor_dias", 7) * 86400
+        for sensor in SENSORES_SUSPEITOS:
+            seg = app.sensores.get(sensor)
+            if seg is not None and seg < limite:
+                a.append(ra["sensor_recente"].achado(f"{sensor} {quando(seg)}"))
+    n_notif = dados.notificacoes.get(pkg, 0)
+    if n_notif and pkg not in MENSAGEIROS and not app.sistema:
+        dias = max(1, (dados.periodo_uso[1] - dados.periodo_uso[0]).days) if dados.periodo_uso else 1
+        if n_notif / dias >= par.get("notificacoes_dia", 20):
+            a.append(ra["notificacoes_excesso"].achado(f"{n_notif} notificações em {dias} dia(s)"))
     if pix.padrao_trojan(pkg, dados.acess, app.appops) and not (loja and pkg in (permitidos or set())):
         a.append(ra["trojan_bancario"].achado())
     if certificados_mod.conferir(pkg, app.cert, _oficiais()) == "falso":
@@ -140,6 +222,16 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "sha256": app.sha256, "cert": app.cert, "virustotal": app.vt,
         "admins": dados.admins.get(pkg, []),
         "nome": app.nome, "icone": app.icone,
+        "atualizado": app.atualizado.isoformat() if app.atualizado else None,
+        "ultimo_uso": app.ultimo_uso.isoformat() if app.ultimo_uso else None,
+        "origem": None if loja or app.sistema else origem_legivel(app),
+        "tamanho": app.tamanho, "sem_icone": sem_icone, "disfarces": app.disfarces,
+        "sensores": dict(sorted(app.sensores.items(), key=lambda x: x[1])),
+        "anuncios": {"tela_cheia": an.get("tela_cheia", 0), "fora_do_app": an.get("fora_do_app", 0),
+                     "ultimo": an["ultimo"].isoformat() if an.get("ultimo") else None,
+                     "sdks": sorted(set(app.sdks_anuncio) | set(an.get("sdks") or ())), "gatilhos": app.gatilhos},
+        "notificacoes": n_notif,
+        "sobreposicao": "SYSTEM_ALERT_WINDOW" in app.appops,
     }
 
 
@@ -153,7 +245,9 @@ def pontuar(dados: DadosAparelho, iocs: Any = None, permitidos: set[str] | None 
 def nota(achados: list[Achado], resultados: list[dict[str, Any]], regras: Regras | None = None) -> tuple[int, str]:
     cfg = (regras or regras_padrao()).nota
     n = 100
-    n -= sum(cfg.get("aparelho_alto", 25) if a["nivel"] == "ALTO" else cfg.get("aparelho_outro", 10) for a in achados)
+    # avisos BAIXO (DNS privado, VPN conectada) são informativos: não tiram pontos
+    n -= sum(cfg.get("aparelho_alto", 25) if a["nivel"] == "ALTO" else cfg.get("aparelho_outro", 10)
+             if a["nivel"] == "MÉDIO" else 0 for a in achados)
     n -= sum(cfg.get("app_alto", 30) if r["nivel"] == "ALTO" else cfg.get("app_medio", 8) if r["nivel"] == "MÉDIO"
              else 0 for r in resultados)
     n = max(0, n)

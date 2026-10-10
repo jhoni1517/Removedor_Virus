@@ -59,6 +59,8 @@ Packages:
   Package [com.systemservice] (b2):
     versionName=1.0
     firstInstallTime=2026-09-27 10:00:00
+    lastUpdateTime=2026-09-27 10:00:00
+    installOriginatingPackageName=com.android.chrome
     User 0: ceDataInode=2 installed=true
       runtime permissions:
         android.permission.READ_SMS: granted=true
@@ -71,14 +73,37 @@ Packages:
   Package [com.exemplo.jogo] (d4):
     versionName=3.0
     firstInstallTime=2020-01-01 10:00:00
+@@SEC home
+priority=0 preferredOrder=0 match=0x108000
+com.motorola.launcher3/.Launcher
+@@SEC rede
+hostname
+dns.adguard-dns.com
+null
+0
+@@SEC uso
+        time="2026-09-28 20:00:00" type=ACTIVITY_RESUMED package=com.whatsapp class=com.whatsapp.Main instanceId=1 flags=0x0
+        time="2026-09-28 20:05:00" type=ACTIVITY_RESUMED package=com.motorola.launcher3 class=com.android.launcher3.Launcher flags=0x0
+        time="2026-09-28 20:06:00" type=ACTIVITY_RESUMED package=com.exemplo.jogo class=com.google.android.gms.ads.AdActivity flags=0x0
+        time="2026-09-28 21:00:00" type=ACTIVITY_RESUMED package=com.exemplo.jogo class=com.exemplo.jogo.Main flags=0x0
+        time="2026-09-28 21:02:00" type=ACTIVITY_RESUMED package=com.exemplo.jogo class=com.applovin.adview.AppLovinFullscreenActivity flags=0x0
+        time="2026-09-29 08:00:00" type=ACTIVITY_RESUMED package=com.whatsapp class=com.whatsapp.Main flags=0x0
+        time="2026-09-29 08:10:00" type=ACTIVITY_RESUMED package=com.exemplo.jogo class=com.google.android.gms.ads.AdActivity flags=0x0
+        time="2026-09-29 08:11:00" type=NOTIFICATION_INTERRUPTION package=com.exemplo.jogo channelId=promo flags=0x0
+        package=com.whatsapp totalTimeUsed="10:00" lastTimeUsed="2026-09-29 08:00:00" totalTimeVisible="10:00"
+        package=com.exemplo.jogo totalTimeUsed="1:00" lastTimeUsed="2026-09-28 21:02:00"
 @@SEC appops
 @@PKG com.whatsapp
-No operations.
+CAMERA: allow; time=+1h ago; duration=+20s
 @@PKG com.systemservice
 SYSTEM_ALERT_WINDOW: allow; time=+1d
 REQUEST_INSTALL_PACKAGES: allow
+RECORD_AUDIO: allow
+    null=[
+      Access: [bg-s] 2026-09-29 09:00:00.000 (-3h2m10s5ms) duration=+40s
+    ]
 @@PKG com.x8bit.bitwarden
 SYSTEM_ALERT_WINDOW: allow
 @@PKG com.exemplo.jogo
-No operations.
+SYSTEM_ALERT_WINDOW: allow; time=+2h ago
 @@SEC fim

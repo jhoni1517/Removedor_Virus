@@ -8,6 +8,7 @@ quando o mesmo aparelho tem app de banco instalado.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -74,3 +75,42 @@ def bancarios_instalados(pacotes: set[str] | list[str], bancos: Bancos | None = 
 def padrao_trojan(pacote: str, acess: set[str], appops: set[str]) -> bool:
     """Acessibilidade + (sobreposição ou captura de tela): o conjunto usado para roubar Pix."""
     return pacote in acess and bool(appops & {"SYSTEM_ALERT_WINDOW", "PROJECT_MEDIA"})
+
+
+def _norm(txt: str) -> str:
+    t = unicodedata.normalize("NFKD", txt or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]", "", t)
+
+
+def imitacao_por_nome(pacote: str, nome: str | None, bancos: Bancos | None = None) -> str | None:
+    """O app mostra na tela o nome de um banco/marca conhecida, mas não é o pacote oficial."""
+    if not nome:
+        return None
+    b = bancos or carregar()
+    alvo = _norm(nome)
+    if len(alvo) < 3:
+        return None
+    for oficial in b.oficiais.values():
+        if _norm(oficial.nome) == alvo and pacote != oficial.pacote and not pacote.startswith(oficial.pacote + "."):
+            return oficial.nome
+    for isca in b.iscas:
+        if _norm(isca.nome) == alvo:
+            return isca.nome
+    return None
+
+
+PREFIXOS_SISTEMA = ("com.android.", "com.google.android.", "com.samsung.android.", "com.sec.android.",
+                    "com.miui.", "com.xiaomi.", "com.motorola.", "com.huawei.", "com.oppo.", "com.coloros.", "android.")
+NOMES_SISTEMA = {_norm(n) for n in (
+    "Configurações", "Settings", "Serviços do Google Play", "Google Play Services", "Sistema", "System",
+    "Atualização do sistema", "System update", "Android System", "Sistema Android", "Segurança", "Security",
+    "Wi-Fi", "Bateria", "Battery", "Google Services", "System Service", "Serviço do sistema")}
+
+
+def finge_sistema(pacote: str, nome: str | None) -> str | None:
+    """App comum (de fora da loja) que se apresenta como parte do Android."""
+    if pacote.startswith(PREFIXOS_SISTEMA):
+        return "usa um nome de pacote reservado ao sistema"
+    if nome and _norm(nome) in NOMES_SISTEMA:
+        return f"aparece como '{nome}'"
+    return None

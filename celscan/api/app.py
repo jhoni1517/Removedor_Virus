@@ -840,6 +840,31 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         except adb.AdbErro as e:
             raise HTTPException(502, f"Não foi possível tirar o print: {e}") from e
 
+    @app.post("/api/na-tela")
+    def app_na_tela(p: PedidoSerial) -> dict[str, Any]:
+        """Qual app está na tela agora (para pegar no flagra quem abriu o pop-up)."""
+        from celscan.acoes import na_tela
+
+        ap = aparelhos.pronto(p.serial)
+        try:
+            x = na_tela.ler(ap)
+        except adb.AdbErro as e:
+            raise HTTPException(502, f"Não consegui ler a tela: {e}") from e
+        if not x:
+            raise HTTPException(422, "Não deu para identificar o app na tela. Desbloqueie o celular e tente de novo.")
+        return x
+
+    @app.post("/api/consumo")
+    def consumo_dados(p: PedidoSerial) -> dict[str, Any]:
+        """Internet gasta por app (móvel e Wi-Fi) desde a última carga completa."""
+        from celscan.acoes import consumo
+
+        ap = aparelhos.pronto(p.serial)
+        try:
+            return consumo.ler(ap)
+        except adb.AdbErro as e:
+            raise HTTPException(502, f"Não consegui ler o consumo: {e}") from e
+
     @app.post("/api/limpeza/cache")
     def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)

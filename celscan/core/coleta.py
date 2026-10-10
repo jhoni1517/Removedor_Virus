@@ -14,6 +14,10 @@ from celscan.core.adb import AdbErro, Aparelho
 
 # PROJECT_MEDIA = captura/transmissão da tela (usada por trojans bancários como o PixRevolution)
 APPOPS_COLETADOS = ("SYSTEM_ALERT_WINDOW", "REQUEST_INSTALL_PACKAGES", "PROJECT_MEDIA")
+# Operações com horário do último uso (painel "quem usou câmera/microfone")
+SENSORES = {"CAMERA": "câmera", "RECORD_AUDIO": "microfone", "FINE_LOCATION": "localização",
+            "COARSE_LOCATION": "localização", "READ_SMS": "SMS", "READ_CONTACTS": "contatos",
+            "READ_CALL_LOG": "chamadas"}
 
 SCRIPT = r"""
 sec(){ echo "@@SEC $1"; }
@@ -31,15 +35,16 @@ sec launcher; cmd package query-activities --brief -a android.intent.action.MAIN
 sec idle; dumpsys deviceidle whitelist 2>&1
 sec su; for f in /system/bin/su /system/xbin/su /sbin/su /su/bin/su /debug_ramdisk/su; do [ -e "$f" ] && echo "$f"; done
 sec pkgdump; dumpsys package packages 2>&1
+sec home; cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>&1
+sec rede; settings get global private_dns_mode; settings get global private_dns_specifier; settings get secure always_on_vpn_app; dumpsys connectivity 2>/dev/null | grep -ciE 'Transports: [A-Z|]*VPN|VPN CONNECTED'
+sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed='
 sec appops
 for p in $(pm list packages {F} | sed 's/^package://'); do
   echo "@@PKG $p"
-  for op in OPS; do
-    cmd appops get $p $op 2>/dev/null || appops get $p $op 2>/dev/null
-  done
+  cmd appops get $p 2>/dev/null || appops get $p 2>/dev/null
 done
 sec fim
-""".replace("OPS", " ".join(APPOPS_COLETADOS))
+"""
 
 # Seção do script -> o que o usuário deixa de ver se ela falhar.
 VERIFICACOES = {
@@ -53,6 +58,7 @@ VERIFICACOES = {
     "notif": "leitores de notificação",
     "sms": "app de SMS padrão",
     "proxy": "proxy global",
+    "uso": "pop-ups de anúncio, notificações em excesso e apps esquecidos (histórico de uso)",
 }
 
 # Seções em que vazio/"null" significa "nenhum configurado" (não é erro).
@@ -129,6 +135,11 @@ class DadosAparelho:
     sempre_ativo: set[str] = field(default_factory=set)
     icones: set[str] | None = None
     avisos: list[str] = field(default_factory=list)
+    anuncios: dict[str, dict] = field(default_factory=dict)  # pacote -> pop-ups/tela cheia
+    notificacoes: dict[str, int] = field(default_factory=dict)  # pacote -> notificações que tocaram
+    rede: dict[str, object] = field(default_factory=dict)
+    home: str | None = None
+    periodo_uso: tuple[datetime, datetime] | None = None
 
     def info(self) -> dict[str, str]:
         g = self.props.get
@@ -155,6 +166,8 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         raise AdbErro("Coleta interrompida — resultado incompleto. Reconecte o cabo e tente de novo.")
     dump = parsers.pkgdump(s.get("pkgdump", ""))
     ops = parsers.appops(s.get("appops", ""), set(APPOPS_COLETADOS))
+    tempos = parsers.appops_tempos(s.get("appops", ""), set(SENSORES))
+    telas, ultimo_uso, notificacoes = parsers.uso(s.get("uso", ""))
     # Apps de sistema atualizados pela loja migram para /data/app e perdem o caminho de sistema; por isso
     # perguntamos ao próprio Android quais são de sistema (pm list packages -s), além de olhar o caminho.
     syspkgs = parsers.desativados(s.get("syspkgs", ""))
@@ -165,8 +178,13 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
             pacote=pkg, apk=caminho, instalador=inst,
             sistema=caminho.startswith(PASTAS_SISTEMA) or pkg in syspkgs,
             perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
-            appops=ops.get(pkg, set()),
+            appops=ops.get(pkg, set()), atualizado=d.get("atualizado"), origem=d.get("origem"),
+            ultimo_uso=ultimo_uso.get(pkg),
         )
+        for op, seg in tempos.get(pkg, {}).items():  # sensores: guarda o uso mais recente por tipo
+            nome = SENSORES[op]
+            if seg < apps[pkg].sensores.get(nome, 1e12):
+                apps[pkg].sensores[nome] = seg
     if not apps:
         raise AdbErro("Nenhum app listado — o 'pm list packages' falhou.")
     dados = DadosAparelho(
@@ -183,7 +201,13 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         su=parsers.linhas_nao_vazias(s.get("su", "")),
         sempre_ativo=parsers.sempre_ativo(s.get("idle", "")),
         icones=parsers.launcher(s.get("launcher", "")),
+        notificacoes=notificacoes,
+        rede=parsers.rede(s.get("rede", "")),
+        home=parsers.home(s.get("home", "")),
+        periodo_uso=(telas[0][0], telas[-1][0]) if telas else None,
     )
+    from celscan.analise.rotulos import sdk_de
+    dados.anuncios = parsers.anuncios(telas, sdk_de)
     dados.avisos = avisos_da_coleta(s, dados, dump)
     return dados
 

@@ -18,6 +18,8 @@ parametros:
   patch_medio_meses: 12
   patch_alto_meses: 24
   recente_dias: 7
+  sensor_dias: 7          # uso de câmera/microfone/etc. por app suspeito considerado recente
+  notificacoes_dia: 20    # notificações por dia (média) para considerar excesso
 
 nota:               # nota do aparelho (0-100): começa em 100 e desconta
   aparelho_alto: 25
@@ -107,6 +109,56 @@ apps:
     titulo: "Roda sempre (sem economia de bateria)"
     significa: "O app pediu para funcionar o tempo todo, mesmo com a tela desligada."
     fazer: "Normal para mensageiros e despertadores. Nos outros, tire a exceção em Configurações > Bateria."
+  anuncio_popup:
+    peso: 45
+    titulo: "Abriu {detalhe}"
+    significa: "O app mostrou propaganda em tela cheia por cima da tela inicial ou de outro app. São os pop-ups que aparecem do nada."
+    fazer: "Remova o app. Se precisar dele, bloqueie em segundo plano e tire a permissão de sobrepor outros apps."
+  anuncio_gatilho:
+    peso: 30
+    titulo: "Preparado para abrir anúncios {detalhe}"
+    significa: "O app tem rede de anúncio, pode desenhar por cima de outros apps e fica escutando avisos do sistema para aparecer. É o jeito típico de adware."
+    fazer: "Se aparecem anúncios do nada, remova este app primeiro."
+  anuncio_tela_cheia:
+    peso: 0
+    titulo: "Mostrou {detalhe}"
+    significa: "Anúncios dentro do próprio app são normais em apps e jogos gratuitos."
+    fazer: "Nada a fazer, a não ser que incomode."
+  anuncio_escondido:
+    peso: 10
+    titulo: "Esconde a tela de anúncio dos apps recentes"
+    significa: "A propaganda não aparece na lista de apps abertos, o que dificulta descobrir de onde ela veio."
+    fazer: "Se aparecem anúncios do nada, desconfie deste app."
+  disfarce:
+    peso: 10
+    titulo: "Pode trocar o próprio nome e ícone para '{detalhe}'"
+    significa: "O app tem um atalho alternativo pronto para se disfarçar de outro app. Alguns apps legítimos têm isso como função de privacidade; apps espiões usam para se esconder."
+    fazer: "Se você não instalou o app por esse motivo, remova."
+  disfarce_escondido:
+    peso: 25
+    titulo: "Escondido e pode se disfarçar de '{detalhe}'"
+    significa: "O app não aparece na tela inicial e tem um ícone alternativo pronto para fingir ser outro app. É uma técnica comum de apps espiões."
+    fazer: "Remova. Se suspeita que alguém instalou para vigiar você, guarde as provas antes."
+  imita_pelo_nome:
+    peso: 70
+    titulo: "Usa o nome '{detalhe}', mas não é o app oficial"
+    significa: "Na tela ele aparece com o nome de um banco ou marca conhecida, mas é outro app e veio de fora da loja. É assim que golpes enganam a vítima."
+    fazer: "Remova agora. Instale o oficial pela Play Store, conferindo quem publica."
+  finge_sistema:
+    peso: 30
+    titulo: "Finge ser parte do Android ({detalhe})"
+    significa: "Um app comum, instalado fora da loja, se apresenta como peça do sistema para você não ter coragem de remover."
+    fazer: "Apps do sistema de verdade vêm de fábrica ou da loja. Remova."
+  sensor_recente:
+    peso: 15
+    titulo: "Usou {detalhe}"
+    significa: "Um app escondido ou de fora da loja acessou câmera, microfone, localização ou SMS nos últimos dias."
+    fazer: "Se você não abriu esse app nesse período, remova."
+  notificacoes_excesso:
+    peso: 15
+    titulo: "{detalhe}"
+    significa: "O app manda notificações demais. Muitas vezes são propagandas ou avisos falsos de vírus."
+    fazer: "Desligue as notificações dele em Configurações > Apps > Notificações, ou remova."
   instalado_recente:
     peso: 5
     titulo: "Instalado há {detalhe} dia(s)"
@@ -178,6 +230,26 @@ appops:
     fazer: "Desative em Configurações > Apps > Acesso especial > Instalar apps desconhecidos."
 
 aparelho:
+  popups:
+    nivel: MÉDIO
+    titulo: "{detalhe} abrindo anúncios fora do app"
+    significa: "São os pop-ups de propaganda que aparecem na tela inicial ou por cima de outros apps."
+    fazer: "Remova os apps marcados como 'Abriu anúncio fora do app'."
+  vpn_sempre:
+    nivel: MÉDIO
+    titulo: "VPN sempre ligada: {detalhe}"
+    significa: "Toda a internet do celular passa por esse app."
+    fazer: "Normal se você instalou essa VPN de propósito. Se não reconhece, remova o app."
+  vpn_ativa:
+    nivel: BAIXO
+    titulo: "VPN conectada agora"
+    significa: "A internet está passando por um app de VPN neste momento."
+    fazer: "Confira se você reconhece a VPN."
+  dns_privado:
+    nivel: BAIXO
+    titulo: "DNS privado: {detalhe}"
+    significa: "Os endereços de sites são consultados nesse servidor em vez do da operadora."
+    fazer: "Normal se você configurou (bloqueador de anúncios, por exemplo). Se não, volte para Automático em Rede > DNS privado."
   risco_pix:
     nivel: ALTO
     titulo: "Risco de golpe no Pix: {detalhe}"
