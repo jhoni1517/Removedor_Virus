@@ -387,6 +387,17 @@ def cmd_parear(a):
 
 def cmd_historico(a):
     con_db = db.conectar()
+    if a.app:
+        achou = db.buscar_app(con_db, a.app, a.limite)
+        if not achou:
+            return con.print(f"Nenhuma análise com '{a.app}' (use pelo menos 3 letras).")
+        t = Table(header_style="bold", title=f"Onde '{a.app}' apareceu")
+        for c in ("Varredura", "Data", "Aparelho", "App", "Pacote", "Risco"):
+            t.add_column(c, overflow="fold")
+        for x in achou:
+            t.add_row(str(x["varredura_id"]), x["data"][:16].replace("T", " "), x["aparelho"], x["nome"] or "",
+                      x["pacote"] or "", f"{x['nivel']} ({x['score']})")
+        return con.print(t)
     linhas = db.varreduras(con_db, a.serial, a.limite)
     if not linhas:
         return con.print("Nenhuma varredura registrada ainda.")
@@ -781,6 +792,7 @@ def main():
     s = sub.add_parser("historico", help="Varreduras e ações anteriores (banco local)")
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
+    s.add_argument("--app", metavar="NOME", help="Procura um app (nome ou pacote) em todas as análises")
     s.set_defaults(func=cmd_historico)
 
     s = sub.add_parser("laudo", help="Gera o laudo PDF de uma varredura do histórico")

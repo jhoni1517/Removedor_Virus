@@ -232,13 +232,32 @@ def restaurar(ap, ident):
             ok = "Success" in out
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+    elif acao == "arquivos_apagados" and meta.get("caminhos"):  # instaladores .apk tirados do armazenamento
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            try:
+                locais = _extrair_apks(pasta, meta, tmp)
+            except ValueError as e:
+                return False, str(e)
+            msgs, ok = [], True
+            for local in locais:
+                original = meta["caminhos"].get(Path(local).name)
+                if not original:
+                    continue
+                r = ap.adb("push", local, original, timeout=600, erro=True)
+                certo = any(x in r for x in ("pushed", "bytes in"))
+                ok &= certo
+                msgs.append(f"{original}: {'devolvido' if certo else 'não confirmou'}")
+            out = "; ".join(msgs)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     elif acao in ("ajuste", "parcial") or (acao is None and meta.get("ajustes")):
         # "parcial": a remoção falhou depois de já ter tirado acessibilidade/sobreposição; isso se desfaz aqui
         ok, msgs = _reverter_ajustes(ap, meta)
         out = "; ".join(msgs) or "nada a desfazer"
     else:
         return False, f"nada a restaurar (ação: {acao})"
-    if ok and acao not in ("ajuste", "parcial", None) and meta.get("ajustes"):
+    if ok and acao not in ("ajuste", "parcial", "arquivos_apagados", None) and meta.get("ajustes"):
         _, msgs = _reverter_ajustes(ap, meta)
         out = f"{out}\n" + "; ".join(msgs)
     if ok:

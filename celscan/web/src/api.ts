@@ -43,6 +43,7 @@ export interface AppResultado {
   removido_antes?: string | null;
   vigilancia?: boolean;
   sensivel?: boolean;
+  poderes?: string[];
   essencial?: boolean;
   sobreposicao?: boolean;
 }

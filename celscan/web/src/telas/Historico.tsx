@@ -13,7 +13,40 @@ interface ItemQuarentena {
 }
 const ACOES: Record<string, string> = {
   removido: "Removido", removido_usuario0: "Removido (usuário)", desativado: "Desativado", ajuste: "Configuração alterada",
+  parcial: "Remoção incompleta (poderes retirados)", arquivos_apagados: "Instaladores .apk apagados",
 };
+interface Achou { varredura_id: number; data: string; aparelho: string; pacote: string; nome: string; nivel: string; score: number; ameaca: string | null }
+
+/** "Esse app já apareceu em outro cliente?": procura em todas as análises guardadas neste PC. */
+function BuscaNoHistorico({ onAbrir }: { onAbrir: (id: number) => void }) {
+  const [termo, setTermo] = useState("");
+  const [achados, setAchados] = useState<Achou[] | null>(null);
+  async function buscar() {
+    try { setAchados(await api<Achou[]>(`/historico/apps?q=${encodeURIComponent(termo.trim())}`)); }
+    catch { setAchados([]); }
+  }
+  return (
+    <Cartao className="mb-8 p-5">
+      <h2 className="mb-3 flex items-center gap-2 font-semibold"><Search size={18} aria-hidden /> Procurar app em todas as análises</h2>
+      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); buscar(); }}>
+        <input className="min-w-[240px] flex-1 rounded-md border border-linha bg-superficie-2 px-3 py-2 text-sm" value={termo}
+          onChange={(e) => setTermo(e.target.value)} placeholder="Nome ou pacote (ex.: Sync Services, com.exemplo)" aria-label="Nome ou pacote do app" />
+        <Botao type="submit" disabled={termo.trim().length < 3}>Procurar</Botao>
+      </form>
+      {achados && (achados.length === 0 ? <p className="mt-3 text-sm text-fraco">Nenhuma análise com esse app.</p> : (
+        <ul className="mt-3 divide-y divide-linha text-sm">
+          {achados.map((a) => (
+            <li key={`${a.varredura_id}-${a.pacote}`} className="flex flex-wrap items-center gap-2 py-2">
+              <span className="min-w-0 flex-1"><strong>{a.nome}</strong> <span className="font-mono text-xs text-fraco">{a.pacote}</span>
+                <span className="block text-xs text-fraco">{data(a.data)} · {a.aparelho} · {a.nivel} ({a.score} pts){a.ameaca ? ` · ${a.ameaca}` : ""}</span></span>
+              <Botao variante="fantasma" onClick={() => onAbrir(a.varredura_id)}>Abrir análise</Botao>
+            </li>
+          ))}
+        </ul>
+      ))}
+    </Cartao>
+  );
+}
 
 function data(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
@@ -69,6 +102,8 @@ export default function Historico({ onAbrir }: { onAbrir: (id: number) => void }
         </form>
         {verificado && <p className={`mt-3 text-sm ${verificado.ok ? "text-ok" : "text-perigo"}`} role="status">{verificado.texto}</p>}
       </Cartao>
+
+      <BuscaNoHistorico onAbrir={onAbrir} />
 
       <h2 className="mb-3 text-lg font-semibold">Varreduras</h2>
       {varreduras === null ? <p className="text-fraco">Carregando...</p> : varreduras.length === 0 ? <Vazio>Nenhuma varredura ainda.</Vazio> : (

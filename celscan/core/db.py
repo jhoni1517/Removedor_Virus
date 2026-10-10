@@ -51,6 +51,10 @@ MIGRACOES = [
     );
     CREATE INDEX ordens_status ON ordens(status, criado_em);
     """,
+    """
+    ALTER TABLE ordens ADD COLUMN retorno_em TEXT;
+    CREATE INDEX ordens_retorno ON ordens(retorno_em);
+    """,
 ]
 
 
@@ -275,6 +279,54 @@ def removidos_antes(con: sqlite3.Connection, serial: str) -> dict[str, str]:
     rows = con.execute("SELECT pacote, MAX(data) FROM acoes WHERE serial = ? AND tipo = 'remocao' "
                        "AND pacote IS NOT NULL AND desfeita_em IS NULL GROUP BY pacote", (serial,)).fetchall()
     return {r[0]: r[1] for r in rows}
+
+
+def buscar_app(con: sqlite3.Connection, termo: str, limite: int = 50) -> list[dict[str, Any]]:
+    """Procura um app (nome ou pacote) em TODAS as varreduras: 'esse app já apareceu em outro cliente?'."""
+    t = (termo or "").strip().lower()
+    if len(t) < 3:
+        return []
+    padrao = "%" + t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    linhas = con.execute(
+        "SELECT v.id, v.data, v.serial, a.fabricante, a.modelo, v.resultado_json FROM varreduras v "
+        "LEFT JOIN aparelhos a ON a.serial = v.serial WHERE v.resultado_json LIKE ? ESCAPE '\\' "
+        "ORDER BY v.id DESC LIMIT 500", (padrao,)).fetchall()
+    res: list[dict[str, Any]] = []
+    for vid, data, serial, fab, modelo, bruto in linhas:
+        try:
+            apps = json.loads(bruto).get("apps") or []
+        except (ValueError, AttributeError):
+            continue
+        for r in apps:
+            if t in (r.get("pacote") or "").lower() or t in (r.get("nome") or "").lower():
+                res.append({"varredura_id": vid, "data": data, "serial": serial,
+                            "aparelho": " ".join(x for x in (fab, modelo) if x) or serial,
+                            "pacote": r.get("pacote"), "nome": r.get("nome") or r.get("pacote"),
+                            "nivel": r.get("nivel"), "score": r.get("score"), "ameaca": r.get("ameaca")})
+                if len(res) >= limite:
+                    return res
+    return res
+
+
+def ameacas_frequentes(con: sqlite3.Connection, desde: str, limite: int = 8) -> list[dict[str, Any]]:
+    """Apps de risco ALTO mais vistos desde a data (ISO): o que está circulando entre os clientes da loja."""
+    cont: dict[str, dict[str, Any]] = {}
+    for (bruto,) in con.execute("SELECT resultado_json FROM varreduras WHERE data >= ? ORDER BY id DESC LIMIT 2000",
+                                (desde,)):
+        try:
+            apps = json.loads(bruto).get("apps") or []
+        except (ValueError, AttributeError):
+            continue
+        vistos = set()
+        for r in apps:
+            pkg = r.get("pacote")
+            if r.get("nivel") != "ALTO" or not pkg or pkg in vistos:
+                continue
+            vistos.add(pkg)  # conta 1 por varredura
+            x = cont.setdefault(pkg, {"pacote": pkg, "nome": r.get("nome") or pkg, "vezes": 0,
+                                      "ameaca": r.get("ameaca"), "motivo": (r.get("motivos") or [None])[0]})
+            x["vezes"] += 1
+    return sorted(cont.values(), key=lambda x: (-x["vezes"], x["nome"].lower()))[:limite]
 
 
 def meta_varredura(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None:

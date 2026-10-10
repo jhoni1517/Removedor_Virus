@@ -8,25 +8,18 @@ import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
-import { Botao, Cartao, Data, IconeApp, Medidor, RaioX, Selo, Vazio, nomeApp, recente, tamanhoLegivel } from "../ui";
-import { AbaAnuncios, AbaInternet, AbaSensores, AbaTodos } from "./AbasResultado";
+import { Botao, Cartao, Data, IconeApp, Medidor, RaioX, Selo, Vazio, duracaoCurta, nomeApp, recente, tamanhoLegivel } from "../ui";
+import { AbaAnuncios, AbaInternet, AbaPoderes, AbaSensores, AbaTodos, ApksGuardados } from "./AbasResultado";
 
 type Filtro = "alerta" | "ALTO" | "MÉDIO" | "BAIXO" | "todos";
 const FILTROS: [Filtro, string][] = [["alerta", "Com alerta"], ["ALTO", "Alto"], ["MÉDIO", "Médio"], ["BAIXO", "Baixo"], ["todos", "Todos"]];
-type Aba = "problemas" | "todos" | "anuncios" | "sensores" | "internet";
-const ABAS_VALIDAS: Aba[] = ["problemas", "todos", "anuncios", "sensores", "internet"];
+type Aba = "problemas" | "todos" | "poderes" | "anuncios" | "sensores" | "internet";
+const ABAS_VALIDAS: Aba[] = ["problemas", "todos", "poderes", "anuncios", "sensores", "internet"];
 function lerLocal<T extends string>(chave: string, validos: readonly T[], padrao: T): T {
   try { const x = localStorage.getItem(chave) as T | null; return x && validos.includes(x) ? x : padrao; } catch { return padrao; }
 }
 function gravarLocal(chave: string, valor: string) { try { localStorage.setItem(chave, valor); } catch { /* sem storage */ } }
 
-
-/** 5400 -> "1 h 30 min"; 300 -> "5 min". */
-export function duracaoCurta(s: number): string {
-  if (s < 60) return "menos de 1 min";
-  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
-  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
-}
 
 const COR_BORDA: Record<string, string> = { ALTO: "border-l-perigo", "MÉDIO": "border-l-atencao", BAIXO: "border-l-linha" };
 
@@ -534,6 +527,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
   const abas: [typeof aba, string, number][] = [
     ["problemas", "Problemas", contagem.ALTO + contagem["MÉDIO"] + v.achados.length],
     ["todos", "Todos os apps", v.resultados.length],
+    ["poderes", "Poderes especiais", v.resultados.filter((r) => !r.sistema && (r.poderes?.length ?? 0) > 0).length],
     ["anuncios", "Anúncios", v.resultados.filter((r) => r.anuncios && (r.anuncios.tela_cheia || r.anuncios.fora_do_app)).length],
     ["sensores", "Câmera e microfone", v.resultados.filter((r) => Object.values(r.sensores ?? {}).some((s) => s < 7 * 86400)).length],
     ["internet", "Internet por app", 0],
@@ -623,6 +617,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         ))}
       </div>
       {aba === "todos" && <AbaTodos v={v} aoAbrir={abrirApp} />}
+      {aba === "poderes" && <AbaPoderes v={v} aoAbrir={abrirApp} />}
       {aba === "anuncios" && <AbaAnuncios v={v} aoAbrir={abrirApp} conectado={conectado} />}
       {aba === "sensores" && <AbaSensores v={v} aoAbrir={abrirApp} />}
       {aba === "internet" && <AbaInternet v={v} aoAbrir={abrirApp} conectado={conectado} />}
@@ -641,6 +636,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
               <div className="flex items-center gap-2"><Selo nivel={a.nivel} /><p className="font-medium">{a.titulo}</p></div>
               <p className="mt-1 text-sm text-fraco">{a.significa}</p>
               <p className="mt-0.5 text-sm"><span className="font-semibold">O que fazer: </span>{a.fazer}</p>
+              {(a.chave === "apks_guardados" || a.chave === "apk_ameaca_guardado") && <ApksGuardados serial={v.info.serial} conectado={conectado} />}
             </Cartao>
           ))}
         </div>

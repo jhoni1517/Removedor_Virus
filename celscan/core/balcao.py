@@ -22,6 +22,7 @@ from celscan.core import preferencias
 from celscan.core.db import _agora
 
 STATUS = ("aguardando", "analisando", "pronto", "entregue")
+DIAS_RETORNO = 30  # revisão gratuita: o painel lembra de chamar o cliente
 NOMES_STATUS = {"aguardando": "Aguardando", "analisando": "Analisando", "pronto": "Pronto", "entregue": "Entregue"}
 
 
@@ -61,10 +62,16 @@ def mudar_status(con: sqlite3.Connection, ordem_id: int, status: str, varredura_
     if status not in STATUS:
         raise ValueError(f"Status inválido: {status}")
     agora = _agora()
+    # entregue: marca o retorno gratuito (revisão) para daqui a N dias; o painel lembra quem chamar
+    retorno = None
+    if status == "entregue":
+        dias = int(preferencias.ler().get("dias_retorno") or DIAS_RETORNO)
+        retorno = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d") if dias > 0 else None
     cur = con.execute(
         """UPDATE ordens SET status=?, atualizado_em=?, entregue_em=CASE WHEN ?='entregue' THEN ? ELSE entregue_em END,
-                             varredura_id=COALESCE(?, varredura_id) WHERE id=?""",
-        (status, agora, status, agora, varredura_id, ordem_id))
+                             varredura_id=COALESCE(?, varredura_id),
+                             retorno_em=CASE WHEN ?='entregue' THEN ? ELSE retorno_em END WHERE id=?""",
+        (status, agora, status, agora, varredura_id, status, retorno, ordem_id))
     con.commit()
     return cur.rowcount > 0
 
@@ -152,7 +159,40 @@ def painel(con: sqlite3.Connection, agora: datetime | None = None) -> dict[str, 
                 "tempo_medio_min": round(sum(tempos) / len(tempos)) if tempos else None}
 
     abertas = {s: con.execute("SELECT COUNT(*) FROM ordens WHERE status=?", (s,)).fetchone()[0] for s in STATUS}
-    return {"dia": periodo(dia), "mes": periodo(mes), "por_status": abertas}
+    from celscan.core import db
+    return {"dia": periodo(dia), "mes": periodo(mes), "por_status": abertas,
+            "retornos": retornos(con, agora),
+            "ameacas_mes": db.ameacas_frequentes(con, agora.strftime("%Y-%m-01"))}
+
+
+def retornos(con: sqlite3.Connection, agora: datetime | None = None, dias: int = 7) -> list[dict[str, Any]]:
+    """Clientes com revisão vencida ou nos próximos `dias` (para mandar o lembrete)."""
+    agora = agora or datetime.now()
+    ate = (agora + timedelta(days=dias)).strftime("%Y-%m-%d")
+    linhas = con.execute(
+        "SELECT o.*, c.nome AS cliente, c.telefone FROM ordens o LEFT JOIN clientes c ON c.id = o.cliente_id "
+        "WHERE o.retorno_em IS NOT NULL AND o.retorno_em <= ? ORDER BY o.retorno_em LIMIT 50", (ate,)).fetchall()
+    res = []
+    for r in linhas:
+        d = _linha(r)
+        d["atrasado"] = d["retorno_em"] < agora.strftime("%Y-%m-%d")
+        nome = (d.get("cliente") or "").split(" ")[0]
+        texto = (f"Olá{', ' + nome if nome else ''}! Aqui é da assistência. Já faz um tempo que cuidamos do seu "
+                 f"{d.get('aparelho') or 'celular'}. "
+                 "Que tal passar aqui para uma revisão rápida e gratuita de segurança?")
+        tel = "".join(ch for ch in (d.get("telefone") or "") if ch.isdigit())
+        if tel and not tel.startswith("55") and len(tel) <= 11:
+            tel = "55" + tel
+        d["whatsapp"] = f"https://wa.me/{tel}?text={quote(texto)}" if tel else None
+        d["mensagem"] = texto
+        res.append(d)
+    return res
+
+
+def concluir_retorno(con: sqlite3.Connection, ordem_id: int) -> bool:
+    cur = con.execute("UPDATE ordens SET retorno_em = NULL WHERE id = ?", (ordem_id,))
+    con.commit()
+    return cur.rowcount > 0
 
 
 def csv_ordens(con: sqlite3.Connection) -> str:

@@ -114,6 +114,30 @@ SENSIVEIS = {
 }
 
 
+def poderes(app: AppBruto, dados: DadosAparelho) -> list[str]:
+    """Poderes especiais que o app tem agora (o que ele CONSEGUE fazer além de um app comum)."""
+    pkg, res = app.pacote, []
+    if pkg in dados.admins:
+        res.append("administrador")
+    if pkg in dados.acess:
+        res.append("controla a tela")
+    if pkg in dados.notif:
+        res.append("lê notificações")
+    if "SYSTEM_ALERT_WINDOW" in app.appops:
+        res.append("janela sobre outros apps")
+    if "PROJECT_MEDIA" in app.appops:
+        res.append("grava a tela")
+    if "REQUEST_INSTALL_PACKAGES" in app.appops:
+        res.append("instala apps")
+    if dados.teclado == pkg:
+        res.append("teclado")
+    if dados.sms == pkg:
+        res.append("SMS padrão")
+    if {"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"} & app.perms:
+        res.append("lê SMS")
+    return res
+
+
 def sensivel(pkg: str) -> bool:
     """App cujo dado não volta só reinstalando: autenticador, senhas, carteira, banco, mensageiro."""
     return pkg in SENSIVEIS or pkg in pix.carregar().oficiais
@@ -130,7 +154,7 @@ def _proprio(app: AppBruto, dados: DadosAparelho) -> dict[str, Any]:
             "anuncios": {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": [], "gatilhos": []},
             "notificacoes": 0, "notificacoes_dia": 0, "enviado_mb": None, "sobreposicao": False, "proprio": True,
             "tempo_uso_s": None, "bateria_mah": None, "rodando": app.rodando, "removido_antes": None,
-            "vigilancia": False, "sensivel": False}
+            "vigilancia": False, "sensivel": False, "poderes": []}
 
 
 def origem_legivel(app: AppBruto, dados: DadosAparelho | None = None) -> str:
@@ -379,6 +403,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "vigilancia": bool(ioc and any(p in ioc.lower() for p in ("stalkerware", "spyware", "pegasus", "predator")))
         or any(x["chave"] == "padrao_espiao" for x in a),
         "sensivel": sensivel(pkg),
+        "poderes": poderes(app, dados),
     }
 
 

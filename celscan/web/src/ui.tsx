@@ -272,3 +272,10 @@ export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
     </figure>
   );
 }
+
+/** 5400 -> "1 h 30 min"; 300 -> "5 min". */
+export function duracaoCurta(s: number): string {
+  if (s < 60) return "menos de 1 min";
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+}

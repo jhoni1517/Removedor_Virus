@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import AfterValidator, BaseModel, Field
@@ -182,6 +182,11 @@ class PedidoConferir(BaseModel):
 class PedidoFinalizar(BaseModel):
     serial: str
     desligar_depuracao: bool = True
+
+
+class PedidoApagarApks(BaseModel):
+    serial: str
+    caminhos: list[str] = Field(min_length=1, max_length=50)
 
 
 class PedidoAjuste(BaseModel):
@@ -744,6 +749,38 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         except ValueError as e:
             raise HTTPException(422, str(e))
         return balcao.ordem(con, oid) or {}
+
+    @app.post("/api/ordens/{oid}/retorno-feito")
+    def retorno_feito(oid: int) -> dict[str, bool]:
+        if not balcao.concluir_retorno(db.conectar(), oid):
+            raise HTTPException(404, "Ordem não encontrada")
+        return {"ok": True}
+
+    @app.get("/api/historico/apps")
+    def buscar_no_historico(q: str = Query(min_length=3, max_length=80)) -> list[dict[str, Any]]:
+        return db.buscar_app(db.conectar(), q)
+
+    @app.get("/api/apks-guardados")
+    def listar_apks(serial: str) -> list[dict[str, Any]]:
+        from celscan.acoes import apks
+        from celscan.analise import iocs as iocs_mod
+        return apks.listar(aparelhos.pronto(serial), iocs_mod.carregar(avisar=lambda m: None))
+
+    @app.post("/api/apks-guardados/apagar")
+    def apagar_apks(p: PedidoApagarApks) -> dict[str, Any]:
+        from celscan.acoes import apks
+        ap = aparelhos.pronto(p.serial)
+        if tarefas.ocupado(p.serial):
+            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        try:
+            res = apks.apagar(ap, p.caminhos)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        except OSError as e:
+            raise HTTPException(409, str(e))
+        db.registrar_acao(db.conectar(), p.serial, "apks_apagados", None, ", ".join(res["apagados"]),
+                          res["quarentena_id"])
+        return res
 
     @app.get("/api/ordens/{oid}/mensagem")
     def mensagem_ordem(oid: int, loja: str | None = None) -> dict[str, str]:

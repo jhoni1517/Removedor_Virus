@@ -33,6 +33,7 @@ from reportlab.platypus import (
 )
 
 from celscan import __version__
+from celscan.analise.plano import plano_de_acao
 
 VERDE, AMBAR, VERMELHO = colors.HexColor("#1f7a4d"), colors.HexColor("#b7791f"), colors.HexColor("#b3261e")
 CINZA, TINTA, LINHA = colors.HexColor("#5b6b7a"), colors.HexColor("#1d1d1b"), colors.HexColor("#d9d3c5")
@@ -337,6 +338,16 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
         return _finalizar(historia, meta, h, codigo, e, retrato)
 
     achados = retrato.get("achados_aparelho", [])
+    apps = retrato.get("apps", [])
+    removidos = {a.get("pacote") for a in acoes or [] if a.get("tipo") == "remocao" and not a.get("desfeita_em")}
+    passos = plano_de_acao(apps, achados, removidos)
+    if passos:
+        historia.append(Paragraph("O que fazer agora" if versao == "cliente" else "Plano de ação", e["h2"]))
+        historia += [Paragraph(_t(f"{i}. {p}"), e["normal"]) for i, p in enumerate(passos, 1)]
+    elif removidos:
+        historia.append(Paragraph("O que fazer agora", e["h2"]))
+        historia.append(Paragraph(_t("Os problemas encontrados foram resolvidos neste atendimento. Evite instalar apps "
+                                     "fora da loja oficial e mantenha o celular atualizado."), e["normal"]))
     historia.append(Paragraph("Configurações do aparelho", e["h2"]))
     if achados:
         for a in achados:
@@ -344,7 +355,6 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
     else:
         historia.append(Paragraph("Nenhum problema encontrado nas configurações.", e["normal"]))
 
-    apps = retrato.get("apps", [])
     risco = [r for r in apps if r.get("nivel") in ("ALTO", "MÉDIO")]
     historia.append(Paragraph("Apps que merecem atenção", e["h2"]))
     if not risco:
