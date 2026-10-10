@@ -155,7 +155,11 @@ def importar(origem: Path | str) -> list[tuple[str, str]]:
 
     conhecidas = {b.arquivo: b for b in todas()}
     res: list[tuple[str, str]] = []
-    with zipfile.ZipFile(origem) as z:
+    try:
+        arquivo = zipfile.ZipFile(origem)
+    except zipfile.BadZipFile as e:
+        raise ValueError("o arquivo não é um .zip válido") from e
+    with arquivo as z:
         try:
             manifesto = json.loads(z.read(MANIFESTO))
         except (KeyError, ValueError) as e:

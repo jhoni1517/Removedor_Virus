@@ -87,7 +87,7 @@ def _sha256(caminho) -> str:
 
 def _tamanho_remoto(ap, caminho: str) -> int | None:
     saida = ap.sh(f"stat -c %s {shlex.quote(caminho)}").strip()
-    return int(saida) if saida.isdigit() else None
+    return int(saida) if saida.isdecimal() else None
 
 
 def criar(ap, pacote, dados=None, copiar_apk=True):

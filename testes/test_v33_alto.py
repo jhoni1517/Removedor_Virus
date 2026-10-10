@@ -147,3 +147,11 @@ def test_pdf_tem_plano(tmp_path):
                "apps": [{"pacote": "a", "nome": "Golpe", "nivel": "ALTO", "score": 90, "achados": [], "motivos": []}]}
     dados, _ = pdf.gerar_pdf(meta, retrato)
     assert dados.startswith(b"%PDF")
+
+
+def test_busca_e_ranking_sem_json1(tmp_path, monkeypatch):
+    from celscan.core import db
+    con = _con(tmp_path)
+    monkeypatch.setattr(db, "_json_sql", lambda c: False)
+    assert len(db.buscar_app(con, "SYNC")) == 2
+    assert db.ameacas_frequentes(con, "2000-01-01")[0]["vezes"] == 2

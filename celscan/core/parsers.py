@@ -236,8 +236,8 @@ def bateria(txt: str) -> dict[str, str | None] | None:
         "nivel": b.get("level"),
         "saude": SAUDE_BATERIA.get(b.get("health", ""), b.get("health")),
         "situacao": STATUS_BATERIA.get(b.get("status", ""), b.get("status")),
-        "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdigit() else None,
-        "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdigit() else None,
+        "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdecimal() else None,
+        "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdecimal() else None,
         "ciclos": b.get("cycle count") or b.get("battery cycle count") or b.get("mbatterycyclecount"),
     }
 
@@ -437,7 +437,7 @@ def rede(txt: str) -> dict[str, object]:
     linhas = [linha.strip() for linha in txt.splitlines()] + ["", "", "", ""]
     limpo = [("" if v in ("null", "") else v) for v in linhas[:4]]
     return {"dns_modo": limpo[0], "dns_servidor": limpo[1], "vpn_sempre": limpo[2],
-            "vpn_ativa": limpo[3].isdigit() and int(limpo[3]) > 0}
+            "vpn_ativa": limpo[3].isdecimal() and int(limpo[3]) > 0}
 
 
 def home(txt: str) -> str | None:
@@ -469,7 +469,8 @@ def pacotes_por_usuario(txt: str) -> dict[int, dict[str, str | None]]:
     atual: dict[str, str | None] | None = None
     for linha in txt.splitlines():
         if linha.startswith("@@USER "):
-            atual = res.setdefault(int(linha[7:].strip() or 0), {})
+            n = linha[7:].strip()
+            atual = res.setdefault(int(n), {}) if n.isdecimal() else None
             continue
         m = re.match(r"^package:([\w.]+)(?:\s+installer=(\S+))?", linha.strip())
         if m and atual is not None:
@@ -484,7 +485,8 @@ def apks_guardados(txt: str) -> list[dict[str, object]]:
         partes = linha.split("\t", 2)
         if len(partes) == 3 and partes[2].startswith("/") and partes[2].lower().endswith(".apk"):
             sha = partes[1] if re.fullmatch(r"[0-9a-f]{64}", partes[1]) else None
-            res.append({"caminho": partes[2], "tamanho": int(partes[0]) if partes[0].isdigit() else None,
+            res.append({"caminho": re.sub(r"/{2,}", "/", partes[2]),
+                        "tamanho": int(partes[0]) if partes[0].isdecimal() else None,
                         "sha256": sha})
     return res
 
@@ -503,7 +505,7 @@ def rodando(txt: str) -> set[str]:
 def relogio(txt: str) -> int | None:
     """`date +%s` do aparelho (para corrigir 'há X minutos' quando o relógio do PC está diferente)."""
     v = (txt or "").strip().splitlines()
-    return int(v[0]) if v and v[0].strip().isdigit() else None
+    return int(v[0]) if v and v[0].strip().isdecimal() else None
 
 
 def _hms(txt: str) -> int:

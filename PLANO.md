@@ -9,6 +9,53 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.3.0b1 (10/10/2026) — 50 upgrades por nível + caçada de bugs
+
+**Crítico (10):** instalador forjado (diz Play Store, mas foi o adb/outro app) · app que voltou depois
+de removido (só se reinstalado depois da remoção) · dropper ativo (instala + controla a tela) · lê
+códigos do banco · golpe do empréstimo · teclado de fora da loja · padrão espião genérico aciona o modo
+vítima (interface e CLI) · perfis/usuários extras e apps só neles · instaladores .apk guardados com
+checagem de hash · apps sensíveis (2FA, senhas, carteira, banco, mensageiro) exigem confirmação.
+Mais: log mascara pareamento/IMEI/telefone/e-mail/token; coleta lê tempo de tela, bateria por app,
+processos vivos e o relógio do celular.
+
+**Prioridade (10):** hashes incrementais (cache por tamanho+data) · prazo aprendido neste PC · aviso
+de bateria baixa · plano por app na confirmação · "Abrir no celular" · varredura liga sozinha na OS
+aberta · bases offline (`--exportar/--importar`, zip validado) · selos Rodando/Voltou/Dados importantes ·
+Finalizar atendimento · conferência automática depois de remover.
+
+**Alto (10):** golpe do empréstimo e leitura de códigos no plano · tempo de tela por app · bateria por
+app · aba Poderes especiais · plano de ação no laudo PDF · apagar instaladores .apk com desfazer ·
+procurar app em todas as análises (`historico --app`) · ameaças do mês no painel · revisão gratuita
+com lembrete no WhatsApp.
+
+**Médio (10):** lembra o modo · % no título · legenda dos níveis · copiar lista de risco · inicial
+colorida no PDF · filtro do histórico · Ctrl+Enter · CSV com colunas novas · "por que está ok" ·
+prazo da revisão configurável.
+
+**Baixo (10):** `--version` · números pt-BR · ícone da aba na cor da nota · "Celular limpo!" ·
+confirmação ao copiar · atalho VirusTotal pelo hash · +19 redes de anúncio · contato da loja no
+rodapé do laudo · leitor de tela anuncia a etapa · `apps --risco`.
+
+| Bugs achados nesta rodada | |
+|---|---|
+| Remover app espião pela CLI acontecia por padrão (Enter), sem o aviso de que alerta quem instalou | ✅ padrão "não" + aviso |
+| `find /sdcard` não entra no link `/sdcard`: a busca por .apk guardados não acharia nada no aparelho | ✅ `/sdcard/` |
+| App só desativado (não removido) seria marcado como "voltou" na visita seguinte | ✅ compara a data de instalação |
+| App reinstalado pelo dono na Play Store seria marcado como "voltou" (+50) | ✅ só fora da loja |
+| Teclado/leitor de notificações do F-Droid ou copiado pelo Smart Switch virava "suspeito" | ✅ lojas alternativas e transferência fora |
+| Perfil "Apps duplos"/Dual Messenger contava como usuário extra; apps no perfil de trabalho eram ALTO | ✅ ignorados / MÉDIO |
+| Prazo 0 (sem revisão) virava 30 dias | ✅ |
+| Tempo da coleta nunca entrava na média (nº de apps definido tarde) | ✅ |
+| Relógio do celular zerado (1970) estragaria "instalado há X dias" | ✅ ignora relógio inválido |
+| Ranking de ameaças e busca no histórico carregavam o JSON inteiro (com ícones) de cada análise | ✅ JSON1 no SQLite, plano B em Python |
+| `@@USER` sem número derrubava o parser (achado no fuzz) | ✅ |
+| `int()` em dígito sobrescrito ("²") passava pelo `isdigit()` | ✅ `isdecimal()` nos parsers |
+| Zip de bases inválido derrubava a CLI com traceback; caminho `../` no zip | ✅ mensagem / ignorado |
+| APK guardado sem tamanho (stat falhou) nunca podia ser apagado | ✅ |
+| Progresso dos hashes contava apps em dobro no plano B | ✅ |
+| Contato da loja com emoji quebraria o rodapé do PDF | ✅ |
+
 ## Beta 3.1.0b1 (10/10/2026) — versão unificada (GitHub + CelScan 3.0 do chat)
 
 Comparação feita entre esta base (3.0.0b11) e a versão 3.0 gerada no chat. Esta base estava muito à

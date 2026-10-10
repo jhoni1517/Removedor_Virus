@@ -192,6 +192,7 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         passos.etapa("coleta")
         with log.etapa("coleta"):
             sc.coletar()
+        passos.n_apps = len(sc.apps)  # antes da próxima etapa: o tempo da coleta entra na média deste PC
         avisos = list(sc.avisos)
         if opcoes.modo == "completo" and not vt:
             avisos.append("VirusTotal não consultado: cadastre sua chave gratuita em Configurações.")

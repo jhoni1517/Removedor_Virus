@@ -281,51 +281,78 @@ def removidos_antes(con: sqlite3.Connection, serial: str) -> dict[str, str]:
     return {r[0]: r[1] for r in rows}
 
 
+def _json_sql(con: sqlite3.Connection) -> bool:
+    """SQLite com JSON1 (padrão desde 3.38): extrai só os campos usados, sem carregar ícones no Python."""
+    try:
+        con.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone()
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _apps_python(con: sqlite3.Connection, sql: str, args: tuple) -> list[tuple[Any, ...]]:
+    """Plano B sem JSON1: lê o JSON no Python (mais lento com muitos ícones)."""
+    res = []
+    for vid, data, serial, fab, modelo, bruto in con.execute(sql, args):
+        try:
+            apps = json.loads(bruto).get("apps") or []
+        except (ValueError, AttributeError):
+            continue
+        res += [(vid, data, serial, fab, modelo, r.get("pacote"), r.get("nome"), r.get("nivel"), r.get("score"),
+                 r.get("ameaca"), (r.get("motivos") or [None])[0]) for r in apps if isinstance(r, dict)]
+    return res
+
+
+_CAMPOS_APP = ("json_extract(j.value, '$.pacote'), json_extract(j.value, '$.nome'), json_extract(j.value, '$.nivel'), "
+               "json_extract(j.value, '$.score'), json_extract(j.value, '$.ameaca'), "
+               "json_extract(j.value, '$.motivos[0]')")
+
+
 def buscar_app(con: sqlite3.Connection, termo: str, limite: int = 50) -> list[dict[str, Any]]:
     """Procura um app (nome ou pacote) em TODAS as varreduras: 'esse app já apareceu em outro cliente?'."""
     t = (termo or "").strip().lower()
     if len(t) < 3:
         return []
     padrao = "%" + t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    linhas = con.execute(
-        "SELECT v.id, v.data, v.serial, a.fabricante, a.modelo, v.resultado_json FROM varreduras v "
-        "LEFT JOIN aparelhos a ON a.serial = v.serial WHERE v.resultado_json LIKE ? ESCAPE '\\' "
-        "ORDER BY v.id DESC LIMIT 500", (padrao,)).fetchall()
+    base = ("SELECT v.id, v.data, v.serial, a.fabricante, a.modelo{campos} FROM varreduras v "
+            "LEFT JOIN aparelhos a ON a.serial = v.serial{junta} WHERE v.resultado_json LIKE ? ESCAPE '\\'{filtro} "
+            "ORDER BY v.id DESC LIMIT ?")
+    if _json_sql(con):
+        linhas = con.execute(base.format(campos=", " + _CAMPOS_APP, junta=", json_each(v.resultado_json, '$.apps') j",
+                                         filtro=" AND (lower(json_extract(j.value, '$.pacote')) LIKE ? ESCAPE '\\' "
+                                                "OR lower(json_extract(j.value, '$.nome')) LIKE ? ESCAPE '\\')"),
+                             (padrao, padrao, padrao, limite * 4)).fetchall()
+    else:
+        linhas = _apps_python(con, base.format(campos=", v.resultado_json", junta="", filtro=""), (padrao, 500))
     res: list[dict[str, Any]] = []
-    for vid, data, serial, fab, modelo, bruto in linhas:
-        try:
-            apps = json.loads(bruto).get("apps") or []
-        except (ValueError, AttributeError):
-            continue
-        for r in apps:
-            if t in (r.get("pacote") or "").lower() or t in (r.get("nome") or "").lower():
-                res.append({"varredura_id": vid, "data": data, "serial": serial,
-                            "aparelho": " ".join(x for x in (fab, modelo) if x) or serial,
-                            "pacote": r.get("pacote"), "nome": r.get("nome") or r.get("pacote"),
-                            "nivel": r.get("nivel"), "score": r.get("score"), "ameaca": r.get("ameaca")})
-                if len(res) >= limite:
-                    return res
+    for vid, data, serial, fab, modelo, pkg, nome, nivel_app, score, ameaca, _ in linhas:
+        if t in (pkg or "").lower() or t in (nome or "").lower():  # confere de novo: o lower() do SQLite é só ASCII
+            res.append({"varredura_id": vid, "data": data, "serial": serial,
+                        "aparelho": " ".join(x for x in (fab, modelo) if x) or serial,
+                        "pacote": pkg, "nome": nome or pkg, "nivel": nivel_app, "score": score, "ameaca": ameaca})
+            if len(res) >= limite:
+                break
     return res
 
 
 def ameacas_frequentes(con: sqlite3.Connection, desde: str, limite: int = 8) -> list[dict[str, Any]]:
     """Apps de risco ALTO mais vistos desde a data (ISO): o que está circulando entre os clientes da loja."""
+    if _json_sql(con):
+        linhas = con.execute(
+            "SELECT v.id, v.data, v.serial, NULL, NULL, " + _CAMPOS_APP + " FROM varreduras v, "
+            "json_each(v.resultado_json, '$.apps') j WHERE v.data >= ? AND json_extract(j.value, '$.nivel') = 'ALTO'",
+            (desde,)).fetchall()
+    else:
+        linhas = _apps_python(con, "SELECT v.id, v.data, v.serial, NULL, NULL, v.resultado_json FROM varreduras v "
+                                   "WHERE v.data >= ? ORDER BY v.id DESC LIMIT 2000", (desde,))
     cont: dict[str, dict[str, Any]] = {}
-    for (bruto,) in con.execute("SELECT resultado_json FROM varreduras WHERE data >= ? ORDER BY id DESC LIMIT 2000",
-                                (desde,)):
-        try:
-            apps = json.loads(bruto).get("apps") or []
-        except (ValueError, AttributeError):
+    vistos: set[tuple[int, str]] = set()
+    for vid, _d, _s, _f, _m, pkg, nome, nivel_app, _sc, ameaca, motivo in linhas:
+        if nivel_app != "ALTO" or not pkg or (vid, pkg) in vistos:
             continue
-        vistos = set()
-        for r in apps:
-            pkg = r.get("pacote")
-            if r.get("nivel") != "ALTO" or not pkg or pkg in vistos:
-                continue
-            vistos.add(pkg)  # conta 1 por varredura
-            x = cont.setdefault(pkg, {"pacote": pkg, "nome": r.get("nome") or pkg, "vezes": 0,
-                                      "ameaca": r.get("ameaca"), "motivo": (r.get("motivos") or [None])[0]})
-            x["vezes"] += 1
+        vistos.add((vid, pkg))  # conta 1 por varredura
+        x = cont.setdefault(pkg, {"pacote": pkg, "nome": nome or pkg, "vezes": 0, "ameaca": ameaca, "motivo": motivo})
+        x["vezes"] += 1
     return sorted(cont.values(), key=lambda x: (-x["vezes"], x["nome"].lower()))[:limite]
 
 

@@ -3,8 +3,26 @@
 Segurança, diagnóstico e otimização de celulares Android pelo cabo USB, no Windows.
 O CelScan substitui o antigo "Removedor de Vírus Android".
 
-> **Versão 3.1 beta 1.** As novidades desta versão ainda não foram testadas num celular real. Se algo
-> der errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
+> **Versão 3.3 beta 1.** As novidades desta versão ainda não foram testadas num celular real. Se algo
+> der errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs` (código de
+> pareamento, IMEI, telefone, e-mail e token já saem mascarados).
+
+## Novidades da 3.3
+
+- **Novos golpes detectados:** app que finge ter vindo da Play Store, app que **voltou** depois de
+  removido, app que instala outros sozinho, app que lê códigos do banco, falso app de empréstimo,
+  teclado de fora da loja, comportamento de **app espião** (mesmo fora das listas), apps escondidos
+  em **outro perfil/usuário** e **instaladores .apk** guardados no celular (com apagar + desfazer).
+- **Proteção do cliente:** autenticador, gerenciador de senhas, carteira, banco e mensageiro só saem com
+  confirmação; aviso de **bateria baixa** antes de remover, copiar ou otimizar.
+- **Atendimento mais rápido:** a 2ª varredura do mesmo celular recalcula só os apps que mudaram; o prazo
+  da barra aprende com o seu PC; a análise liga sozinha na ordem de serviço aberta.
+- **Depois de remover:** conferência automática (o app saiu mesmo? sobrou acessibilidade/admin?),
+  botão **Abrir no celular** e **Finalizar atendimento** (limpa os rastros e desliga a depuração USB).
+- **Mais informação:** aba **Poderes especiais**, tempo de tela e bateria por app, selos "Rodando agora"
+  e "Voltou", "por que está ok", plano de ação no laudo PDF.
+- **Loja:** procurar um app em todas as análises, ameaças do mês, **revisão gratuita** com lembrete no
+  WhatsApp, contato da loja no rodapé do laudo, bases para PC sem internet (`bases --exportar/--importar`).
 
 ## Novidades da 3.1
 
@@ -103,7 +121,11 @@ celscan-cli android [--modo rapido|completo] [--remover]   varredura + laudo
 celscan-cli otimizar                                       cache, compilação, animações, bloatware
 celscan-cli historico | quarentena listar | quarentena restaurar ID
 celscan-cli laudo ID [--versao tecnico] | verificar CÓDIGO
-celscan-cli bases [--atualizar]   (e --offline em qualquer comando)
+celscan-cli bases [--atualizar] [--exportar ARQ.zip | --importar ARQ.zip]   (e --offline em qualquer comando)
+celscan-cli historico --app NOME  procura um app em todas as análises
+celscan-cli apps [--risco [alto]] [--csv ARQ]
+celscan-cli finalizar             limpa os rastros do CelScan e desliga a depuração USB
+celscan-cli --version
 celscan-cli espelhar [--modo controlar|ver|otg] [--tela-desligada] [--gravar video.mp4]
 celscan-cli backup [--categorias fotos,whatsapp_midia] [--destino PASTA] [--verificar]
 celscan-cli fixtures              grava as saídas do celular para os testes

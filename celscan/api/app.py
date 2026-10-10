@@ -188,7 +188,7 @@ class PedidoFinalizar(BaseModel):
 
 class PedidoApagarApks(BaseModel):
     serial: str
-    caminhos: list[str] = Field(min_length=1, max_length=50)
+    caminhos: list[Annotated[str, Field(max_length=512)]] = Field(min_length=1, max_length=50)
 
 
 class PedidoAjuste(BaseModel):

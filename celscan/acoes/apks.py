@@ -16,7 +16,8 @@ from celscan.acoes import quarentena
 from celscan.core import parsers
 from celscan.core.adb import Aparelho
 
-LISTAR = ("find /sdcard -maxdepth 5 -type f -iname '*.apk' -size -100M 2>/dev/null | head -50 | while read f; do "
+# /sdcard é um link: com a barra no fim o find entra nele (sem ela, só listaria o próprio link)
+LISTAR = ("find /sdcard/ -maxdepth 5 -type f -iname '*.apk' -size -50M 2>/dev/null | head -50 | while read f; do "
           "printf '%s\\t%s\\t%s\\n' \"$(stat -c %s \"$f\" 2>/dev/null)\" "
           "\"$(sha256sum \"$f\" 2>/dev/null | cut -d' ' -f1)\" \"$f\"; done")
 _SEGURO = re.compile(r"^/(sdcard|storage/emulated/0)/[^\n\r\0]+\.apk$", re.I)
@@ -47,7 +48,9 @@ def apagar(ap: Aparelho, caminhos: list[str]) -> dict[str, Any]:
             nome = f"{i:02d}_{Path(c).name}"
             local = Path(tmp) / nome
             ap.adb("pull", c, str(local), timeout=600)
-            if not local.exists() or local.stat().st_size != existentes[c].get("tamanho"):
+            esperado = existentes[c].get("tamanho")
+            tamanho = local.stat().st_size if local.exists() else 0
+            if not tamanho or (esperado is not None and tamanho != esperado):
                 quarentena.descartar(pasta)
                 raise OSError(f"não consegui copiar {c} inteiro; nada foi apagado")
             locais.append((str(local), nome))

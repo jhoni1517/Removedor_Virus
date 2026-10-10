@@ -133,7 +133,7 @@ def poderes(app: AppBruto, dados: DadosAparelho) -> list[str]:
         res.append("teclado")
     if dados.sms == pkg:
         res.append("SMS padrão")
-    if {"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"} & app.perms:
+    if dados.sms != pkg and {"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"} & app.perms:
         res.append("lê SMS")
     return res
 
@@ -214,7 +214,8 @@ def achados_aparelho(dados: DadosAparelho, regras: Regras | None = None,
         a.append(ra["vpn_ativa"].achado())
     if rede.get("dns_modo") == "hostname" and rede.get("dns_servidor"):
         a.append(ra["dns_privado"].achado(rede["dns_servidor"]))
-    extras = [u for u in dados.usuarios if u.get("id") != 0]
+    # 95 (Samsung Dual Messenger) e 999 (Xiaomi Apps duplos) só guardam cópias de apps do dono
+    extras = [u for u in dados.usuarios if u.get("id") not in (0, 95, 999)]
     if extras and "outros_usuarios" in ra:
         nomes = ", ".join(f"'{u['nome']}'" for u in extras[:3])
         a.append(ra["outros_usuarios"].achado(f"{len(extras)} perfil(is)/usuário(s) ({nomes})"))

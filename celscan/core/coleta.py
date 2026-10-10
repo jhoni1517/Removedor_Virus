@@ -44,7 +44,7 @@ sec relogio; date +%s
 sec rodando; ps -A -o NAME 2>/dev/null || ps 2>/dev/null
 sec usuarios; pm list users 2>&1
 sec outros; for u in $(pm list users 2>/dev/null | sed -n 's/.*UserInfo{\([0-9]*\):.*/\1/p'); do [ "$u" != "0" ] && { echo "@@USER $u"; pm list packages -3 -i --user $u 2>/dev/null; }; done
-sec apks; find /sdcard -maxdepth 5 -type f -iname '*.apk' -size -100M 2>/dev/null | head -20 | while read f; do printf '%s\t%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null)" "$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" "$f"; done
+sec apks; find /sdcard/ -maxdepth 5 -type f -iname '*.apk' -size -50M 2>/dev/null | head -20 | while read f; do printf '%s\t%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null)" "$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" "$f"; done
 sec appops
 for p in $(pm list packages {F} | sed 's/^package://'); do
   echo "@@PKG $p"
@@ -298,7 +298,7 @@ def _ler_linha_hash(linha: str, por_caminho: dict[str, AppBruto]) -> AppBruto | 
     app = por_caminho.get(partes[3])
     if not app:
         return None
-    app.tamanho = int(partes[1]) if partes[1].isdigit() else None
+    app.tamanho = int(partes[1]) if partes[1].isdecimal() else None
     app.sha256 = partes[2] if re.fullmatch(r"[0-9a-f]{64}", partes[2]) else None
     return app
 
@@ -315,7 +315,7 @@ def calcular_hashes(ap: Aparelho, dados: DadosAparelho, sistema: bool = False) -
             partes = linha.split("\t")
             if len(partes) == 3 and partes[0] == "@@S":
                 num = partes[1].split()
-                if len(num) == 2 and num[0].isdigit() and num[1].isdigit():
+                if len(num) == 2 and num[0].isdecimal() and num[1].isdecimal():
                     estado[partes[2]] = (int(num[0]), int(num[1]))
     except AdbErro as e:
         log.LOGGER.info("stat dos APKs falhou (%s); calculando todos os hashes", e)

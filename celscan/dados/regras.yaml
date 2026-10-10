@@ -312,10 +312,10 @@ aparelho:
     significa: "O celular tem outro usuário ou perfil (por exemplo 'perfil de trabalho'). Apps instalados só lá não aparecem na tela do dono e escapam de uma análise comum."
     fazer: "Se é celular da empresa, é normal. Se ninguém criou esse perfil, remova em Configurações > Sistema > Vários usuários."
   apps_em_outro_perfil:
-    nivel: ALTO
+    nivel: MÉDIO
     titulo: "Apps escondidos em outro perfil: {detalhe}"
-    significa: "Estes apps existem só no outro usuário/perfil, fora da vista do dono do celular."
-    fazer: "Confira com o dono se ele reconhece. Se não, apague o perfil ou o usuário extra."
+    significa: "Estes apps existem só no outro usuário/perfil (perfil de trabalho, Pasta Segura ou usuário extra), fora da vista da tela principal."
+    fazer: "Em celular da empresa ou na Pasta Segura do próprio dono é normal. Se ninguém reconhece, apague o perfil ou o usuário extra."
   apk_ameaca_guardado:
     nivel: ALTO
     titulo: "Instalador de ameaça guardado no celular: {detalhe}"
