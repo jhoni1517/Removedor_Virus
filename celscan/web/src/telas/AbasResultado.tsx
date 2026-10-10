@@ -239,9 +239,12 @@ function exportarCsv(v: Varredura, lista: AppResultado[]) {
     if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
     return `"${t.replace(/"/g, '""')}"`;
   };
-  const linhas = [["App", "Pacote", "Versão", "Instalado em", "Último uso", "Tamanho", "Origem", "Nível", "Pontos", "Motivos"].map(cel).join(";"),
+  const linhas = [["App", "Pacote", "Versão", "Instalado em", "Último uso", "Tamanho", "Origem", "Nível", "Pontos", "Motivos",
+    "Tela na semana (min)", "Bateria (mAh)", "Poderes especiais", "Rodando"].map(cel).join(";"),
     ...lista.map((r) => [nomeApp(r), r.pacote, r.versao, dataBr(r.instalado), dataBr(r.ultimo_uso), tamanhoLegivel(r.tamanho),
-      r.loja ?? (r.sistema ? "Sistema" : r.origem ?? "Fora da loja"), r.nivel, r.score, r.motivos.join(" | ")].map(cel).join(";"))];
+      r.loja ?? (r.sistema ? "Sistema" : r.origem ?? "Fora da loja"), r.nivel, r.score, r.motivos.join(" | "),
+      r.tempo_uso_s ? Math.round(r.tempo_uso_s / 60) : "", r.bateria_mah != null ? Math.round(r.bateria_mah) : "",
+      (r.poderes ?? []).join(", "), r.rodando ? "sim" : ""].map(cel).join(";"))];
   const blob = new Blob(["\ufeff" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

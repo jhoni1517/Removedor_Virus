@@ -50,6 +50,14 @@ export default function Varrendo({ tarefa, modo, onFim, onCancelado }: {
   const restante = (ev.estimativa_s ?? 0) * (1 - fracao) +
     etapas.slice(indiceAtual + 1).reduce((soma, [k]) => soma + (TEMPOS[k] ?? 0), 0);
 
+  // M2: progresso no título da janela (dá para acompanhar pela barra de tarefas com outra janela na frente)
+  const pct = Math.min(99, Math.round(((Math.max(0, indiceAtual) + fracao) / Math.max(1, etapas.length)) * 100));
+  useEffect(() => {
+    const antes = document.title;
+    document.title = `${pct}% · Verificando o celular — CelScan`;
+    return () => { document.title = antes; };
+  }, [pct]);
+
   return (
     <div className="max-w-3xl">
       <Titulo sub={`Não desconecte o cabo. Tempo decorrido: ${formatarTempo((agora - inicio) / 1000)}${restante > 0 ? ` · faltam cerca de ${formatarTempo(restante)}` : ""}`}>

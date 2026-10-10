@@ -65,7 +65,8 @@ def mudar_status(con: sqlite3.Connection, ordem_id: int, status: str, varredura_
     # entregue: marca o retorno gratuito (revisão) para daqui a N dias; o painel lembra quem chamar
     retorno = None
     if status == "entregue":
-        dias = int(preferencias.ler().get("dias_retorno") or DIAS_RETORNO)
+        valor = preferencias.ler().get("dias_retorno")
+        dias = DIAS_RETORNO if valor is None else int(valor)  # 0 = sem lembrete (não vira o padrão)
         retorno = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d") if dias > 0 else None
     cur = con.execute(
         """UPDATE ordens SET status=?, atualizado_em=?, entregue_em=CASE WHEN ?='entregue' THEN ? ELSE entregue_em END,

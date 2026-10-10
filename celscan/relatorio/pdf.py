@@ -140,11 +140,30 @@ def _achado(a: dict, e: dict, nivel: str | None = None) -> list:
             Paragraph(f"<b>O que fazer:</b> {_t(a['fazer'])}", e["normal"]), Spacer(1, 5)]
 
 
+def _inicial_pdf(r: dict, lado: float) -> Drawing:
+    """Sem ícone legível: quadrado colorido com a inicial do nome (como na interface), em vez de buraco."""
+    from reportlab.graphics.shapes import String
+
+    nome = _nome(r).strip() or "?"
+    inicial = nome[0].upper()
+    try:
+        inicial.encode("latin-1")  # a fonte padrão do PDF não tem letras de outros alfabetos
+    except UnicodeEncodeError:
+        inicial = (r.get("pacote") or "?")[0].upper()
+    paleta = ("#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#4f46e5", "#b45309")
+    cor = colors.HexColor(paleta[int(hashlib.sha1(r.get("pacote", "").encode()).hexdigest(), 16) % len(paleta)])
+    d = Drawing(lado, lado)
+    d.add(Rect(0, 0, lado, lado, rx=lado * 0.22, ry=lado * 0.22, fillColor=cor, strokeColor=None))
+    d.add(String(lado / 2, lado * 0.3, inicial, fontName="Helvetica-Bold", fontSize=lado * 0.5,
+                 fillColor=colors.white, textAnchor="middle"))
+    return d
+
+
 def _icone_pdf(r: dict, lado: float):
-    """Ícone do app para o PDF (PNG/WebP); SVG e ausência voltam None."""
+    """Ícone do app para o PDF (PNG/WebP); SVG ou ausência viram a inicial do nome."""
     uri = r.get("icone") or ""
     if not uri.startswith(("data:image/png;base64,", "data:image/webp;base64,")):
-        return None
+        return _inicial_pdf(r, lado)
     try:
         import base64
 
@@ -157,7 +176,7 @@ def _icone_pdf(r: dict, lado: float):
         buf.seek(0)
         return RLImage(buf, width=lado, height=lado)
     except Exception:
-        return None
+        return _inicial_pdf(r, lado)
 
 
 def _nome(r: dict) -> str:

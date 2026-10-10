@@ -44,6 +44,7 @@ export interface AppResultado {
   vigilancia?: boolean;
   sensivel?: boolean;
   poderes?: string[];
+  seguro_porque?: string[];
   essencial?: boolean;
   sobreposicao?: boolean;
 }

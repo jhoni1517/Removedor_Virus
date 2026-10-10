@@ -152,6 +152,7 @@ class PedidoConfig(BaseModel):
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
     usar_agente: bool | None = None
+    dias_retorno: int | None = Field(default=None, ge=0, le=365)  # 0 = sem lembrete de revisão
 
 
 class PedidoEspelho(BaseModel):
@@ -582,7 +583,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         return {"chave_virustotal": f"…{chave[-4:]}" if chave else None, "offline": config.OFFLINE,
                 "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
                 "canal_atualizacao": c.get("canal_atualizacao", "beta"),
-                "usar_agente": bool(c.get("usar_agente", False)), "agente_disponivel": agente.disponivel()}
+                "usar_agente": bool(c.get("usar_agente", False)), "agente_disponivel": agente.disponivel(),
+                "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO))}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:

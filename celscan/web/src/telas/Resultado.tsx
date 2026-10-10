@@ -101,6 +101,9 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
               <ShieldAlert size={16} aria-hidden /> {r.ameaca}
             </p>
           )}
+          {achados.length === 0 && (r.nivel === "OK" || r.nivel === "PERMITIDO") && (r.seguro_porque?.length ?? 0) > 0 && (
+            <p className="mt-1.5 text-xs text-ok">Por que está ok: {r.seguro_porque!.join(" · ")}.</p>
+          )}
           {achados.length > 0 && (
             <>
               <button className="mt-2 flex items-center gap-1 text-sm text-destaque" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
@@ -384,6 +387,16 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     if (removidos.size) linhas.push("", `Removidos: ${[...removidos].map(nomeDe).join(", ")}.`);
     return linhas.join("\n");
   }
+  async function copiarListaRisco() {
+    const risco = v.resultados.filter((r) => r.nivel === "ALTO" || r.nivel === "MÉDIO");
+    const linhas = ["App\tPacote\tNível\tPontos\tOrigem\tMotivos",
+      ...risco.map((r) => [nomeApp(r), r.pacote, r.nivel, r.score, r.loja ?? r.origem ?? (r.sistema ? "sistema" : "fora da loja"),
+        r.motivos.join("; ")].join("\t"))];
+    try {
+      await navigator.clipboard.writeText(linhas.join("\n"));
+      avisar({ tipo: "ok", texto: `${risco.length} app(s) copiados. Cole numa planilha ou no sistema da loja.` });
+    } catch { avisar({ tipo: "erro", texto: "Não consegui copiar." }); }
+  }
   async function copiarResumo() {
     try { await navigator.clipboard.writeText(resumoTexto()); avisar({ tipo: "ok", texto: "Resumo copiado. Cole no WhatsApp do cliente." }); }
     catch { avisar({ tipo: "erro", texto: "Não consegui copiar. Selecione e copie manualmente." }); }
@@ -582,6 +595,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
             <Monitor size={15} aria-hidden /> Ver a tela
           </Botao>
           <Botao onClick={copiarResumo} title="Texto curto para mandar ao cliente"><MessageCircle size={15} aria-hidden /> Copiar resumo</Botao>
+          <Botao onClick={copiarListaRisco} disabled={contagem.ALTO + contagem["MÉDIO"] === 0}
+            title="Apps de risco alto e médio, em colunas (cola direto numa planilha)"><Copy size={15} aria-hidden /> Copiar lista de risco</Botao>
           <Botao onClick={exportarJson} title="Todos os dados desta varredura em JSON"><Download size={15} aria-hidden /> Exportar JSON</Botao>
           <Botao onClick={() => setBusca("")} title="Procurar um app (Ctrl+K)"><Search size={15} aria-hidden /> Procurar app</Botao>
           {desfeitos.length > 0 && conectado && (
@@ -643,7 +658,17 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
       )}
 
       <div className="mb-3 mt-8 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Apps</h2>
+        <h2 className="text-lg font-semibold">Apps
+          <details className="legenda-niveis ml-2 inline-block align-middle text-sm font-normal">
+            <summary className="cursor-pointer text-fraco">o que os níveis querem dizer?</summary>
+            <dl className="mt-1 space-y-0.5 text-xs">
+              <div><dt className="inline font-semibold text-perigo">Alto (60+ pts): </dt><dd className="inline">sinais fortes de golpe, espião ou vírus. Remova, salvo se o cliente reconhecer e confiar.</dd></div>
+              <div><dt className="inline font-semibold text-atencao">Médio (30–59): </dt><dd className="inline">comportamento suspeito. Pergunte ao cliente se ele instalou e usa.</dd></div>
+              <div><dt className="inline font-semibold">Baixo (1–29): </dt><dd className="inline">detalhe para conferir, normalmente inofensivo.</dd></div>
+              <div><dt className="inline font-semibold text-ok">Ok / Permitido: </dt><dd className="inline">nenhum sinal, ou app da lista de permitidos da loja.</dd></div>
+            </dl>
+          </details>
+        </h2>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Filtrar por nível">
           {FILTROS.map(([f, nome]) => (
             <button key={f} role="radio" aria-checked={filtro === f} onClick={() => setFiltro(f)}

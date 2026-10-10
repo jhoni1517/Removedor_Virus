@@ -16,7 +16,7 @@ import Varrendo from "./telas/Varrendo";
 import { Avisos } from "./ui";
 
 const ATALHOS: [string, string][] = [
-  ["Alt + 1…7", "Trocar de seção"], ["Ctrl + K", "Procurar um app no resultado"], ["?", "Mostrar esta lista"],
+  ["Alt + 1…7", "Trocar de seção"], ["Ctrl + K", "Procurar um app no resultado"], ["Ctrl + Enter", "Iniciar a varredura"], ["?", "Mostrar esta lista"],
   ["Esc", "Fechar janelas e diálogos"], ["Tab / Shift + Tab", "Andar pelos botões"],
 ];
 

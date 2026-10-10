@@ -353,7 +353,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         a.append(ra["padrao_espiao"].achado())
     if pix.padrao_trojan(pkg, dados.acess, app.appops) and not (loja and pkg in (permitidos or set())):
         a.append(ra["trojan_bancario"].achado())
-    if certificados_mod.conferir(pkg, app.cert, _oficiais()) == "falso":
+    cert_situacao = certificados_mod.conferir(pkg, app.cert, _oficiais())
+    if cert_situacao == "falso":
         a.append(ra["certificado_falso"].achado(pix.carregar().oficiais.get(pkg, pix.AppConhecido(pkg, pkg, ())).nome))
     if pkg == dados.sms and pkg not in SMS_CONHECIDOS:
         a.append(ra["sms_padrao"].achado())
@@ -377,6 +378,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     permitido = pkg in (permitidos or set()) and bool(loja) and not ioc
     if permitido:
         score = min(score, lim.get("permitido_teto", 10))
+    pod = poderes(app, dados)
     return {
         "pacote": pkg, "score": score, "nivel": "PERMITIDO" if permitido else nivel(score, r),
         "motivos": [x["titulo"] for x in a], "achados": a, "ameaca": ioc,
@@ -403,8 +405,28 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "vigilancia": bool(ioc and any(p in ioc.lower() for p in ("stalkerware", "spyware", "pegasus", "predator")))
         or any(x["chave"] == "padrao_espiao" for x in a),
         "sensivel": sensivel(pkg),
-        "poderes": poderes(app, dados),
+        "poderes": pod,
+        "seguro_porque": _por_que_seguro(app, loja, permitido, cert_situacao, iocs, pod),
     }
+
+
+def _por_que_seguro(app: AppBruto, loja: str | None, permitido: bool, cert: str | None, iocs: Any,
+                    poderes_app: list[str]) -> list[str]:
+    """Os sinais bons que o técnico pode mostrar ao cliente ("por que esse eu deixei?")."""
+    res = []
+    if permitido:
+        res.append("está na lista de apps permitidos desta loja")
+    if app.sistema:
+        res.append("veio de fábrica no celular")
+    elif loja:
+        res.append(f"instalado pela {loja}")
+    if cert == "ok":
+        res.append("assinatura digital igual à do app oficial")
+    if iocs and app.sha256:
+        res.append("não está na lista de ameaças conhecidas")
+    if not poderes_app:
+        res.append("não tem nenhum poder especial")
+    return res
 
 
 def pontuar(dados: DadosAparelho, iocs: Any = None, permitidos: set[str] | None = None,

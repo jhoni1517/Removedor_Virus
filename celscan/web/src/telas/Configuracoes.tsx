@@ -65,7 +65,7 @@ function SomAoTerminar() {
   );
 }
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number }
 
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar, modelo, mudarModelo } = useApp();
@@ -207,6 +207,18 @@ export default function Configuracoes() {
           </label>
         </Cartao>
       )}
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Revisão gratuita</h2>
+        <p className="mt-1 text-sm text-fraco">Ao entregar uma ordem de serviço, o painel da loja lembra de chamar o cliente para uma revisão
+          depois deste prazo. Use 0 para não lembrar.</p>
+        <label className="mt-3 flex items-center gap-2 text-sm">Lembrar depois de
+          <select className="rounded-md border border-linha bg-superficie px-2 py-1" value={cfg?.dias_retorno ?? 30}
+            onChange={(e) => salvar({ dias_retorno: Number(e.target.value) })} aria-label="Dias até a revisão">
+            {[0, 15, 30, 60, 90, 180].map((d) => <option key={d} value={d}>{d === 0 ? "nunca" : `${d} dias`}</option>)}
+          </select>
+        </label>
+      </Cartao>
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Atualizações</h2>

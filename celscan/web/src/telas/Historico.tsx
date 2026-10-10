@@ -57,6 +57,8 @@ export default function Historico({ onAbrir }: { onAbrir: (id: number) => void }
   const [varreduras, setVarreduras] = useState<LinhaVarredura[] | null>(null);
   const [quarentena, setQuarentena] = useState<ItemQuarentena[]>([]);
   const [codigo, setCodigo] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [soRisco, setSoRisco] = useState(false);
   const [verificado, setVerificado] = useState<{ ok: boolean; texto: string } | null>(null);
 
   const carregar = useCallback(async () => {
@@ -105,7 +107,13 @@ export default function Historico({ onAbrir }: { onAbrir: (id: number) => void }
 
       <BuscaNoHistorico onAbrir={onAbrir} />
 
-      <h2 className="mb-3 text-lg font-semibold">Varreduras</h2>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h2 className="text-lg font-semibold">Varreduras</h2>
+        <input type="search" value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Filtrar por aparelho ou serial"
+          aria-label="Filtrar varreduras" className="min-w-[200px] flex-1 rounded-md border border-linha bg-superficie px-3 py-1.5 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" className="accent-[var(--destaque)]" checked={soRisco}
+          onChange={(e) => setSoRisco(e.target.checked)} /> Só com app de risco</label>
+      </div>
       {varreduras === null ? <p className="text-fraco">Carregando...</p> : varreduras.length === 0 ? <Vazio>Nenhuma varredura ainda.</Vazio> : (
         <Cartao className="mb-8 overflow-hidden">
           <table className="w-full text-sm">
@@ -114,7 +122,9 @@ export default function Historico({ onAbrir }: { onAbrir: (id: number) => void }
                 <th className="p-3 font-medium">Apps</th><th className="p-3 font-medium">Com risco</th><th className="p-3" /></tr>
             </thead>
             <tbody className="divide-y divide-linha">
-              {varreduras.map((v) => (
+              {varreduras.filter((v) => (!soRisco || v.apps_risco > 0) && (!filtro.trim()
+                || `${v.fabricante} ${v.modelo} ${v.serial}`.toLocaleLowerCase("pt-BR").includes(filtro.trim().toLocaleLowerCase("pt-BR"))))
+                .map((v) => (
                 <tr key={v.id} className="hover:bg-superficie-2">
                   <td className="numeros p-3 font-mono">{data(v.data)}</td>
                   <td className="p-3">{v.fabricante} {v.modelo} <span className="font-mono text-xs text-fraco">{v.serial}</span></td>
