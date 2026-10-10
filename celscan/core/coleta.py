@@ -102,7 +102,15 @@ class AppBruto:
     cert: dict | None = None
     vt: dict | None = None
     nome: str | None = None
-    icone: str | None = None  # data URI do PNG
+    icone: str | None = None  # data URI do ícone (PNG, WebP ou SVG)
+    atualizado: datetime | None = None
+    origem: str | None = None  # app que abriu o instalador (Chrome, WhatsApp...)
+    sdks_anuncio: list[str] = field(default_factory=list)
+    gatilhos: list[str] = field(default_factory=list)
+    disfarces: list[str] = field(default_factory=list)
+    anuncio_escondido: bool = False
+    sensores: dict[str, float] = field(default_factory=dict)  # câmera/microfone/... -> segundos desde o uso
+    ultimo_uso: datetime | None = None
 
 
 @dataclass
@@ -216,6 +224,8 @@ def ler_rotulo(ap: Aparelho, app: AppBruto) -> None:
     try:
         r = rotulos.obter(ap, app.pacote, app.apk, app.tamanho, app.sha256)
         app.nome = r.nome
-        app.icone = rotulos.icone_data_uri(r.icone_png)
+        app.icone = rotulos.icone_data_uri(r)
+        app.sdks_anuncio, app.gatilhos, app.disfarces = r.sdks_anuncio, r.gatilhos, r.disfarces
+        app.anuncio_escondido = r.anuncio_escondido
     except Exception:
         pass

@@ -175,15 +175,17 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         cands = sc.candidatos()
         with log.etapa("assinaturas"):
             _em_paralelo(cands, sc.ler_certificado, lambda i, pkg: passos.etapa("assinaturas", i, len(cands), pkg))
-        sem_nome = cands
+        # nome e ícone de TODOS os apps (não só dos suspeitos): a lista inteira fica legível
+        todos = list(sc.apps)
+        sem_nome = todos
         if preferencias.ler().get("usar_agente") and agente_mod.disponivel():
-            passos.etapa("rotulos", 0, len(cands), "CelScan Agente")
+            passos.etapa("rotulos", 0, len(todos), "CelScan Agente")
             try:
                 with log.etapa("agente"), agente_mod.Agente(ap) as ag:
                     for pkg, dados in ag.apps(icones=True).items():
                         if pkg in sc.apps:
                             sc.apps[pkg].nome, sc.apps[pkg].icone = dados["nome"], dados["icone"]
-                sem_nome = [p for p in cands if not sc.apps[p].nome]
+                sem_nome = [p for p in todos if not sc.apps[p].nome]
             except AdbErro as e:  # inclui AgenteIndisponivel: cai para a leitura do APK
                 avisos.append(f"CelScan Agente indisponível ({e}); nomes lidos direto dos APKs.")
         with log.etapa("rotulos"):

@@ -74,7 +74,8 @@ def leitor_remoto(aparelho, caminho):
     """Devolve ler(off, n) que lê n bytes do arquivo no celular a partir de off (com dd, sem baixar tudo)."""
     q = shlex.quote(caminho)
 
-    def ler(off, n, bs=4096):
+    def ler(off, n, bs=None):
+        bs = bs or (65536 if n > 262144 else 4096)  # blocos maiores para o resources.arsc (vários MB)
         ini, fim = off // bs, (off + n + bs - 1) // bs
         dados = aparelho.bytes(f"dd if={q} bs={bs} skip={ini} count={fim - ini} 2>/dev/null")
         d = off - ini * bs
