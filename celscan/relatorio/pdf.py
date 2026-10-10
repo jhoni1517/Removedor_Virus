@@ -435,11 +435,16 @@ def _finalizar(historia: list, meta: dict, h: str, codigo: str, e: dict, retrato
                                 ("TOPPADDING", (0, 0), (-1, -1), 8)]))
     historia += [Spacer(1, 12), KeepTogether([rodape])]
 
+    from celscan.core import preferencias
+    contato = str(preferencias.ler().get("contato_loja") or "").strip()[:90]
+
     def numerar(canvas, doc) -> None:
         canvas.saveState()
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(CINZA)
         canvas.drawString(18 * mm, 10 * mm, f"CelScan · laudo nº {meta['id']} · verificação {codigo}")
+        if contato:  # dúvidas do cliente: como falar com a loja que fez a análise
+            canvas.drawCentredString(105 * mm, 6 * mm, contato.encode("latin-1", "replace").decode("latin-1"))
         canvas.drawRightString(192 * mm, 10 * mm, f"página {doc.page}")
         canvas.restoreState()
 

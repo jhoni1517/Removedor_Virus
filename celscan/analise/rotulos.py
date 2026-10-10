@@ -40,6 +40,13 @@ SDK_ANUNCIO = {
     "com.adcolony": "AdColony", "com.startapp": "Start.io", "com.my.target": "myTarget",
     "com.yandex.mobile.ads": "Yandex Ads", "com.fyber": "Fyber/DT", "com.smaato": "Smaato",
     "com.tapjoy": "Tapjoy", "com.appodeal": "Appodeal", "com.bigossp": "BIGO Ads",
+    # 3.3: redes comuns em apps de "limpeza", lanternas e jogos que viram adware
+    "com.kwai.network": "Kwai Ads", "com.kwad.sdk": "Kwai Ads", "com.huawei.hms.ads": "Huawei Ads",
+    "com.verve": "Verve", "net.pubnative": "Verve/PubNative", "com.amazon.device.ads": "Amazon Ads",
+    "com.criteo": "Criteo", "com.ogury": "Ogury", "io.presage": "Ogury", "com.bidmachine": "BidMachine",
+    "io.bidmachine": "BidMachine", "com.anythink": "TopOn", "com.mobfox": "MobFox", "com.adsterra": "Adsterra",
+    "com.yandex.mobile.ads.interstitial": "Yandex Ads", "com.mintegral.msdk": "Mintegral",
+    "com.tradplus.ads": "TradPlus", "com.maticoo.sdk": "Maticoo", "com.hyprmx": "HyprMX",
 }
 # Avisos do sistema que adware usa para abrir anúncio fora do app
 GATILHOS = {

@@ -153,6 +153,7 @@ class PedidoConfig(BaseModel):
     canal_atualizacao: Literal["estavel", "beta"] | None = None
     usar_agente: bool | None = None
     dias_retorno: int | None = Field(default=None, ge=0, le=365)  # 0 = sem lembrete de revisão
+    contato_loja: str | None = Field(default=None, max_length=90)  # sai no rodapé do laudo
 
 
 class PedidoEspelho(BaseModel):
@@ -584,7 +585,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                 "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
                 "canal_atualizacao": c.get("canal_atualizacao", "beta"),
                 "usar_agente": bool(c.get("usar_agente", False)), "agente_disponivel": agente.disponivel(),
-                "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO))}
+                "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO)),
+                "contato_loja": c.get("contato_loja") or ""}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:

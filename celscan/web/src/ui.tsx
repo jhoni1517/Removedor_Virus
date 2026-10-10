@@ -199,7 +199,7 @@ export function Data({ iso }: { iso?: string | null }) {
 
 export function tamanhoLegivel(bytes?: number | null): string {
   if (!bytes) return "—";
-  return bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1048576))} MB`;
+  return bytes >= 1073741824 ? `${(bytes / 1073741824).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })} GB` : `${Math.max(1, Math.round(bytes / 1048576))} MB`;
 }
 
 /** Data ISO -> Date; "AAAA-MM-DD" vira meia-noite LOCAL (new Date("2026-10-10") seria UTC e cairia no dia anterior no Brasil). */

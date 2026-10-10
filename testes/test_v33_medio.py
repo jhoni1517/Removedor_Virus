@@ -20,7 +20,8 @@ def test_pdf_usa_inicial_quando_nao_ha_icone():
 
     from celscan.relatorio import pdf
     assert isinstance(pdf._icone_pdf({"pacote": "com.x", "nome": "Ônibus"}, 20), Drawing)
-    assert isinstance(pdf._icone_pdf({"pacote": "com.x", "nome": "微信", "icone": "data:image/svg+xml,..."}, 20), Drawing)
+    svg = {"pacote": "com.x", "nome": "微信", "icone": "data:image/svg+xml,..."}
+    assert isinstance(pdf._icone_pdf(svg, 20), Drawing)
     assert isinstance(pdf._icone_pdf({"pacote": "com.x", "icone": "data:image/png;base64,lixo"}, 20), Drawing)
 
 

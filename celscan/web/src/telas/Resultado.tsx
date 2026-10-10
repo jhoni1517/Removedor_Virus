@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUp, ChevronDown, Copy, Download, ExternalLink, FileText, MessageCircle, Monitor, PowerOff,
+import { AlertTriangle, ArrowUp, ChevronDown, PartyPopper, Copy, Download, ExternalLink, FileText, MessageCircle, Monitor, PowerOff,
   RotateCcw, Search, ShieldAlert, SlidersHorizontal, Smartphone, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BateriaBaixa } from "../bateria";
@@ -20,6 +20,10 @@ function lerLocal<T extends string>(chave: string, validos: readonly T[], padrao
 }
 function gravarLocal(chave: string, valor: string) { try { localStorage.setItem(chave, valor); } catch { /* sem storage */ } }
 
+
+function contagemLimpa(v: Varredura): boolean {
+  return !v.resultados.some((r) => r.nivel === "ALTO" || r.nivel === "MÉDIO") && !v.achados.some((a) => a.nivel === "ALTO" || a.nivel === "MÉDIO");
+}
 
 const COR_BORDA: Record<string, string> = { ALTO: "border-l-perigo", "MÉDIO": "border-l-atencao", BAIXO: "border-l-linha" };
 
@@ -52,6 +56,10 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
   const [aberto, setAberto] = useState(r.nivel === "ALTO");
   useEffect(() => { if (foco) setAberto(true); }, [foco]);
   const [ajustar, setAjustar] = useState(false);
+  const { avisar } = useApp();
+  const copiar = (texto: string, msg: string) => {
+    navigator.clipboard?.writeText(texto).then(() => { if (msg) avisar({ tipo: "ok", texto: msg, duracao: 2000 }); }).catch(() => undefined);
+  };
   const achados = r.achados.filter((a) => a.chave !== "ameaca_conhecida");
   const acionavel = !r.sistema && r.nivel !== "OK" && r.nivel !== "PERMITIDO" && !removido;
   return (
@@ -79,7 +87,12 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
           <p className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-fraco">
             <span className="truncate">{r.pacote}</span>
             <button className="shrink-0 rounded p-0.5 hover:bg-superficie-2" title="Copiar o nome do pacote" aria-label={`Copiar ${r.pacote}`}
-              onClick={() => navigator.clipboard?.writeText(r.pacote)}><Copy size={12} aria-hidden /></button>
+              onClick={() => copiar(r.pacote, "Pacote copiado.")}><Copy size={12} aria-hidden /></button>
+            {r.sha256 && !r.sistema && (
+              <a className="inline-flex shrink-0 items-center gap-0.5 font-sans text-destaque hover:underline" target="_blank" rel="noreferrer"
+                href={`https://www.virustotal.com/gui/file/${r.sha256}`} title="Abre o resultado deste APK no VirusTotal (só o hash é enviado)"
+                onClick={() => copiar(r.sha256!, "")}>VirusTotal <ExternalLink size={11} aria-hidden /></a>
+            )}
             {!r.sistema && (
               <a className="inline-flex shrink-0 items-center gap-0.5 font-sans text-destaque hover:underline" target="_blank" rel="noreferrer"
                 href={`https://play.google.com/store/apps/details?id=${encodeURIComponent(r.pacote)}`}
@@ -334,6 +347,16 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     document.title = `CelScan — ${v.info.modelo}: ${v.nota}/100`;
     return () => { document.title = antes; };
   }, [v]);
+  // L3: ícone da aba com a cor da nota (verde/amarelo/vermelho): dá para ver com várias abas abertas
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!link) return;
+    const antes = link.href;
+    const cor = v.nota >= 70 ? "%2316a34a" : v.nota >= 50 ? "%23d97706" : "%23dc2626";
+    link.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='8' y='3' width='16' height='26' rx='3' fill='${cor}'/%3E%3Cpath d='M12 16l3 3 6-6' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E`;
+    return () => { link.href = antes; };
+  }, [v.nota]);
+  const limpo = v.nota >= 90 && contagemLimpa(v);
   // Ctrl+K: busca rápida de app
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
@@ -552,6 +575,12 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
 
   return (
     <div className="resultado max-w-6xl pb-24">
+      {limpo && (
+        <div className="comemorar mb-4 flex items-center gap-3 rounded-lg border border-ok/40 bg-ok-suave p-4 text-ok" role="status">
+          <PartyPopper size={22} aria-hidden />
+          <p><strong>Celular limpo!</strong> Nenhum app de risco e nada perigoso nas configurações. Bom momento para mostrar o laudo ao cliente.</p>
+        </div>
+      )}
       <Cartao className="mb-6 flex flex-wrap items-center gap-6 p-6">
         <Medidor nota={v.nota} veredito={v.veredito} />
         <div className="min-w-[220px] flex-1">

@@ -455,3 +455,8 @@ body {
   background: currentColor; vertical-align: middle; animation: celscan-vivo 1.6s ease-in-out infinite; }
 @keyframes celscan-vivo { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .selo-vivo::before { animation: none; } }
+
+/* 3.3: comemoração discreta quando o celular está limpo */
+.comemorar { animation: celscan-comemorar .6s ease-out both; }
+@keyframes celscan-comemorar { from { transform: scale(.97); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .comemorar { animation: none; } }

@@ -1,3 +1,4 @@
+import { num } from "../nomes";
 import { BateriaBaixa } from "../bateria";
 import { FolderOpen, HardDriveDownload, Monitor, MousePointer2, ShieldAlert, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,8 +17,8 @@ interface ResumoBackup { destino: string; copiados: number; pulados: number; fal
 const ORDEM = ["autorizado", "toque", "imagem", "morto"];
 
 export function tamanho(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024 ** 3) return `${num(bytes / 1024 ** 3, 1)} GB`;
+  if (bytes >= 1024 ** 2) return `${num(bytes / 1024 ** 2, 1)} MB`;
   if (bytes <= 0) return "0 KB";
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

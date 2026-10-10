@@ -65,7 +65,7 @@ function SomAoTerminar() {
   );
 }
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number; contato_loja: string }
 
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar, modelo, mudarModelo } = useApp();
@@ -207,6 +207,21 @@ export default function Configuracoes() {
           </label>
         </Cartao>
       )}
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Contato da loja no laudo</h2>
+        <p className="mt-1 text-sm text-fraco">Sai no rodapé de cada página do laudo em PDF (ex.: nome, WhatsApp e endereço).</p>
+        <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => {
+          e.preventDefault();
+          const campo = (e.currentTarget.elements.namedItem("contato") as HTMLInputElement);
+          salvar({ contato_loja: campo.value.trim() });
+        }}>
+          <input name="contato" maxLength={90} defaultValue={cfg?.contato_loja ?? ""} key={cfg?.contato_loja ?? ""}
+            placeholder="Cell Center · (11) 99999-0000 · Rua X, 100" aria-label="Contato da loja"
+            className="min-w-[260px] flex-1 rounded-md border border-linha bg-superficie-2 px-3 py-2 text-sm" />
+          <Botao type="submit">Salvar</Botao>
+        </form>
+      </Cartao>
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Revisão gratuita</h2>

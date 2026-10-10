@@ -12,3 +12,8 @@ export function duracaoCurta(s: number): string {
   const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
   return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
 }
+
+/** Número no formato brasileiro (vírgula decimal): num(1.5, 1) -> "1,5". */
+export function num(n: number, casas = 0): string {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}

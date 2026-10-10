@@ -58,8 +58,11 @@ export default function Varrendo({ tarefa, modo, onFim, onCancelado }: {
     return () => { document.title = antes; };
   }, [pct]);
 
+  const textoEtapa = etapas.find(([k]) => k === ev.etapa)?.[1];
   return (
     <div className="max-w-3xl">
+      {/* L9: leitor de tela anuncia a etapa nova (não cada app, para não falar sem parar) */}
+      <p className="sr-only" aria-live="polite">{textoEtapa ? `Etapa: ${textoEtapa}` : ""}</p>
       <Titulo sub={`Não desconecte o cabo. Tempo decorrido: ${formatarTempo((agora - inicio) / 1000)}${restante > 0 ? ` · faltam cerca de ${formatarTempo(restante)}` : ""}`}>
         Verificando o celular
       </Titulo>

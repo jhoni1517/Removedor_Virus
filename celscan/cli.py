@@ -700,6 +700,9 @@ def cmd_apps(a):
     if retrato is None:
         sys.exit(f"Varredura {vid} não encontrada.")
     apps = retrato.get("apps", [])
+    if a.risco:  # só o que precisa de atenção (alto e médio; com --risco alto, só alto)
+        niveis = {"alto": ("ALTO",), "medio": ("ALTO", "MÉDIO")}[a.risco]
+        apps = [r for r in apps if r.get("nivel") in niveis]
     if a.json:
         _json(apps)
         return
@@ -736,6 +739,7 @@ def cmd_iocs(a):
 def main():
     p = argparse.ArgumentParser(prog="celscan", description=f"CelScan {VERSAO} — segurança e otimização via USB")
     p.add_argument("--offline", action="store_true", help="Não acessa a internet (usa só as cópias locais)")
+    p.add_argument("--version", "-V", action="version", version=f"CelScan {VERSAO}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("android", help="Varredura de segurança do Android")
@@ -849,6 +853,8 @@ def main():
     s.add_argument("--id", type=int, help="Número da varredura (padrão: a última)")
     s.add_argument("--json", action="store_true")
     s.add_argument("--csv", metavar="ARQUIVO", help="Salva em planilha CSV")
+    s.add_argument("--risco", nargs="?", const="medio", choices=("alto", "medio"),
+                   help="Só os apps de risco (padrão: alto e médio; 'alto' para só os de risco alto)")
     s.set_defaults(func=cmd_apps)
 
     s = sub.add_parser("na-tela", help="Mostra qual app está na tela agora (pega o app do pop-up no flagra)")
