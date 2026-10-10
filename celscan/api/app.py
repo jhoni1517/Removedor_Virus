@@ -131,6 +131,7 @@ class PedidoRemocao(BaseModel):
     pacotes: list[Pacote] = Field(min_length=1)
     ciente_vitima: bool = False  # a pessoa leu o aviso de que remover app espião pode alertar quem instalou
     confirmar_sistema: bool = False  # apps de fábrica só saem com confirmação explícita
+    confirmar_sensivel: bool = False  # autenticador, senhas, banco, mensageiro: o dono confirmou que tem acesso
 
 
 class PedidoEvidencias(BaseModel):
@@ -433,6 +434,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         if de_fabrica and not p.confirmar_sistema:
             raise HTTPException(409, "SISTEMA: estes apps vieram de fábrica. Remover pode tirar funções do aparelho; "
                                      "confirme (confirmar_sistema) para continuar: " + ", ".join(de_fabrica))
+        from celscan.analise.pontuacao import sensivel
+        sensiveis = [a["pacote"] for a in alvos if a.get("sensivel") or sensivel(a["pacote"])]
+        if sensiveis and not p.confirmar_sensivel:
+            raise HTTPException(409, "SENSIVEL: estes apps guardam senhas, códigos de 2 etapas, carteira ou "
+                                     "conversas. Confirme com o dono (confirmar_sensivel) antes de remover: "
+                                     + ", ".join(sensiveis))
         espioes = [a["pacote"] for a in alvos if evidencias.eh_vigilancia(a)]
         if espioes and not p.ciente_vitima:
             raise HTTPException(409, "MODO_VITIMA: remover app espião pode alertar quem instalou. "

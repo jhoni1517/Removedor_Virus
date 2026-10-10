@@ -37,6 +37,13 @@ export interface AppResultado {
   notificacoes?: number;
   notificacoes_dia?: number;
   enviado_mb?: number | null;
+  tempo_uso_s?: number | null;
+  bateria_mah?: number | null;
+  rodando?: boolean;
+  removido_antes?: string | null;
+  vigilancia?: boolean;
+  sensivel?: boolean;
+  essencial?: boolean;
   sobreposicao?: boolean;
 }
 
@@ -114,6 +121,7 @@ export interface Remocao {
   ok: boolean;
   mensagem: string;
   quarentena_id: string | null;
+  parcial?: boolean;
 }
 
 const CHAVE = "celscan-token";

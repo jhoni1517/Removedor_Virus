@@ -270,6 +270,13 @@ def acoes(con: sqlite3.Connection, serial: str | None = None, limite: int = 50) 
     return con.execute("SELECT * FROM acoes ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
 
 
+def removidos_antes(con: sqlite3.Connection, serial: str) -> dict[str, str]:
+    """Apps que o CelScan já removeu deste aparelho (e não foram desfeitos): {pacote: data}."""
+    rows = con.execute("SELECT pacote, MAX(data) FROM acoes WHERE serial = ? AND tipo = 'remocao' "
+                       "AND pacote IS NOT NULL AND desfeita_em IS NULL GROUP BY pacote", (serial,)).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
 def meta_varredura(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None:
     row = con.execute("SELECT id, serial, data, modo, nota, veredito, duracao_s FROM varreduras WHERE id = ?",
                       (varredura_id,)).fetchone()

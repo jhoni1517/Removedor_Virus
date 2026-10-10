@@ -103,6 +103,12 @@ def documentar(ap: Aparelho, achados: list[dict[str, Any]], destino: Path, info:
 
 
 def eh_vigilancia(resultado: dict[str, Any]) -> bool:
-    """True para apps que acionam o modo vítima: indicador de stalkerware/spyware conhecido."""
+    """True para apps que acionam o modo vítima: stalkerware/spyware conhecido OU comportamento de app espião
+    (escondido + lê tela/notificações/sensores). Antes só a lista conhecida acionava, e um espião novo era
+    removido sem o aviso de que isso pode alertar quem instalou."""
+    if resultado.get("vigilancia"):
+        return True
     ameaca = (resultado.get("ameaca") or "").lower()
-    return bool(ameaca) and any(p in ameaca for p in ("stalkerware", "spyware", "pegasus", "predator", "espião"))
+    if ameaca and any(p in ameaca for p in ("stalkerware", "spyware", "pegasus", "predator", "espião")):
+        return True
+    return any(a.get("chave") == "padrao_espiao" for a in resultado.get("achados") or [])

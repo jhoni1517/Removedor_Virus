@@ -155,9 +155,20 @@ def cmd_android(a):
         for r in alvos:
             texto = "\n".join(f"• [bold]{x['titulo']}[/]\n  [dim]{x['significa']}[/]\n  → {x['fazer']}"
                               for x in r["achados"])
-            con.print(Panel(texto, title=f"{r['pacote']} (risco {r['score']})",
+            con.print(Panel(texto, title=f"{r.get('nome') or r['pacote']} · {r['pacote']} (risco {r['score']})",
                             border_style="red" if r["score"] >= 60 else "yellow"))
-            if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60):
+            from celscan.acoes import evidencias
+            cuidado = False
+            if evidencias.eh_vigilancia(r):
+                cuidado = True
+                con.print("[bold yellow]Atenção:[/] parece app espião. Remover pode avisar quem instalou. Se a pessoa "
+                          "corre risco, guarde as provas antes (interface: 'Documentar antes de remover') e procure "
+                          "ajuda: 190 (polícia) ou 180 (Central de Atendimento à Mulher).")
+            if r.get("sensivel"):
+                cuidado = True
+                con.print("[bold yellow]Atenção:[/] este app guarda senhas, códigos de 2 etapas, carteira ou "
+                          "conversas. Confirme com o dono que ele tem como entrar nas contas.")
+            if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60 and not cuidado):
                 with con.status("Removendo..."):
                     feito = servicos.remover_apps(ap, [r])[0]
                 con.print(f"  {'[green]✔' if feito['ok'] else '[red]✘'}[/] {feito['mensagem']}")

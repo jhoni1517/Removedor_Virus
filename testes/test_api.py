@@ -61,7 +61,8 @@ def test_varredura_remocao_e_desfazer(cliente):
     assert cliente.get("/api/varreduras", headers=H).json()[0]["id"] == res["varredura_id"]
 
     t = cliente.post("/api/remover", json={"serial": "ABC123", "varredura_id": res["varredura_id"],
-                                           "pacotes": ["com.systemservice"]}, headers=H).json()
+                                           "pacotes": ["com.systemservice"], "ciente_vitima": True},
+                     headers=H).json()
     t = esperar(cliente, t)
     feito = t["resultado"][0]
     assert feito["ok"] and feito["quarentena_id"]
@@ -211,3 +212,16 @@ def test_correcoes_api(cliente):
     assert r.status_code == 200 and r.json()["resultado"][0]["ok"] and r.json()["desfazer_id"]
     assert cliente.post("/api/correcoes/aplicar", json={"serial": "ABC123", "ids": []}, headers=H).status_code == 422
     assert cliente.post("/api/correcoes/aplicar", json={"serial": "ABC123", "ids": ["x"]}, headers=H).status_code == 422
+
+
+def test_remover_app_sensivel_pede_confirmacao(cliente):
+    t = esperar(cliente, cliente.post("/api/varreduras", json={"serial": "ABC123", "modo": "rapido"},
+                                      headers=H).json())
+    vid = t["resultado"]["varredura_id"]
+    r = cliente.post("/api/remover", json={"serial": "ABC123", "varredura_id": vid,
+                                           "pacotes": ["com.x8bit.bitwarden"]}, headers=H)
+    assert r.status_code == 409 and r.json()["detail"].startswith("SENSIVEL")
+    r = cliente.post("/api/remover", json={"serial": "ABC123", "varredura_id": vid, "pacotes": ["com.x8bit.bitwarden"],
+                                           "confirmar_sensivel": True}, headers=H)
+    assert r.status_code == 200
+    esperar(cliente, r.json())

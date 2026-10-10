@@ -38,8 +38,13 @@ sec pkgdump; dumpsys package packages 2>&1
 sec teclado; settings get secure default_input_method
 sec home; cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>&1
 sec rede; settings get global private_dns_mode; settings get global private_dns_specifier; settings get secure always_on_vpn_app; dumpsys connectivity 2>/dev/null | grep -ciE 'Transports: [A-Z|]*VPN|VPN CONNECTED'
-sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed='
-sec consumo; dumpsys batterystats --checkin 2>/dev/null | grep -E '^9,[0-9]+,(i,uid|l,nt),'
+sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed=|In-memory (daily|weekly) stats'
+sec consumo; dumpsys batterystats --checkin 2>/dev/null | grep -E '^9,[0-9]+,(i,uid|l,nt|l,pwi),'
+sec relogio; date +%s
+sec rodando; ps -A -o NAME 2>/dev/null || ps 2>/dev/null
+sec usuarios; pm list users 2>&1
+sec outros; for u in $(pm list users 2>/dev/null | sed -n 's/.*UserInfo{\([0-9]*\):.*/\1/p'); do [ "$u" != "0" ] && { echo "@@USER $u"; pm list packages -3 -i --user $u 2>/dev/null; }; done
+sec apks; find /sdcard -maxdepth 5 -type f -iname '*.apk' -size -100M 2>/dev/null | head -20 | while read f; do printf '%s\t%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null)" "$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" "$f"; done
 sec appops
 for p in $(pm list packages {F} | sed 's/^package://'); do
   echo "@@PKG $p"
@@ -122,6 +127,11 @@ class AppBruto:
     enviado_mb: float | None = None  # dados enviados pela internet desde a última carga completa
     nome_truque: bool = False  # nome com caracteres invisíveis/de inversão de texto
     sem_rotulo: bool = False  # APK lido, mas sem nome para mostrar
+    iniciador: str | None = None  # quem realmente iniciou a instalação (Android 11+)
+    tempo_uso_s: int | None = None  # tempo de tela na última semana
+    bateria_mah: float | None = None  # energia gasta desde a última carga completa
+    rodando: bool = False  # tinha processo vivo no momento da análise
+    removido_antes: str | None = None  # data em que o CelScan já tinha removido este app (voltou?)
 
 
 @dataclass
@@ -146,6 +156,11 @@ class DadosAparelho:
     home: str | None = None
     teclado: str | None = None
     periodo_uso: tuple[datetime, datetime] | None = None
+    sistema_pkgs: set[str] = field(default_factory=set)
+    usuarios: list[dict] = field(default_factory=list)  # perfis/usuários do aparelho (0 = dono)
+    outros_usuarios: dict[int, dict[str, str | None]] = field(default_factory=dict)  # usuário -> apps só lá
+    apks_guardados: list[dict] = field(default_factory=list)  # instaladores .apk soltos no armazenamento
+    relogio_aparelho: datetime | None = None
 
     def info(self) -> dict[str, str]:
         g = self.props.get
@@ -179,6 +194,9 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
     # Apps de sistema atualizados pela loja migram para /data/app e perdem o caminho de sistema; por isso
     # perguntamos ao próprio Android quais são de sistema (pm list packages -s), além de olhar o caminho.
     syspkgs = parsers.desativados(s.get("syspkgs", ""))
+    tempo_uso = parsers.tempo_de_uso(s.get("uso", ""))
+    bateria = parsers.bateria_por_app(s.get("consumo", ""))
+    vivos = parsers.rodando(s.get("rodando", ""))
     apps: dict[str, AppBruto] = {}
     for pkg, (caminho, inst) in parsers.pacotes(s.get("pkgs", "")).items():
         d = dump.get(pkg, {})
@@ -188,6 +206,8 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
             perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
             appops=ops.get(pkg, set()), atualizado=d.get("atualizado"), origem=d.get("origem"),
             ultimo_uso=ultimo_uso.get(pkg), enviado_mb=(rede_apps.get(pkg) or {}).get("enviado_mb"),
+            iniciador=d.get("iniciador"), tempo_uso_s=tempo_uso.get(pkg), bateria_mah=bateria.get(pkg),
+            rodando=pkg in vivos,
         )
         for op, seg in tempos.get(pkg, {}).items():  # sensores: guarda o uso mais recente por tipo
             nome = SENSORES[op]
@@ -214,7 +234,17 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         home=parsers.home(s.get("home", "")),
         teclado=parsers.teclado(s.get("teclado", "")),
         periodo_uso=parsers.periodo_eventos(s.get("uso", "")),
+        sistema_pkgs=syspkgs,
+        usuarios=parsers.usuarios(s.get("usuarios", "")),
+        apks_guardados=parsers.apks_guardados(s.get("apks", "")),
     )
+    epoch = parsers.relogio(s.get("relogio", ""))
+    # relógio zerado (bateria removida, 1970) não serve de referência: aí vale a hora do PC
+    dados.relogio_aparelho = datetime.fromtimestamp(epoch) if epoch and epoch > 1_420_070_400 else None
+    # apps que existem SÓ em outro usuário/perfil (o resto da análise vê só o dono, usuário 0)
+    dados.outros_usuarios = {u: {p: i for p, i in pk.items() if p not in apps}
+                             for u, pk in parsers.pacotes_por_usuario(s.get("outros", "")).items()}
+    dados.outros_usuarios = {u: pk for u, pk in dados.outros_usuarios.items() if pk}
     from celscan.analise.rotulos import sdk_de
     dados.anuncios = parsers.anuncios(telas, sdk_de)
     dados.avisos = avisos_da_coleta(s, dados, dump)

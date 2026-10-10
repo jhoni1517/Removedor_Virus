@@ -104,6 +104,21 @@ def relacoes(dados: DadosAparelho) -> dict[str, Any]:
     return rel
 
 
+# Remover estes pode trancar a pessoa fora das contas (códigos de 2 etapas, senhas, carteiras, token do banco)
+SENSIVEIS = {
+    "com.google.android.apps.authenticator2", "com.azure.authenticator", "com.authy.authy", "com.twofasapp",
+    "org.fedorahosted.freeotp", "com.beemdevelopment.aegis", "com.x8bit.bitwarden", "com.lastpass.lpandroid",
+    "com.agilebits.onepassword", "com.dashlane", "keepass2android.keepass2android", "com.kunzisoft.keepass.free",
+    "io.metamask", "com.wallet.crypto.trustapp", "com.binance.dev", "com.coinbase.android", "com.google.android.gm",
+    "com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "org.thoughtcrime.securesms",
+}
+
+
+def sensivel(pkg: str) -> bool:
+    """App cujo dado não volta só reinstalando: autenticador, senhas, carteira, banco, mensageiro."""
+    return pkg in SENSIVEIS or pkg in pix.carregar().oficiais
+
+
 def _proprio(app: AppBruto, dados: DadosAparelho) -> dict[str, Any]:
     return {"pacote": app.pacote, "score": 0, "nivel": "PERMITIDO", "motivos": [PROPRIOS[app.pacote]],
             "achados": [], "ameaca": None, "instalador": app.instalador, "loja": None, "sistema": False,
@@ -113,7 +128,9 @@ def _proprio(app: AppBruto, dados: DadosAparelho) -> dict[str, Any]:
             "icone": app.icone, "atualizado": None, "ultimo_uso": None, "origem": PROPRIOS[app.pacote],
             "essencial": False, "tamanho": app.tamanho, "sem_icone": False, "disfarces": [], "sensores": {},
             "anuncios": {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": [], "gatilhos": []},
-            "notificacoes": 0, "notificacoes_dia": 0, "enviado_mb": None, "sobreposicao": False, "proprio": True}
+            "notificacoes": 0, "notificacoes_dia": 0, "enviado_mb": None, "sobreposicao": False, "proprio": True,
+            "tempo_uso_s": None, "bateria_mah": None, "rodando": app.rodando, "removido_antes": None,
+            "vigilancia": False, "sensivel": False}
 
 
 def origem_legivel(app: AppBruto, dados: DadosAparelho | None = None) -> str:
@@ -138,7 +155,7 @@ def nivel(score: int, regras: Regras | None = None) -> str:
 
 
 def achados_aparelho(dados: DadosAparelho, regras: Regras | None = None,
-                     agora: datetime | None = None) -> list[Achado]:
+                     agora: datetime | None = None, iocs: Any = None) -> list[Achado]:
     r = regras or regras_padrao()
     ra, par = r.aparelho, r.parametros
     a: list[Achado] = []
@@ -173,6 +190,24 @@ def achados_aparelho(dados: DadosAparelho, regras: Regras | None = None,
         a.append(ra["vpn_ativa"].achado())
     if rede.get("dns_modo") == "hostname" and rede.get("dns_servidor"):
         a.append(ra["dns_privado"].achado(rede["dns_servidor"]))
+    extras = [u for u in dados.usuarios if u.get("id") != 0]
+    if extras and "outros_usuarios" in ra:
+        nomes = ", ".join(f"'{u['nome']}'" for u in extras[:3])
+        a.append(ra["outros_usuarios"].achado(f"{len(extras)} perfil(is)/usuário(s) ({nomes})"))
+    escondidos = sorted({p for pk in dados.outros_usuarios.values() for p in pk})
+    if escondidos and "apps_em_outro_perfil" in ra:
+        a.append(ra["apps_em_outro_perfil"].achado(", ".join(escondidos[:5]) + ("..." if len(escondidos) > 5 else "")))
+    if dados.apks_guardados:
+        perigosos = []
+        for f in dados.apks_guardados:
+            hit = iocs.checar("", None, f.get("sha256")) if (iocs and f.get("sha256")) else None
+            if hit:
+                f["ameaca"] = hit
+                perigosos.append(f"{f['caminho'].rsplit('/', 1)[-1]} ({hit})")
+        if perigosos and "apk_ameaca_guardado" in ra:
+            a.append(ra["apk_ameaca_guardado"].achado("; ".join(perigosos[:3])))
+        elif "apks_guardados" in ra:
+            a.append(ra["apks_guardados"].achado(f"{len(dados.apks_guardados)} instalador(es) .apk"))
     bancos = pix.bancarios_instalados(dados.apps)
     suspeitos = sorted(p for p, app in dados.apps.items() if not app.sistema
                        and LOJAS.get(app.instalador or "") is None and pix.padrao_trojan(p, dados.acess, app.appops))
@@ -185,7 +220,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
                 agora: datetime | None = None, regras: Regras | None = None) -> dict[str, Any]:
     r = regras or regras_padrao()
     ra, par, lim = r.apps, r.parametros, r.limites
-    agora = agora or datetime.now()
+    # hora do próprio celular: com o relógio do PC errado, "instalado há X dias" saía errado
+    agora = agora or dados.relogio_aparelho or datetime.now()
     pkg = app.pacote
     if pkg in PROPRIOS:  # o próprio CelScan Agente (se ficou instalado) não é suspeito
         return _proprio(app, dados)
@@ -260,6 +296,37 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     if n_notif and pkg not in MENSAGEIROS and not app.sistema:
         if n_notif / dias >= par.get("notificacoes_dia", 20):
             a.append(ra["notificacoes_excesso"].achado(f"{n_notif} notificações em {dias} dia(s)"))
+    inst_atual = app.instalador or ""
+    # "de fora" = instalado pelo navegador/arquivos/adb; loja alternativa e cópia de outro celular não contam
+    fora = not app.sistema and not loja and inst_atual not in LOJAS_ALTERNATIVAS and inst_atual not in TRANSFERENCIA
+    bancos_inst = bool(pix.bancarios_instalados(dados.apps))
+    # instalador forjado: diz que veio da loja, mas quem iniciou foi o adb ou outro app comum (Android 11+)
+    ini = app.iniciador
+    if (loja and ini and ini != app.instalador and ini not in LOJAS and ini not in dados.sistema_pkgs
+            and ini not in ("com.google.android.gms", "android") and ini not in TRANSFERENCIA
+            and (ini == "com.android.shell" or ini in dados.apps)
+            and "instalador_forjado" in ra):
+        a.append(ra["instalador_forjado"].achado(loja))
+    if app.removido_antes and not loja and "voltou" in ra:  # reinstalado da loja oficial pelo dono não é reinfecção
+        a.append(ra["voltou"].achado(app.removido_antes))
+    if fora and "REQUEST_INSTALL_PACKAGES" in app.appops and pkg in dados.acess and "dropper_ativo" in ra:
+        a.append(ra["dropper_ativo"].achado())
+    perms_sms = {"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"}
+    if (fora and bancos_inst and (pkg in dados.notif or app.perms & perms_sms) and pkg not in MENSAGEIROS
+            and pkg != dados.sms and "intercepta_codigos" in ra):
+        a.append(ra["intercepta_codigos"].achado())
+    agenda = "android.permission.READ_CONTACTS" in app.perms and app.perms & {
+        "android.permission.READ_SMS", "android.permission.READ_CALL_LOG"}
+    if fora and agenda and pkg not in MENSAGEIROS and "golpe_emprestimo" in ra:
+        a.append(ra["golpe_emprestimo"].achado())
+    if fora and dados.teclado == pkg and "teclado_suspeito" in ra:
+        a.append(ra["teclado_suspeito"].achado())
+    escondido = sem_icone or bool(app.disfarces)
+    espiona = pkg in dados.acess or pkg in dados.notif or pkg in dados.admins or any(
+        (app.sensores.get(x) or 1e12) < par.get("sensor_dias", 7) * 86400 for x in SENSORES_SUSPEITOS) or (
+        (app.enviado_mb or 0) >= par.get("envio_mb", 50))
+    if fora and escondido and espiona and "padrao_espiao" in ra:
+        a.append(ra["padrao_espiao"].achado())
     if pix.padrao_trojan(pkg, dados.acess, app.appops) and not (loja and pkg in (permitidos or set())):
         a.append(ra["trojan_bancario"].achado())
     if certificados_mod.conferir(pkg, app.cert, _oficiais()) == "falso":
@@ -307,6 +374,11 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "notificacoes": n_notif, "notificacoes_dia": round(n_notif / dias, 1) if n_notif else 0,
         "enviado_mb": app.enviado_mb,
         "sobreposicao": "SYSTEM_ALERT_WINDOW" in app.appops,
+        "tempo_uso_s": app.tempo_uso_s, "bateria_mah": app.bateria_mah, "rodando": app.rodando,
+        "removido_antes": app.removido_antes,
+        "vigilancia": bool(ioc and any(p in ioc.lower() for p in ("stalkerware", "spyware", "pegasus", "predator")))
+        or any(x["chave"] == "padrao_espiao" for x in a),
+        "sensivel": sensivel(pkg),
     }
 
 
@@ -317,7 +389,7 @@ def pontuar(dados: DadosAparelho, iocs: Any = None, permitidos: set[str] | None 
     _mesmo_autor(resultados, r)
     # ordem estável: risco, depois nome (a lista não "pula" entre varreduras iguais)
     resultados.sort(key=lambda x: (-x["score"], (x.get("nome") or x["pacote"]).lower(), x["pacote"]))
-    return achados_aparelho(dados, regras, agora), resultados
+    return achados_aparelho(dados, regras, agora, iocs), resultados
 
 
 def _mesmo_autor(resultados: list[dict[str, Any]], regras: Regras) -> None:

@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowUp, ChevronDown, Copy, Download, ExternalLink, File
   ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BuscaRapida } from "./BuscaRapida";
-import { ehVigilancia, planoDeAcao } from "../plano";
+import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 
 import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
@@ -196,9 +196,11 @@ function useFocoPreso(ativo: boolean) {
   return ref;
 }
 
-function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes: string[]; confirmar: (ciente: boolean) => void; cancelar: () => void }) {
-  const espioes = v.resultados.filter((r) => pacotes.includes(r.pacote) && ehVigilancia(r.ameaca));
+function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes: string[]; confirmar: (ciente: boolean, sensivel: boolean) => void; cancelar: () => void }) {
+  const espioes = v.resultados.filter((r) => pacotes.includes(r.pacote) && ehVigilancia(r));
+  const sensiveis = v.resultados.filter((r) => pacotes.includes(r.pacote) && r.sensivel);
   const [ciente, setCiente] = useState(false);
+  const [cienteSensivel, setCienteSensivel] = useState(false);
   const ref = useFocoPreso(true);
   const porPacote = new Map(v.resultados.map((r) => [r.pacote, r]));
   return (
@@ -208,9 +210,12 @@ function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes:
         <h2 id="titulo-confirmar" className="text-lg font-semibold">Remover {pacotes.length} app(s)?</h2>
         <ul className="my-3 max-h-48 space-y-1.5 overflow-auto text-sm">{pacotes.map((p) => {
           const r = porPacote.get(p);
-          return <li key={p} className="flex items-center gap-2">
+          const plano = r ? planoRemocao(r) : null;
+          return <li key={p} className="flex items-start gap-2">
             {r && <IconeApp nome={r.nome} pacote={p} icone={r.icone} tamanho={24} />}
-            <span className="font-medium">{r ? nomeApp(r) : p}</span><span className="truncate font-mono text-xs text-fraco">{p}</span></li>;
+            <span className="min-w-0"><span className="font-medium">{r ? nomeApp(r) : p}</span>
+              <span className="ml-2 truncate font-mono text-xs text-fraco">{p}</span>
+              {plano && <span className={`block text-xs ${plano.alerta ? "text-atencao" : "text-fraco"}`}>{plano.texto}</span>}</span></li>;
         })}</ul>
         {espioes.length > 0 && <PainelVitima v={v} espioes={espioes} />}
         <p className="text-sm text-fraco">
@@ -223,10 +228,18 @@ function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes:
             <span>Li o aviso e a pessoa dona do celular decidiu remover agora.</span>
           </label>
         )}
+        {sensiveis.length > 0 && (
+          <label className="mt-3 flex items-start gap-2 rounded-md bg-atencao-suave p-2 text-sm">
+            <input type="checkbox" className="mt-1 accent-[var(--destaque)]" checked={cienteSensivel} onChange={(e) => setCienteSensivel(e.target.checked)} />
+            <span><strong>{sensiveis.map(nomeApp).join(", ")}</strong> guarda(m) senhas, códigos de 2 etapas, carteira ou conversas.
+              O dono confirmou que tem como entrar nas contas (backup das conversas, códigos de recuperação) antes de remover.</span>
+          </label>
+        )}
         <div className="mt-5 flex justify-end gap-2">
-          <Botao onClick={cancelar} autoFocus={espioes.length > 0}>Cancelar</Botao>
-          <Botao variante="perigo" onClick={() => confirmar(espioes.length > 0)} disabled={espioes.length > 0 && !ciente}
-            autoFocus={espioes.length === 0}>Remover</Botao>
+          <Botao onClick={cancelar} autoFocus={espioes.length > 0 || sensiveis.length > 0}>Cancelar</Botao>
+          <Botao variante="perigo" onClick={() => confirmar(espioes.length > 0, sensiveis.length > 0)}
+            disabled={(espioes.length > 0 && !ciente) || (sensiveis.length > 0 && !cienteSensivel)}
+            autoFocus={espioes.length === 0 && sensiveis.length === 0}>Remover</Botao>
         </div>
       </Cartao>
     </div>
@@ -395,19 +408,22 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     }
   }
 
-  async function executarRemocao(pacotes: string[], cienteVitima = false) {
+  async function executarRemocao(pacotes: string[], cienteVitima = false, cienteSensivel = false) {
     setConfirmando(null);
     setOcupado(true);
     try {
       const t = await esperar(await api<Tarefa<Remocao[]>>("/remover", {
-        corpo: { serial: v.info.serial, varredura_id: v.varredura_id, pacotes, ciente_vitima: cienteVitima } }));
+        corpo: { serial: v.info.serial, varredura_id: v.varredura_id, pacotes, ciente_vitima: cienteVitima,
+          confirmar_sensivel: cienteSensivel } }));
       if (t.estado !== "concluida" || !t.resultado) throw new Error(t.erro ?? "A remoção não terminou.");
       const feitos = t.resultado;
       const ok = feitos.filter((f) => f.ok);
       setRemovidos((s) => new Set([...s, ...ok.map((f) => f.pacote)]));
       setDesfeitos((l) => [...l, ...ok.filter((f) => f.quarentena_id).map((f) => ({ pacote: f.pacote, quarentena_id: f.quarentena_id! }))]);
       setSelecao(new Set());
-      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${nomeDe(f.pacote)}: ${f.mensagem}` }));
+      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${nomeDe(f.pacote)}: ${f.mensagem}`,
+        // remoção parcial: o que já foi tirado (acessibilidade, sobreposição) pode ser devolvido
+        acao: f.parcial && f.quarentena_id ? { rotulo: "Desfazer o que foi tirado", executar: () => { desfazer([{ ...f, ok: true }]); } } : undefined }));
       if (ok.length) {
         avisar({ tipo: "ok", texto: `${ok.length} app(s) removido(s). Cópia guardada na quarentena.`, duracao: 10000,
           acao: { rotulo: "Desfazer", executar: () => { desfazer(ok); } } });
@@ -631,7 +647,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </button>
       )}
       {busca !== null && <BuscaRapida apps={v.resultados} fechar={() => setBusca(null)} escolher={(p) => { setBusca(null); abrirApp(p); }} />}
-      {confirmando && <Confirmar v={v} pacotes={confirmando} confirmar={(ciente) => executarRemocao(confirmando, ciente)} cancelar={() => setConfirmando(null)} />}
+      {confirmando && <Confirmar v={v} pacotes={confirmando} confirmar={(ciente, sensivel) => executarRemocao(confirmando, ciente, sensivel)} cancelar={() => setConfirmando(null)} />}
     </div>
   );
 }

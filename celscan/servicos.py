@@ -141,6 +141,23 @@ def _em_paralelo(pacotes: list[str], tarefa: Callable[[str], Any], avancar: Call
             raise
 
 
+def marcar_reinstalados(apps: dict, removidos: dict[str, str]) -> None:
+    """Marca 'removido_antes' só se o app foi instalado DE NOVO depois da remoção. Um app que o CelScan só
+    conseguiu desativar continua na lista com a data de instalação antiga, e não é reinfecção."""
+    from datetime import datetime, timedelta
+
+    for pkg, quando in removidos.items():
+        app = apps.get(pkg)
+        if not app or not app.instalado:
+            continue
+        try:
+            removido_em = datetime.fromisoformat(quando)
+        except ValueError:
+            continue
+        if app.instalado >= removido_em - timedelta(minutes=10):  # folga: relógio do PC x do celular
+            app.removido_antes = removido_em.strftime("%d/%m/%Y")
+
+
 def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, progresso: Progresso = _nada,
                        cancelar: threading.Event | None = None, conexao=None) -> ResultadoVarredura:
     opcoes = opcoes or OpcoesVarredura()
@@ -201,11 +218,13 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         raise verificar_conexao(ap.serial, e) from e
 
     passos.etapa("analise")
+    con = conexao or db.conectar()
+    # app que o CelScan já tinha removido deste celular e voltou: reinfecção (alguém ou algo reinstalou)
+    marcar_reinstalados(sc.apps, db.removidos_antes(con, ap.serial))
     achados, resultados = sc.pontuar()
     n, veredito = nota(achados, resultados)
     duracao = time.perf_counter() - inicio
     info = sc.info()
-    con = conexao or db.conectar()
     vid = db.salvar_varredura(con, info, n, veredito, achados, resultados, avisos, duracao, modo=opcoes.modo,
                               cliente_id=opcoes.cliente_id)
     log.LOGGER.info("varredura %d (%s): %d apps em %.1fs, nota %d", vid, opcoes.modo, len(resultados), duracao, n)

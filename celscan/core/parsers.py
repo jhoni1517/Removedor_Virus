@@ -89,7 +89,7 @@ def pkgdump(txt: str) -> dict[str, dict]:
         if m:
             # A primeira ocorrência vale (a seção "Hidden system packages" repete nomes).
             cur = pkgs.setdefault(m.group(1), {"perms": set(), "versao": None, "instalado": None,
-                                               "atualizado": None, "origem": None})
+                                               "atualizado": None, "origem": None, "iniciador": None})
             continue
         if re.match(r"^\S", linha):  # nova seção de primeiro nível (ex.: "Hidden system packages:")
             cur = None
@@ -104,6 +104,9 @@ def pkgdump(txt: str) -> dict[str, dict]:
         elif s.startswith("lastUpdateTime=") and not cur["atualizado"]:
             cur["atualizado"] = data(s.split("=", 1)[1])
         elif s.startswith(("installOriginatingPackageName=", "installInitiatingPackageName=")):
+            if s.startswith("installInitiatingPackageName="):
+                ini = s.split("=", 1)[1].strip()
+                cur["iniciador"] = None if ini in ("", "null") else ini
             # quem abriu o instalador: Chrome, WhatsApp, gerenciador de arquivos... (Android 11+)
             v = s.split("=", 1)[1].strip()
             if v and v != "null" and "packageinstaller" not in v and (not cur["origem"] or "Originating" in s):
@@ -447,3 +450,106 @@ def teclado(txt: str) -> str | None:
     v = (txt or "").strip().splitlines()[0].strip() if (txt or "").strip() else ""
     pkg = v.split("/")[0]
     return pkg if pkg and pkg != "null" and re.fullmatch(r"[\w.]+", pkg) else None
+
+
+
+# ---------------------------------------------------------------- 3.3: usuários, APKs guardados, uso e bateria
+
+def usuarios(txt: str) -> list[dict[str, object]]:
+    """`pm list users` -> [{id, nome, ativo}] ("UserInfo{10:Trabalho:1030} running")."""
+    res = []
+    for uid, nome, _flags, resto in re.findall(r"UserInfo\{(\d+):([^:}]*):?([0-9a-fA-F]*)\}(.*)", txt):
+        res.append({"id": int(uid), "nome": nome.strip() or f"Usuário {uid}", "ativo": "running" in resto})
+    return res
+
+
+def pacotes_por_usuario(txt: str) -> dict[int, dict[str, str | None]]:
+    """Blocos '@@USER n' + `pm list packages -3 -i --user n` -> {n: {pacote: instalador}}."""
+    res: dict[int, dict[str, str | None]] = {}
+    atual: dict[str, str | None] | None = None
+    for linha in txt.splitlines():
+        if linha.startswith("@@USER "):
+            atual = res.setdefault(int(linha[7:].strip() or 0), {})
+            continue
+        m = re.match(r"^package:([\w.]+)(?:\s+installer=(\S+))?", linha.strip())
+        if m and atual is not None:
+            atual[m.group(1)] = None if m.group(2) in (None, "null") else m.group(2)
+    return res
+
+
+def apks_guardados(txt: str) -> list[dict[str, object]]:
+    """Linhas 'tamanho<TAB>sha256<TAB>caminho' -> [{caminho, tamanho, sha256}]."""
+    res = []
+    for linha in txt.splitlines():
+        partes = linha.split("\t", 2)
+        if len(partes) == 3 and partes[2].startswith("/") and partes[2].lower().endswith(".apk"):
+            sha = partes[1] if re.fullmatch(r"[0-9a-f]{64}", partes[1]) else None
+            res.append({"caminho": partes[2], "tamanho": int(partes[0]) if partes[0].isdigit() else None,
+                        "sha256": sha})
+    return res
+
+
+def rodando(txt: str) -> set[str]:
+    """`ps -A -o NAME` -> pacotes com processo vivo (processos 'pkg:servico' contam para o pacote)."""
+    res = set()
+    for linha in txt.splitlines():
+        nome = linha.strip().split()[-1] if linha.strip() else ""
+        nome = nome.split(":")[0]
+        if "." in nome and re.fullmatch(r"[A-Za-z0-9_.]+", nome):
+            res.add(nome)
+    return res
+
+
+def relogio(txt: str) -> int | None:
+    """`date +%s` do aparelho (para corrigir 'há X minutos' quando o relógio do PC está diferente)."""
+    v = (txt or "").strip().splitlines()
+    return int(v[0]) if v and v[0].strip().isdigit() else None
+
+
+def _hms(txt: str) -> int:
+    """'01:02:03', '02:03' ou '1d 02:03:04' -> segundos."""
+    dias = 0
+    m = re.match(r"^\s*(\d+)d\s+(.*)$", txt or "")
+    if m:
+        dias, txt = int(m.group(1)), m.group(2)
+    partes = [int(x) for x in re.findall(r"\d+", txt or "")]
+    seg = 0
+    for x in partes[-3:]:
+        seg = seg * 60 + x
+    return dias * 86400 + seg
+
+
+def tempo_de_uso(txt: str) -> dict[str, int]:
+    """Tempo de tela por app (s) do intervalo semanal do `dumpsys usagestats` (diário se não houver)."""
+    blocos: dict[str, dict[str, int]] = {}
+    atual = "diario"
+    for linha in txt.splitlines():
+        m = re.search(r"In-memory (daily|weekly|monthly|yearly) stats", linha)
+        if m:
+            atual = {"daily": "diario", "weekly": "semanal", "monthly": "mensal", "yearly": "anual"}[m.group(1)]
+            continue
+        m = re.search(r'package=(\S+)\s+totalTimeUsed="([^"]+)"', linha)
+        if m:
+            b = blocos.setdefault(atual, {})
+            b[m.group(1)] = max(b.get(m.group(1), 0), _hms(m.group(2)))
+    return blocos.get("semanal") or blocos.get("diario") or {}
+
+
+def bateria_por_app(txt: str) -> dict[str, float]:
+    """`dumpsys batterystats --checkin`: linhas 'pwi' (uso de energia em mAh por uid) -> {pacote: mAh}."""
+    pacotes: dict[str, list[str]] = {}
+    gasto: dict[str, float] = {}
+    for linha in txt.splitlines():
+        p = linha.strip().split(",")
+        if len(p) >= 6 and p[2] == "i" and p[3] == "uid":
+            pacotes.setdefault(p[4], []).append(p[5])
+        elif len(p) >= 6 and p[2] == "l" and p[3] == "pwi" and p[4] == "uid":
+            try:
+                gasto[p[1]] = gasto.get(p[1], 0.0) + float(p[5])
+            except ValueError:
+                continue
+    res: dict[str, float] = {}
+    for uid, mah in gasto.items():
+        for pkg in pacotes.get(uid, []):
+            res[pkg] = round(mah, 1)
+    return res

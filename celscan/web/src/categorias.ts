@@ -16,12 +16,14 @@ const POR_CHAVE: Record<string, Categoria> = {
   ameaca_conhecida: "ameaca", virustotal_detectado: "ameaca",
   imita_app_conhecido: "golpe", imita_pelo_nome: "golpe", certificado_falso: "golpe", trojan_bancario: "golpe",
   sms_padrao: "golpe", nome_com_truque: "golpe", instalou_outros: "golpe",
+  instalador_forjado: "golpe", voltou: "ameaca", dropper_ativo: "golpe", intercepta_codigos: "golpe",
+  golpe_emprestimo: "golpe", teclado_suspeito: "espionagem", padrao_espiao: "espionagem",
   acessibilidade: "espionagem", administrador: "espionagem", device_owner: "espionagem", leitor_notificacoes: "espionagem",
   sem_icone: "espionagem", disfarce: "espionagem", disfarce_escondido: "espionagem", sensor_recente: "espionagem",
   envio_dados: "espionagem", sempre_ativo: "espionagem", finge_sistema: "espionagem", mesmo_autor: "espionagem",
   anuncio_popup: "anuncio", anuncio_gatilho: "anuncio", anuncio_escondido: "anuncio", anuncio_tela_cheia: "anuncio", notificacoes_excesso: "anuncio",
   SYSTEM_ALERT_WINDOW: "anuncio",
-  fora_da_loja: "origem", certificado_debug: "origem", virustotal_desconhecido: "origem", lote_suspeito: "origem",
+  fora_da_loja: "origem", loja_alternativa: "origem", transferido: "origem", certificado_debug: "origem", virustotal_desconhecido: "origem", lote_suspeito: "origem",
   sem_nome: "origem", REQUEST_INSTALL_PACKAGES: "origem", instalado_recente: "origem",
 };
 

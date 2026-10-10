@@ -200,6 +200,41 @@ apps:
     titulo: "{detalhe}"
     significa: "O app manda notificações demais. Muitas vezes são propagandas ou avisos falsos de vírus."
     fazer: "Desligue as notificações dele em Configurações > Apps > Notificações, ou remova."
+  padrao_espiao:
+    peso: 40
+    titulo: "Comportamento de app espião"
+    significa: "O app se esconde (sem ícone ou com disfarce) e ao mesmo tempo lê a tela, as notificações ou usa câmera/microfone/localização. É o jeito de trabalhar dos apps de monitoramento (stalkerware), mesmo os que ainda não estão em nenhuma lista."
+    fazer: "Se alguém pode ter mexido no seu celular, guarde as provas antes de remover e procure ajuda. Depois remova."
+  instalador_forjado:
+    peso: 50
+    titulo: "Diz que veio da {detalhe}, mas foi instalado de outro jeito"
+    significa: "O app foi marcado como se tivesse vindo da loja, mas quem fez a instalação foi outro programa ou um computador. Golpistas fazem isso para o app parecer confiável."
+    fazer: "Remova e, se precisar do app, instale de novo direto pela loja."
+  voltou:
+    peso: 50
+    titulo: "Voltou depois de removido (removido em {detalhe})"
+    significa: "Este app já tinha sido removido numa visita anterior e apareceu de novo. Isso acontece quando outro app ou um site reinstala o vírus sozinho."
+    fazer: "Remova de novo e procure o app que instala outros (veja os alertas 'Instalou outros apps'). Troque as senhas."
+  dropper_ativo:
+    peso: 30
+    titulo: "Consegue instalar apps sozinho"
+    significa: "Tem permissão para instalar apps e também controla a tela (acessibilidade), então pode tocar em 'Instalar' sem você. É assim que golpes bancários baixam a segunda parte do vírus."
+    fazer: "Remova. Se o app for de automação que você instalou de propósito, tire pelo menos a permissão de instalar apps."
+  intercepta_codigos:
+    peso: 30
+    titulo: "Pode ler códigos do banco"
+    significa: "Lê SMS ou todas as notificações num celular com app de banco instalado. Com isso dá para pegar o código de confirmação de um Pix ou de troca de senha."
+    fazer: "Se não for um app de mensagens ou relógio inteligente que você usa, remova antes de abrir o banco."
+  golpe_emprestimo:
+    peso: 30
+    titulo: "Coleta sua agenda de contatos"
+    significa: "App de fora da loja que lê contatos e também SMS ou registro de chamadas. É o perfil dos falsos apps de empréstimo que depois ameaçam expor a pessoa para os contatos."
+    fazer: "Remova. Se já houve ameaça ou cobrança, guarde prints e registre ocorrência."
+  teclado_suspeito:
+    peso: 40
+    titulo: "Teclado de fora da loja em uso"
+    significa: "O teclado vê tudo o que você digita, inclusive senhas. Este teclado não veio de uma loja oficial."
+    fazer: "Volte para o teclado original em Configurações > Sistema > Idiomas e entrada, e remova este app."
   instalado_recente:
     peso: 5
     titulo: "Instalado há {detalhe} dia(s)"
@@ -271,6 +306,26 @@ appops:
     fazer: "Desative em Configurações > Apps > Acesso especial > Instalar apps desconhecidos."
 
 aparelho:
+  outros_usuarios:
+    nivel: MÉDIO
+    titulo: "Há {detalhe} além do dono"
+    significa: "O celular tem outro usuário ou perfil (por exemplo 'perfil de trabalho'). Apps instalados só lá não aparecem na tela do dono e escapam de uma análise comum."
+    fazer: "Se é celular da empresa, é normal. Se ninguém criou esse perfil, remova em Configurações > Sistema > Vários usuários."
+  apps_em_outro_perfil:
+    nivel: ALTO
+    titulo: "Apps escondidos em outro perfil: {detalhe}"
+    significa: "Estes apps existem só no outro usuário/perfil, fora da vista do dono do celular."
+    fazer: "Confira com o dono se ele reconhece. Se não, apague o perfil ou o usuário extra."
+  apk_ameaca_guardado:
+    nivel: ALTO
+    titulo: "Instalador de ameaça guardado no celular: {detalhe}"
+    significa: "Há um arquivo .apk de um vírus conhecido salvo no armazenamento, esperando para ser instalado (ou para reinstalar depois de removido)."
+    fazer: "Apague o arquivo (o CelScan guarda uma cópia segura) e não abra arquivos .apk recebidos por mensagem."
+  apks_guardados:
+    nivel: BAIXO
+    titulo: "{detalhe} guardado(s) no celular"
+    significa: "São arquivos para instalar apps, normalmente baixados ou recebidos por mensagem. Se forem antigos, só ocupam espaço."
+    fazer: "Apague os que você não reconhece ou não usa mais."
   popups:
     nivel: MÉDIO
     titulo: "{detalhe} abrindo anúncios fora do app"
