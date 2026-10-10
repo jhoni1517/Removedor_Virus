@@ -159,7 +159,13 @@ if a[0] == "shell":
         chave = c.split()[1]
         m = re.search(r"^\[" + re.escape(chave) + r"\]: \[(.*)\]$", fixture("coleta.txt"), re.M)
         fim(m.group(1) if m else "")
+    if "@@S" in c:  # tamanho + data de modificação (cache incremental de hashes)
+        for pkg in PACOTES:
+            print(f"@@S\t{os.path.getsize(apk_de(pkg))} 1700000000\t/data/app/~~X==/{pkg}-Y==/base.apk")
+        fim()
     if "sha256sum" in c:
+        with open(os.path.join(EST, "hashes.log"), "a", encoding="utf-8") as hl:
+            hl.write(c + "\n")
         for pkg, h in zip(PACOTES, "abcd", strict=True):
             tam = os.path.getsize(apk_de(pkg))
             # hash muda conforme o APK servido, para o cache de nomes/ícones não misturar apps

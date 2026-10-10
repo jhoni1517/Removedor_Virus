@@ -225,3 +225,14 @@ def test_remover_app_sensivel_pede_confirmacao(cliente):
                                            "confirmar_sensivel": True}, headers=H)
     assert r.status_code == 200
     esperar(cliente, r.json())
+
+
+def test_atendimento_conferir_abrir_e_finalizar(cliente):
+    r = cliente.post("/api/conferir", json={"serial": "ABC123", "pacotes": ["com.systemservice"]}, headers=H)
+    assert r.status_code == 200 and r.json()[0]["pacote"] == "com.systemservice"
+    assert cliente.post("/api/conferir", json={"serial": "ABC123", "pacotes": ["x y"]}, headers=H).status_code == 422
+    r = cliente.post("/api/abrir-app", json={"serial": "ABC123", "pacote": "com.whatsapp"}, headers=H)
+    assert r.status_code == 200
+    assert "nivel" in cliente.get("/api/bateria?serial=ABC123", headers=H).json()
+    r = cliente.post("/api/finalizar", json={"serial": "ABC123", "desligar_depuracao": False}, headers=H)
+    assert r.status_code == 200 and r.json()["feito"]

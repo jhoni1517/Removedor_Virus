@@ -255,19 +255,102 @@ def coletar(ap: Aparelho, sistema: bool = False) -> DadosAparelho:
     return montar(ap.serial, ap.script(SCRIPT.replace("{F}", filtro(sistema)), timeout=900))
 
 
+# 3.3: tamanho + data de modificação de cada APK (rápido). Só os APKs novos ou trocados passam pelo sha256sum;
+# os demais vêm do cache deste PC. Na 2ª varredura do mesmo celular a etapa cai de ~40 s para ~2 s.
+STATS = ("pm list packages -f {F} | sed 's/^package://; s/=[^=]*$//' | while read f; do "
+         "printf '@@S\\t%s\\t%s\\n' \"$(stat -c '%s %Y' \"$f\" 2>/dev/null)\" \"$f\"; done")
+HASH_LISTA = ("for f in {L}; do printf '@@H\\t%s\\t%s\\t%s\\n' \"$(stat -c %s \"$f\" 2>/dev/null)\" "
+              "\"$(sha256sum \"$f\" 2>/dev/null | cut -d' ' -f1)\" \"$f\"; done")
+LIMITE_LISTA = 3000  # aparelhos antigos aceitam comandos de no máximo ~4 KB pelo adb
+
+
+def _arquivo_cache_hash(serial: str):
+    from celscan.config import DIR
+    return DIR / "cache" / f"hashes_{re.sub(r'[^A-Za-z0-9_.-]', '_', serial)}.json"
+
+
+def _ler_cache_hash(serial: str) -> dict[str, list]:
+    import json
+    try:
+        dados = json.loads(_arquivo_cache_hash(serial).read_text(encoding="utf-8"))
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _gravar_cache_hash(serial: str, cache: dict[str, list]) -> None:
+    import json
+    import os
+    alvo = _arquivo_cache_hash(serial)
+    try:
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        tmp = alvo.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache), encoding="utf-8")
+        os.replace(tmp, alvo)
+    except OSError as e:
+        log.LOGGER.info("cache de hashes não gravado: %s", e)
+
+
+def _ler_linha_hash(linha: str, por_caminho: dict[str, AppBruto]) -> AppBruto | None:
+    partes = linha.split("\t")
+    if len(partes) != 4 or partes[0] != "@@H":
+        return None
+    app = por_caminho.get(partes[3])
+    if not app:
+        return None
+    app.tamanho = int(partes[1]) if partes[1].isdigit() else None
+    app.sha256 = partes[2] if re.fullmatch(r"[0-9a-f]{64}", partes[2]) else None
+    return app
+
+
 def calcular_hashes(ap: Aparelho, dados: DadosAparelho, sistema: bool = False) -> Iterator[str]:
-    """Gerador: devolve cada pacote conforme o hash sai do aparelho."""
+    """Gerador: devolve cada pacote conforme o hash sai do aparelho (ou do cache, se o APK não mudou)."""
+    import shlex
+
     por_caminho = {a.apk: a for a in dados.apps.values()}
-    for linha in ap.linhas(HASHES.replace("{F}", filtro(sistema))):
-        partes = linha.split("\t")
-        if len(partes) != 4 or partes[0] != "@@H":
-            continue
-        app = por_caminho.get(partes[3])
+    cache = _ler_cache_hash(ap.serial)
+    estado: dict[str, tuple[int, int]] = {}  # caminho -> (tamanho, modificado)
+    try:
+        for linha in ap.linhas(STATS.replace("{F}", filtro(sistema))):
+            partes = linha.split("\t")
+            if len(partes) == 3 and partes[0] == "@@S":
+                num = partes[1].split()
+                if len(num) == 2 and num[0].isdigit() and num[1].isdigit():
+                    estado[partes[2]] = (int(num[0]), int(num[1]))
+    except AdbErro as e:
+        log.LOGGER.info("stat dos APKs falhou (%s); calculando todos os hashes", e)
+    faltam: list[str] = []
+    novo_cache: dict[str, list] = {}
+    entregues: set[str] = set()
+    for caminho, (tam, mod) in estado.items():
+        app = por_caminho.get(caminho)
         if not app:
             continue
-        app.tamanho = int(partes[1]) if partes[1].isdigit() else None
-        app.sha256 = partes[2] if re.fullmatch(r"[0-9a-f]{64}", partes[2]) else None
-        yield app.pacote
+        c = cache.get(caminho)
+        if isinstance(c, list) and len(c) == 3 and c[0] == tam and c[1] == mod and c[2]:
+            app.tamanho, app.sha256 = tam, c[2]
+            novo_cache[caminho] = c
+            entregues.add(app.pacote)
+            yield app.pacote
+        else:
+            faltam.append(caminho)
+    sem_estado = [a.apk for a in dados.apps.values() if a.apk and a.apk not in estado]
+    lista = " ".join(shlex.quote(c) for c in faltam)
+    if not estado or sem_estado or len(lista) > LIMITE_LISTA:
+        comando = HASHES.replace("{F}", filtro(sistema))  # sem stat (ou lista grande demais): tudo, como antes
+    else:
+        comando = HASH_LISTA.replace("{L}", lista) if faltam else ""
+    if comando:
+        for linha in ap.linhas(comando):
+            app = _ler_linha_hash(linha, por_caminho)
+            if not app:
+                continue
+            if app.sha256 and app.apk in estado:
+                novo_cache[app.apk] = [*estado[app.apk], app.sha256]
+            if app.pacote not in entregues:
+                entregues.add(app.pacote)
+                yield app.pacote
+    _gravar_cache_hash(ap.serial, novo_cache)
 
 
 def ler_certificado(ap: Aparelho, app: AppBruto) -> None:

@@ -1,6 +1,7 @@
-import { AlertTriangle, ArrowUp, ChevronDown, Copy, Download, ExternalLink, FileText, MessageCircle, Monitor, RotateCcw, Search,
-  ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowUp, ChevronDown, Copy, Download, ExternalLink, FileText, MessageCircle, Monitor, PowerOff,
+  RotateCcw, Search, ShieldAlert, SlidersHorizontal, Smartphone, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BateriaBaixa } from "../bateria";
 import { BuscaRapida } from "./BuscaRapida";
 import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 
@@ -19,6 +20,13 @@ function lerLocal<T extends string>(chave: string, validos: readonly T[], padrao
 }
 function gravarLocal(chave: string, valor: string) { try { localStorage.setItem(chave, valor); } catch { /* sem storage */ } }
 
+
+/** 5400 -> "1 h 30 min"; 300 -> "5 min". */
+export function duracaoCurta(s: number): string {
+  if (s < 60) return "menos de 1 min";
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+}
 
 const COR_BORDA: Record<string, string> = { ALTO: "border-l-perigo", "MÉDIO": "border-l-atencao", BAIXO: "border-l-linha" };
 
@@ -43,9 +51,10 @@ const ACOES_APP: [string, string][] = [
   ["parar", "Forçar parada agora"],
 ];
 
-function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, podeAgir, foco }: {
+function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelular, removido, podeAgir, foco }: {
   r: AppResultado; selecionado: boolean; alternar: () => void; remover: () => void;
-  permissoes: (pkg: string, acoes: string[]) => void; removido: boolean; podeAgir: boolean; foco?: boolean;
+  permissoes: (pkg: string, acoes: string[]) => void; abrirNoCelular: (pkg: string) => void;
+  removido: boolean; podeAgir: boolean; foco?: boolean;
 }) {
   const [aberto, setAberto] = useState(r.nivel === "ALTO");
   useEffect(() => { if (foco) setAberto(true); }, [foco]);
@@ -67,6 +76,12 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
             {recente(r.instalado) && <span className="rounded bg-destaque-suave px-1.5 py-0.5 text-xs font-semibold text-destaque">Novo</span>}
             <span className="numeros font-mono text-xs text-fraco">{r.score} pts</span>
             {removido && <span className="rounded bg-ok-suave px-1.5 py-0.5 text-xs font-semibold text-ok">Removido</span>}
+            {r.removido_antes && !removido && <span className="rounded bg-perigo-suave px-1.5 py-0.5 text-xs font-semibold text-perigo"
+              title={`O CelScan já tinha removido este app em ${r.removido_antes} e ele foi instalado de novo`}>Voltou</span>}
+            {r.rodando && !removido && !r.sistema && <span className="selo-vivo rounded bg-atencao-suave px-1.5 py-0.5 text-xs font-semibold text-atencao"
+              title="Estava aberto ou rodando em segundo plano no momento da análise">Rodando agora</span>}
+            {r.sensivel && <span className="rounded bg-superficie-2 px-1.5 py-0.5 text-xs text-fraco"
+              title="Guarda senhas, códigos de 2 etapas, carteira ou conversas: remover exige confirmação do dono">Dados importantes</span>}
           </div>
           <p className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-fraco">
             <span className="truncate">{r.pacote}</span>
@@ -85,6 +100,8 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
             {r.ultimo_uso && <> · último uso <Data iso={r.ultimo_uso} /></>}
             {r.versao ? ` · versão ${r.versao}` : ""}
             {r.tamanho ? ` · ${tamanhoLegivel(r.tamanho)}` : ""}
+            {r.tempo_uso_s ? ` · ${duracaoCurta(r.tempo_uso_s)} de tela na semana` : ""}
+            {r.bateria_mah && r.bateria_mah >= 1 ? ` · ${Math.round(r.bateria_mah).toLocaleString("pt-BR")} mAh de bateria` : ""}
           </p>
           {r.ameaca && (
             <p className="mt-2 flex items-center gap-2 rounded-md bg-perigo-suave px-2 py-1 text-sm font-semibold text-perigo">
@@ -122,6 +139,9 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
               <Botao key={k} className="py-1" disabled={!podeAgir}
                 onClick={() => { permissoes(r.pacote, [k]); setAjustar(false); }}>{nome}</Botao>
             ))}
+            <Botao className="py-1" variante="fantasma" disabled={!podeAgir} onClick={() => abrirNoCelular(r.pacote)}
+              title="Abre a página deste app nos Ajustes do celular (desinstalar, forçar parada, permissões)">
+              <Smartphone size={14} aria-hidden /> Abrir no celular</Botao>
           </div>
         </div>
       )}
@@ -203,6 +223,7 @@ function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes:
   const [cienteSensivel, setCienteSensivel] = useState(false);
   const ref = useFocoPreso(true);
   const porPacote = new Map(v.resultados.map((r) => [r.pacote, r]));
+
   return (
     <div ref={ref} className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-confirmar"
       onKeyDown={(e) => e.key === "Escape" && cancelar()}>
@@ -218,6 +239,7 @@ function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes:
               {plano && <span className={`block text-xs ${plano.alerta ? "text-atencao" : "text-fraco"}`}>{plano.texto}</span>}</span></li>;
         })}</ul>
         {espioes.length > 0 && <PainelVitima v={v} espioes={espioes} />}
+        <BateriaBaixa serial={v.info.serial} />
         <p className="text-sm text-fraco">
           Antes de remover, o CelScan guarda uma cópia de cada app na quarentena e tira as permissões perigosas.
           Você pode desfazer logo em seguida ou depois, pelo Histórico.
@@ -421,18 +443,50 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
       setRemovidos((s) => new Set([...s, ...ok.map((f) => f.pacote)]));
       setDesfeitos((l) => [...l, ...ok.filter((f) => f.quarentena_id).map((f) => ({ pacote: f.pacote, quarentena_id: f.quarentena_id! }))]);
       setSelecao(new Set());
-      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${nomeDe(f.pacote)}: ${f.mensagem}`,
-        // remoção parcial: o que já foi tirado (acessibilidade, sobreposição) pode ser devolvido
-        acao: f.parcial && f.quarentena_id ? { rotulo: "Desfazer o que foi tirado", executar: () => { desfazer([{ ...f, ok: true }]); } } : undefined }));
+      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${nomeDe(f.pacote)}: ${f.mensagem}`, duracao: 12000,
+        // remoção parcial: o que já foi tirado (acessibilidade, sobreposição) pode ser devolvido;
+        // senão, o atalho leva direto à página do app no celular para o técnico resolver por lá
+        acao: f.parcial && f.quarentena_id ? { rotulo: "Desfazer o que foi tirado", executar: () => { desfazer([{ ...f, ok: true }]); } }
+          : { rotulo: "Abrir no celular", executar: () => { abrirNoCelular(f.pacote); } } }));
       if (ok.length) {
         avisar({ tipo: "ok", texto: `${ok.length} app(s) removido(s). Cópia guardada na quarentena.`, duracao: 10000,
           acao: { rotulo: "Desfazer", executar: () => { desfazer(ok); } } });
+        conferir(ok.map((f) => f.pacote));
       }
     } catch (e) {
       avisar({ tipo: "erro", texto: (e as Error).message });
     } finally {
       setOcupado(false);
     }
+  }
+
+  async function abrirNoCelular(pacote: string) {
+    try {
+      await api("/abrir-app", { corpo: { serial: v.info.serial, pacote } });
+      avisar({ tipo: "ok", texto: `A página de ${nomeDe(pacote)} abriu nos Ajustes do celular.` });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
+
+  /** Depois de remover: confere se os apps sumiram mesmo e não deixaram acessibilidade/admin/notificações. */
+  async function conferir(pacotes: string[]) {
+    try {
+      const res = await api<{ pacote: string; instalado: boolean; sobrou: string[]; limpo: boolean }[]>("/conferir",
+        { corpo: { serial: v.info.serial, pacotes } });
+      const sujos = res.filter((r) => !r.limpo);
+      if (!sujos.length) avisar({ tipo: "ok", texto: `Conferido no celular: ${pacotes.length} app(s) saíram de vez, sem deixar rastro.` });
+      else sujos.forEach((r) => avisar({ tipo: "erro", duracao: 12000,
+        texto: `${nomeDe(r.pacote)}: ${r.instalado ? "ainda está instalado" : "saiu"}${r.sobrou.length ? `, mas sobrou: ${r.sobrou.join(", ")}` : ""}.`,
+        acao: { rotulo: "Abrir no celular", executar: () => { abrirNoCelular(r.pacote); } } }));
+    } catch { /* conferência é um extra: a remoção já foi informada */ }
+  }
+
+  async function finalizarAtendimento() {
+    if (!window.confirm("Finalizar o atendimento?\n\nO CelScan apaga o que deixou no celular e desliga a Depuração USB e as "
+      + "Opções do desenvolvedor. A conexão com este PC cai em seguida.")) return;
+    try {
+      const r = await api<{ feito: string[] }>("/finalizar", { corpo: { serial: v.info.serial, desligar_depuracao: true } });
+      avisar({ tipo: "ok", duracao: 12000, texto: `Atendimento finalizado: ${r.feito.join("; ")}. Pode desconectar o cabo.` });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
 
   async function verTela() {
@@ -541,6 +595,10 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
               <RotateCcw size={15} aria-hidden /> Desfazer tudo ({desfeitos.length})
             </Botao>
           )}
+          <Botao onClick={finalizarAtendimento} disabled={!conectado || ocupado}
+            title="Apaga o que o CelScan deixou no celular e desliga a Depuração USB (o cliente não sai com o celular aberto)">
+            <PowerOff size={15} aria-hidden /> Finalizar atendimento
+          </Botao>
           <Botao variante="fantasma" onClick={onNova}>Nova varredura</Botao>
         </div>
       </Cartao>
@@ -620,7 +678,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           visiveis.map((r) => (
             <CartaoApp key={r.pacote} r={r} selecionado={selecao.has(r.pacote)} alternar={() => alternar(r.pacote)}
               removido={removidos.has(r.pacote)} podeAgir={conectado && !ocupado} remover={() => setConfirmando([r.pacote])}
-              permissoes={ajustarPermissoes} foco={foco === r.pacote} />
+              permissoes={ajustarPermissoes} abrirNoCelular={abrirNoCelular} foco={foco === r.pacote} />
           ))}
       </div>
       </>}

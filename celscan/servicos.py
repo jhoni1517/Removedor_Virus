@@ -18,7 +18,7 @@ from celscan.analise import iocs as iocs_mod
 from celscan.analise import pontuacao
 from celscan.analise.pontuacao import nota
 from celscan.analise.virustotal import VirusTotal
-from celscan.core import adb, bases, db, log, preferencias
+from celscan.core import adb, balcao, bases, db, log, preferencias, tempos
 from celscan.core import agente as agente_mod
 from celscan.core.adb import AdbErro, Aparelho
 from celscan.varredura import Varredura
@@ -102,8 +102,21 @@ def verificar_conexao(serial: str, erro: Exception) -> Exception:
 class _Passos:
     """Emite eventos de progresso e confere o cancelamento."""
 
+    MEDIR = ("coleta", "hashes", "rotulos", "analise")  # etapas que dependem do PC/celular (não da internet)
+
     def __init__(self, progresso: Progresso, cancelar: threading.Event | None):
         self.progresso, self.cancelar = progresso, cancelar
+        self.n_apps: int | None = None
+        self._atual: str | None = None
+        self._desde = time.perf_counter()
+
+    def _fechar(self) -> None:
+        if self._atual in self.MEDIR and self.n_apps:
+            tempos.registrar(self._atual, time.perf_counter() - self._desde, self.n_apps)
+
+    def concluir(self) -> None:
+        self._fechar()
+        self._atual = None
 
     def checar(self) -> None:
         if self.cancelar is not None and self.cancelar.is_set():
@@ -111,7 +124,11 @@ class _Passos:
 
     def etapa(self, nome: str, atual: int | None = None, total: int | None = None, detalhe: str = "") -> None:
         self.checar()
-        texto, estimativa = ETAPAS.get(nome, (nome, 0))
+        if nome != self._atual:
+            self._fechar()
+            self._atual, self._desde = nome, time.perf_counter()
+        texto, padrao = ETAPAS.get(nome, (nome, 0))
+        estimativa = tempos.estimar(nome, self.n_apps, padrao) if padrao else 0
         self.progresso({"etapa": nome, "descricao": texto, "detalhe": detalhe, "atual": atual, "total": total,
                         "estimativa_s": estimativa})
 
@@ -187,6 +204,7 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
                 avisos.append("Lista de ameaças conhecidas indisponível (sem internet e sem cópia local).")
 
         total = len(sc.apps)
+        passos.n_apps = total
         with log.etapa("hashes"):
             for i, pkg in enumerate(sc.calcular_hashes(), 1):
                 passos.etapa("hashes", i, total, pkg)
@@ -228,6 +246,13 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
     vid = db.salvar_varredura(con, info, n, veredito, achados, resultados, avisos, duracao, modo=opcoes.modo,
                               cliente_id=opcoes.cliente_id)
     log.LOGGER.info("varredura %d (%s): %d apps em %.1fs, nota %d", vid, opcoes.modo, len(resultados), duracao, n)
+    passos.concluir()
+    try:
+        ordem = balcao.vincular_varredura(con, ap.serial, vid)
+        if ordem:
+            log.LOGGER.info("varredura %d ligada à ordem de serviço %d", vid, ordem)
+    except Exception as e:  # noqa: BLE001 - a OS é um extra: nunca derruba a varredura
+        log.LOGGER.info("não liguei a varredura à OS: %s", e)
     return ResultadoVarredura(vid, opcoes.modo, info, n, veredito, achados, resultados, avisos, duracao)
 
 

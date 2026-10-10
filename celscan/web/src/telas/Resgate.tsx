@@ -1,3 +1,4 @@
+import { BateriaBaixa } from "../bateria";
 import { FolderOpen, HardDriveDownload, Monitor, MousePointer2, ShieldAlert, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
@@ -217,6 +218,7 @@ export function PainelBackup({ d }: { d: Dispositivo | undefined }) {
           </p>
         </div>
       )}
+      {pronto && <BateriaBaixa serial={d?.serial} />}
       <div className="mt-4 flex flex-wrap gap-2">
         {!tarefa && <Botao onClick={calcular} disabled={!pronto || escolhidas.size === 0}>Calcular tamanho</Botao>}
         {!tarefa && <Botao variante="primario" onClick={copiar} disabled={!pronto || escolhidas.size === 0}><HardDriveDownload size={15} aria-hidden /> Copiar para o PC</Botao>}

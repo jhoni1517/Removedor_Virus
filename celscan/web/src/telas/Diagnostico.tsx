@@ -1,3 +1,4 @@
+import { BateriaBaixa } from "../bateria";
 import { Activity, Apple, BatteryCharging, Camera, Check, Cpu, FolderOpen, Gauge, HardDrive, Power, Rocket, Sparkles, Stethoscope, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
@@ -659,6 +660,7 @@ export default function Diagnostico() {
           </div>
         </div>
       )}
+      <BateriaBaixa serial={d?.serial} />
       <PainelDiagnostico d={d} />
       <PainelCorrecoes d={d} />
       <PainelPrint d={d} />

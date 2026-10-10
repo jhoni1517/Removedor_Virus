@@ -187,3 +187,52 @@ def test_log_mascara_dados_pessoais():
     for segredo in ("123456", "356938035643809", "98765-4321", "ana@mail.com"):
         assert segredo not in msg
     assert "192.168.0.2:4000" in msg
+
+
+# ---------------------------------------------------------------- P1: cache incremental de hashes
+class _ApHash:
+    serial = "SER:1"
+
+    def __init__(self, stats, hashes):
+        self.stats, self.hashes, self.cmds = stats, hashes, []
+
+    def linhas(self, cmd, silencio=180):
+        self.cmds.append(cmd)
+        if "@@S" in cmd:
+            yield from self.stats
+        else:
+            yield from self.hashes
+
+
+def test_hashes_incrementais(tmp_path, monkeypatch):
+    from celscan import config
+    from celscan.core import coleta
+    monkeypatch.setattr(config, "DIR", tmp_path)
+    d = coleta.DadosAparelho.__new__(coleta.DadosAparelho)
+    d.apps = {"a": AppBruto("a", "/data/app/a/base.apk", None, False),
+              "b": AppBruto("b", "/data/app/b/base.apk", None, False)}
+    stats = ["@@S\t10 100\t/data/app/a/base.apk", "@@S\t20 200\t/data/app/b/base.apk"]
+    hs = [f"@@H\t10\t{'a' * 64}\t/data/app/a/base.apk", f"@@H\t20\t{'b' * 64}\t/data/app/b/base.apk"]
+    ap = _ApHash(stats, hs)
+    assert sorted(coleta.calcular_hashes(ap, d)) == ["a", "b"]
+    assert "for f in" in ap.cmds[1]  # só a lista dos que faltam
+    # 2ª vez: nada mudou -> nenhum sha256sum
+    ap2 = _ApHash(stats, [])
+    assert sorted(coleta.calcular_hashes(ap2, d)) == ["a", "b"] and len(ap2.cmds) == 1
+    assert d.apps["b"].sha256 == "b" * 64
+    # b atualizado (data mudou): só ele é recalculado
+    stats[1] = "@@S\t21 300\t/data/app/b/base.apk"
+    ap3 = _ApHash(stats, [f"@@H\t21\t{'c' * 64}\t/data/app/b/base.apk"])
+    assert sorted(coleta.calcular_hashes(ap3, d)) == ["a", "b"]
+    assert "/data/app/a/" not in ap3.cmds[1] and d.apps["b"].sha256 == "c" * 64
+
+
+def test_hashes_sem_stat_calcula_tudo(tmp_path, monkeypatch):
+    from celscan import config
+    from celscan.core import coleta
+    monkeypatch.setattr(config, "DIR", tmp_path)
+    d = coleta.DadosAparelho.__new__(coleta.DadosAparelho)
+    d.apps = {"a": AppBruto("a", "/data/app/a/base.apk", None, False)}
+    ap = _ApHash([], [f"@@H\t10\t{'a' * 64}\t/data/app/a/base.apk"] * 2)
+    assert list(coleta.calcular_hashes(ap, d)) == ["a"]  # sem repetir no progresso
+    assert "pm list packages -f" in ap.cmds[1]

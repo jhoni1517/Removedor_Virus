@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
+from celscan.acoes import atendimento, backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -167,6 +167,21 @@ class PedidoEspelho(BaseModel):
     buffer_ms: int = 0
     codec: str = ""
     sem_audio: bool = False
+
+
+class PedidoApp(BaseModel):
+    serial: str
+    pacote: Pacote
+
+
+class PedidoConferir(BaseModel):
+    serial: str
+    pacotes: list[Pacote] = Field(min_length=1, max_length=200)
+
+
+class PedidoFinalizar(BaseModel):
+    serial: str
+    desligar_depuracao: bool = True
 
 
 class PedidoAjuste(BaseModel):
@@ -665,6 +680,26 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return {"aberto": navegacao.abrir_ajuste(ap, p.ajuste)}
         except ValueError as e:
             raise HTTPException(422, str(e))
+
+    # ---- atendimento: bateria antes, conferência depois, finalizar
+    @app.get("/api/bateria")
+    def bateria(serial: str) -> dict[str, Any]:
+        return atendimento.bateria(aparelhos.pronto(serial))
+
+    @app.post("/api/abrir-app")
+    def abrir_app(p: PedidoApp) -> dict[str, str]:
+        return {"aberto": atendimento.abrir_app(aparelhos.pronto(p.serial), p.pacote)}
+
+    @app.post("/api/conferir")
+    def conferir(p: PedidoConferir) -> list[dict[str, Any]]:
+        return atendimento.conferir(aparelhos.pronto(p.serial), list(p.pacotes))
+
+    @app.post("/api/finalizar")
+    def finalizar(p: PedidoFinalizar) -> dict[str, Any]:
+        ap = aparelhos.pronto(p.serial)
+        if tarefas.ocupado(p.serial):
+            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        return {"feito": atendimento.finalizar(ap, p.desligar_depuracao)}
 
     # ---- balcão: ordens de serviço, pacotes e painel da loja
     @app.get("/api/servicos")

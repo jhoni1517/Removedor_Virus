@@ -449,3 +449,9 @@ body {
   .raio-x { position: static; }
   a[href]::after { content: ""; }
 }
+
+/* 3.3: selo "Rodando agora" com um pontinho pulsando */
+.selo-vivo::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 9999px;
+  background: currentColor; vertical-align: middle; animation: celscan-vivo 1.6s ease-in-out infinite; }
+@keyframes celscan-vivo { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .selo-vivo::before { animation: none; } }

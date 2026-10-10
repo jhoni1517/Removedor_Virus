@@ -11,7 +11,7 @@ import csv
 import io
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -67,6 +67,20 @@ def mudar_status(con: sqlite3.Connection, ordem_id: int, status: str, varredura_
         (status, agora, status, agora, varredura_id, ordem_id))
     con.commit()
     return cur.rowcount > 0
+
+
+def vincular_varredura(con: sqlite3.Connection, serial: str, varredura_id: int, dias: int = 3) -> int | None:
+    """Liga a varredura à ordem de serviço aberta do mesmo celular (sem análise ainda, criada nos últimos dias)
+    e passa a ordem para 'analisando'. Antes o técnico tinha de ligar à mão e o laudo saía sem a OS."""
+    limite = (datetime.now() - timedelta(days=dias)).isoformat(timespec="seconds")
+    row = con.execute("SELECT id, status FROM ordens WHERE serial = ? AND varredura_id IS NULL "
+                      "AND status != 'entregue' AND criado_em >= ? ORDER BY id DESC LIMIT 1",
+                      (serial, limite)).fetchone()
+    if not row:
+        return None
+    novo = "analisando" if row[1] == "aguardando" else row[1]
+    mudar_status(con, int(row[0]), novo, varredura_id)
+    return int(row[0])
 
 
 def _linha(r: sqlite3.Row) -> dict[str, Any]:

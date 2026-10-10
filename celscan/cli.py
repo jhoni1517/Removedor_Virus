@@ -572,6 +572,18 @@ def cmd_fixtures(a):
 
 
 def cmd_bases(a):
+    if a.exportar:
+        feitas = bases.exportar(a.exportar)
+        con.print(f"[green]✔[/] {len(feitas)} base(s) gravada(s) em {a.exportar}: {', '.join(feitas)}")
+        con.print("Leve o arquivo para o PC sem internet e rode: [bold]celscan bases --importar ARQUIVO[/]")
+        return
+    if a.importar:
+        try:
+            for nome, situacao in bases.importar(a.importar):
+                con.print(f"{'[green]✔' if situacao == 'importada' else '[dim]·'}[/] {nome}: {situacao}")
+        except (OSError, ValueError) as e:
+            con.print(f"[red]Não consegui importar:[/] {e}")
+            sys.exit(1)
     if a.atualizar:
         for b in bases.todas():
             with con.status(f"Atualizando {b.descricao}..."):
@@ -586,6 +598,15 @@ def cmd_bases(a):
         t.add_row(str(s["nome"]), str(s["descricao"]), local, idade,
                   "[yellow]vencida[/]" if s["vencida"] else "[green]ok[/]")
     con.print(t)
+
+
+def cmd_finalizar(a):
+    from celscan.acoes import atendimento
+    ap = escolher_aparelho(a.serial)
+    for linha in atendimento.finalizar(ap, desligar_depuracao=not a.manter_depuracao):
+        con.print(f"[green]✔[/] {linha}")
+    if not a.manter_depuracao:
+        con.print("Pode desconectar o cabo. Se precisar de novo, ligue a Depuração USB nas Opções do desenvolvedor.")
 
 
 def _json(obj) -> None:
@@ -846,7 +867,14 @@ def main():
 
     s = sub.add_parser("bases", help="Situação das bases (indicadores, UAD, certificados)")
     s.add_argument("--atualizar", action="store_true", help="Baixa todas agora")
+    s.add_argument("--exportar", metavar="ARQUIVO.zip", help="Grava as bases num .zip para levar a um PC sem internet")
+    s.add_argument("--importar", metavar="ARQUIVO.zip", help="Usa as bases de um .zip gerado com --exportar")
     s.set_defaults(func=cmd_bases)
+
+    s = sub.add_parser("finalizar", help="Fim do atendimento: limpa os rastros do CelScan e desliga a depuração USB")
+    s.add_argument("--serial")
+    s.add_argument("--manter-depuracao", action="store_true", help="Só limpa; deixa a depuração ligada")
+    s.set_defaults(func=cmd_finalizar)
 
     s = sub.add_parser("iocs", help="Atualiza os indicadores de ameaças")
     s.set_defaults(func=cmd_iocs)
