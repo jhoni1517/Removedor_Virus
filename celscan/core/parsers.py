@@ -400,20 +400,32 @@ def periodo_eventos(txt: str) -> tuple[datetime, datetime] | None:
     return (min(ts), max(ts)) if ts else None
 
 
-def anuncios(telas: list[tuple[datetime, str, str]], sdk_de) -> dict[str, dict]:
-    """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up)."""
+def anuncios(telas: list[tuple[datetime, str, str]], sdk_de, janela_s: int = 120) -> dict[str, dict]:
+    """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up).
+
+    Pop-up = a tela de anúncio apareceu vindo de OUTRO app (tela inicial, outro app) e a pessoa NÃO entrou no
+    app em seguida. O anúncio de abertura ("app open"), que aparece quando a própria pessoa toca no ícone do
+    jogo e logo depois cai na tela do jogo, não conta: antes isso marcava jogos comuns como adware."""
     res: dict[str, dict] = {}
-    anterior = None
-    for t, pkg, classe in telas:
+    for i, (t, pkg, classe) in enumerate(telas):
         sdk = sdk_de(classe) if classe else None
-        if sdk:
-            r = res.setdefault(pkg, {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": set()})
-            r["tela_cheia"] += 1
-            r["sdks"].add(sdk)
-            r["ultimo"] = max(r["ultimo"], t) if r["ultimo"] else t
-            if anterior and anterior != pkg:
-                r["fora_do_app"] += 1
-        anterior = pkg
+        if not sdk:
+            continue
+        r = res.setdefault(pkg, {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": set(),
+                                 "abertura": 0})
+        r["tela_cheia"] += 1
+        r["sdks"].add(sdk)
+        r["ultimo"] = max(r["ultimo"], t) if r["ultimo"] else t
+        anterior = telas[i - 1][1] if i > 0 else None
+        if not anterior or anterior == pkg:
+            continue
+        seguinte = next(((t2, p2, c2) for t2, p2, c2 in telas[i + 1:] if not (p2 == pkg and sdk_de(c2 or ""))), None)
+        entrou_no_app = (seguinte is not None and seguinte[1] == pkg
+                         and (seguinte[0] - t).total_seconds() <= janela_s)
+        if entrou_no_app:
+            r["abertura"] += 1  # anúncio de abertura: a pessoa abriu o app
+        else:
+            r["fora_do_app"] += 1
     return res
 
 

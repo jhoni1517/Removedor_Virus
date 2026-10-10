@@ -8,12 +8,12 @@ const ETAPAS: [string, string][] = [
   ["coleta", "Lendo apps e configurações do aparelho"],
   ["iocs", "Carregando a lista de ameaças conhecidas"],
   ["hashes", "Calculando a impressão digital de cada app"],
-  ["assinaturas", "Conferindo a assinatura dos apps suspeitos"],
+  ["rotulos", "Lendo nome, ícone e assinatura de cada app"],
   ["virustotal", "Consultando o VirusTotal"],
   ["analise", "Analisando e montando o resultado"],
 ];
 
-const TEMPOS: Record<string, number> = { iocs: 5, hashes: 40, assinaturas: 15, analise: 2 };
+const TEMPOS: Record<string, number> = { iocs: 5, hashes: 40, rotulos: 25, analise: 2 };
 
 function formatarTempo(s: number): string {
   if (s < 60) return `${Math.max(1, Math.round(s))} s`;

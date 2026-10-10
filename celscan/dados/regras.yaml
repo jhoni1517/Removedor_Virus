@@ -70,6 +70,16 @@ apps:
     titulo: "Instalado fora da loja oficial ({detalhe})"
     significa: "O app veio de um arquivo baixado da internet ou de outro app, sem a verificação da loja."
     fazer: "Prefira sempre a Play Store. Se não lembra de ter instalado, remova."
+  loja_alternativa:
+    peso: 5
+    titulo: "Instalado pela {detalhe} (loja alternativa)"
+    significa: "Veio de uma loja alternativa conhecida, que verifica ou compila os apps. Não é a Play Store, mas não é um arquivo solto da internet."
+    fazer: "Normal se você usa essa loja de propósito."
+  transferido:
+    peso: 5
+    titulo: "Copiado de outro celular ({detalhe})"
+    significa: "O app veio na transferência do celular antigo. Se no antigo ele tinha vindo da loja, está tudo certo."
+    fazer: "Se não reconhece o app, remova. Se reconhece, reinstale pela loja para receber atualizações."
   sms_padrao:
     peso: 20
     titulo: "Definido como app de SMS padrão"

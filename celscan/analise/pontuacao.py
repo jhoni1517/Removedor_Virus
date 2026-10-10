@@ -13,7 +13,7 @@ from celscan.analise import certificados as certificados_mod
 from celscan.analise import pix, rotulos
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
-from celscan.config import LOJAS, SMS_CONHECIDOS
+from celscan.config import LOJAS, LOJAS_ALTERNATIVAS, PROPRIOS, SMS_CONHECIDOS, TRANSFERENCIA
 from celscan.core import seguranca
 from celscan.core.coleta import AppBruto, DadosAparelho
 
@@ -80,10 +80,17 @@ def relacoes(dados: DadosAparelho) -> dict[str, Any]:
     filhos: dict[str, list[str]] = {}
     for pkg, app in dados.apps.items():
         for pai in {app.instalador, app.origem} - {None, "", pkg}:
-            if pai in dados.apps and not dados.apps[pai].sistema and pai not in LOJAS:
+            p = dados.apps.get(pai)
+            # Navegador, mensageiro ou gerenciador de arquivos que só ABRIU o APK a pedido do usuário não é dropper
+            # (antes o WhatsApp da Play virava "instalou outros apps" quando alguém abria um APK recebido nele).
+            # Dropper é app de FORA da loja que instala outros.
+            if (p and not p.sistema and pai not in LOJAS and pai not in LOJAS_ALTERNATIVAS and pai not in ORIGEM
+                    and pai not in TRANSFERENCIA and (p.instalador or "") not in LOJAS):
                 filhos.setdefault(pai, []).append(pkg)
     fora = sorted(((a.instalado, p) for p, a in dados.apps.items()
-                   if a.instalado and not a.sistema and (a.instalador or "") not in LOJAS), key=lambda x: x[0])
+                   if a.instalado and not a.sistema and p not in PROPRIOS
+                   and (a.instalador or "") not in {*LOJAS, *LOJAS_ALTERNATIVAS, *TRANSFERENCIA, "com.android.shell"}),
+                  key=lambda x: x[0])
     lote: dict[str, list[str]] = {}
     for t, pkg in fora:  # outros apps de fora da loja instalados até 10 min antes ou depois
         vizinhos = [q for t2, q in fora if q != pkg and abs((t2 - t).total_seconds()) <= 600]
@@ -97,7 +104,24 @@ def relacoes(dados: DadosAparelho) -> dict[str, Any]:
     return rel
 
 
+def _proprio(app: AppBruto, dados: DadosAparelho) -> dict[str, Any]:
+    return {"pacote": app.pacote, "score": 0, "nivel": "PERMITIDO", "motivos": [PROPRIOS[app.pacote]],
+            "achados": [], "ameaca": None, "instalador": app.instalador, "loja": None, "sistema": False,
+            "desativado": False, "versao": app.versao,
+            "instalado": app.instalado.isoformat() if app.instalado else None,
+            "sha256": app.sha256, "cert": app.cert, "virustotal": None, "admins": [], "nome": "CelScan Agente",
+            "icone": app.icone, "atualizado": None, "ultimo_uso": None, "origem": PROPRIOS[app.pacote],
+            "essencial": False, "tamanho": app.tamanho, "sem_icone": False, "disfarces": [], "sensores": {},
+            "anuncios": {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": [], "gatilhos": []},
+            "notificacoes": 0, "notificacoes_dia": 0, "enviado_mb": None, "sobreposicao": False, "proprio": True}
+
+
 def origem_legivel(app: AppBruto, dados: DadosAparelho | None = None) -> str:
+    inst = app.instalador or ""
+    if inst in LOJAS_ALTERNATIVAS:
+        return f"{LOJAS_ALTERNATIVAS[inst]} (loja alternativa)"
+    if inst in TRANSFERENCIA:
+        return f"copiado de outro celular ({TRANSFERENCIA[inst]})"
     if app.origem:
         pai = dados.apps.get(app.origem) if dados else None
         return ORIGEM.get(app.origem, f"aberto pelo app {(pai.nome if pai and pai.nome else app.origem)}")
@@ -163,6 +187,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     ra, par, lim = r.apps, r.parametros, r.limites
     agora = agora or datetime.now()
     pkg = app.pacote
+    if pkg in PROPRIOS:  # o próprio CelScan Agente (se ficou instalado) não é suspeito
+        return _proprio(app, dados)
     a: list[Achado] = []
     ioc = iocs.checar(pkg, app.cert, app.sha256) if iocs else None
     if ioc:
@@ -181,7 +207,13 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         if sem_icone:
             a.append(ra["sem_icone"].achado())
         if not loja:
-            a.append(ra["fora_da_loja"].achado(origem_legivel(app, dados)))
+            inst = app.instalador or ""
+            if inst in LOJAS_ALTERNATIVAS and "loja_alternativa" in ra:
+                a.append(ra["loja_alternativa"].achado(LOJAS_ALTERNATIVAS[inst]))
+            elif inst in TRANSFERENCIA and "transferido" in ra:
+                a.append(ra["transferido"].achado(TRANSFERENCIA[inst]))
+            else:
+                a.append(ra["fora_da_loja"].achado(origem_legivel(app, dados)))
     imitado = pix.imitacao(pkg) if not app.sistema and not loja else None
     if imitado:
         a.append(ra["imita_app_conhecido"].achado(imitado))

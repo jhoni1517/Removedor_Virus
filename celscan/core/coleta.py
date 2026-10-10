@@ -9,7 +9,7 @@ from datetime import datetime
 
 from celscan.analise import apksig
 from celscan.config import PASTAS_SISTEMA
-from celscan.core import parsers
+from celscan.core import log, parsers
 from celscan.core.adb import AdbErro, Aparelho
 
 # PROJECT_MEDIA = captura/transmissão da tela (usada por trojans bancários como o PixRevolution)
@@ -256,9 +256,13 @@ def ler_rotulo(ap: Aparelho, app: AppBruto) -> None:
         return
     try:
         r = rotulos.obter(ap, app.pacote, app.apk, app.tamanho, app.sha256)
-        app.nome = r.nome
-        app.icone = rotulos.icone_data_uri(r)
+        # nome/ícone vindos do CelScan Agente têm prioridade; o manifesto sempre é lido (anúncios, disfarces...)
+        if not app.nome or app.nome == app.pacote:
+            app.nome = r.nome
+        app.icone = app.icone or rotulos.icone_data_uri(r)
         app.sdks_anuncio, app.gatilhos, app.disfarces = r.sdks_anuncio, r.gatilhos, r.disfarces
         app.anuncio_escondido, app.nome_truque, app.sem_rotulo = r.anuncio_escondido, r.nome_truque, r.sem_rotulo
-    except Exception:
-        pass
+        if app.cert is None and r.cert:
+            app.cert = r.cert
+    except Exception as e:  # noqa: BLE001
+        log.LOGGER.info("leitura do APK de %s falhou: %s", app.pacote, e)

@@ -28,11 +28,11 @@ from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena,
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
-from celscan.api.tarefas import Gerenciador
+from celscan.api.tarefas import Gerenciador, Ocupado
 from celscan.core import adb, agente, balcao, db, log, preferencias, seguranca
 
 WEB = config.PACOTE / "web" / "dist"
-HOSTS = ("127.0.0.1", "localhost")
+HOSTS = ("127.0.0.1", "localhost", "::1")
 HOSTS_TESTE = ("testserver",)  # nome usado pelo TestClient; só vale quando o app é criado para testes
 MARCAS: dict[str, Any] = yaml.safe_load((config.DADOS / "conexao.yaml").read_text(encoding="utf-8"))
 RESGATE: dict[str, Any] = yaml.safe_load((config.DADOS / "resgate.yaml").read_text(encoding="utf-8"))
@@ -95,7 +95,7 @@ class PedidoOrdem(BaseModel):
     aparelho: str | None = None
     imei: str | None = None
     observacoes: str | None = None
-    valor: float | None = None
+    valor: float | None = Field(default=None, ge=0, le=1_000_000, allow_inf_nan=False)
     cliente_nome: str | None = None
     cliente_telefone: str | None = None
     consentimento: bool = False  # LGPD: só guarda nome/telefone com consentimento
@@ -146,7 +146,7 @@ class PedidoDesfazer(BaseModel):
 
 
 class PedidoConfig(BaseModel):
-    chave_virustotal: str | None = None
+    chave_virustotal: str | None = Field(default=None, max_length=128)  # o cofre do Windows limita o tamanho
     offline: bool | None = None
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
@@ -304,19 +304,35 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.middleware("http")
     async def proteger(request: Request, chamar):
-        host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
+        bruto = (request.headers.get("host") or "").strip()
+        host = bruto[1:bruto.index("]")] if bruto.startswith("[") and "]" in bruto else bruto.rsplit(":", 1)[0]
         if host not in HOSTS and not (app.state.testes and host in HOSTS_TESTE):
             return JSONResponse({"detail": "host não permitido"}, status_code=403)
         if request.url.path.startswith("/api/"):
             recebido = request.headers.get("x-celscan-token") or request.query_params.get("t")
-            if not recebido or not secrets.compare_digest(recebido, token):
+            # bytes: compare_digest com texto não-ASCII levantava TypeError (erro 500)
+            if not recebido or not secrets.compare_digest(recebido.encode(), token.encode()):
                 return JSONResponse({"detail": "token inválido"}, status_code=401)
         return await chamar(request)
 
+    def retrato_do_aparelho(varredura_id: int, serial: str) -> dict[str, Any]:
+        """Retrato da varredura, conferindo que ela é DESTE aparelho. Sem isso, com dois celulares no PC, abrir
+        uma análise antiga do celular A e clicar em Remover agia no celular B conectado."""
+        con = db.conectar()
+        retrato = db.retrato(con, varredura_id)
+        if retrato is None:
+            raise HTTPException(404, "Varredura não encontrada")
+        dono = db.serial_da_varredura(con, varredura_id)
+        if dono and dono != serial:
+            raise HTTPException(409, "Esta análise é de outro celular. Abra a análise do aparelho conectado "
+                                     "ou faça uma nova varredura.")
+        return retrato
+
     def nova_tarefa(tipo: str, serial: str | None, funcao) -> dict[str, Any]:
-        if serial and (ocupada := tarefas.ocupado(serial)):
-            raise HTTPException(409, f"Já existe uma operação em andamento neste aparelho ({ocupada.tipo}).")
-        return tarefas.criar(tipo, serial, funcao, erros).publico()
+        try:
+            return tarefas.criar(tipo, serial, funcao, erros).publico()
+        except Ocupado as e:
+            raise HTTPException(409, str(e)) from e
 
     # ---- estado geral
     @app.get("/api/estado")
@@ -366,7 +382,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.get("/api/varreduras")
     def listar_varreduras(serial: str | None = None, limite: int = 50) -> list[dict[str, Any]]:
-        return [dict(v) for v in db.varreduras(db.conectar(), serial, limite)]
+        # no SQLite, LIMIT negativo = sem limite: devolvia o histórico inteiro
+        return [dict(v) for v in db.varreduras(db.conectar(), serial, max(1, min(limite, 500)))]
 
     @app.get("/api/varreduras/{vid}")
     def obter_varredura(vid: int) -> dict[str, Any]:
@@ -402,9 +419,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/remover")
     def remover(p: PedidoRemocao) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)
-        retrato = db.retrato(db.conectar(), p.varredura_id)
-        if retrato is None:
-            raise HTTPException(404, "Varredura não encontrada")
+        retrato = retrato_do_aparelho(p.varredura_id, p.serial)
         por_pacote = {r["pacote"]: r for r in retrato["apps"]}
         faltando = [x for x in p.pacotes if x not in por_pacote]
         if faltando:
@@ -435,9 +450,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/evidencias")
     def documentar(p: PedidoEvidencias) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)
-        retrato = db.retrato(db.conectar(), p.varredura_id)
-        if retrato is None:
-            raise HTTPException(404, "Varredura não encontrada")
+        retrato = retrato_do_aparelho(p.varredura_id, p.serial)
         por_pacote = {r["pacote"]: r for r in retrato["apps"]}
         achados = [dict(por_pacote[x]) for x in p.pacotes if x in por_pacote]
         if not achados:
@@ -1082,7 +1095,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.websocket("/api/ws")
     async def tempo_real(ws: WebSocket) -> None:
         recebido = ws.query_params.get("t") or ""
-        if not secrets.compare_digest(recebido, token):
+        if not secrets.compare_digest(recebido.encode(), token.encode()):
             await ws.close(code=4401)
             return
         await ws.accept()

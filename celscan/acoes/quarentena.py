@@ -4,6 +4,7 @@ Os APKs ficam num zip cifrado com a senha padrão da área ("infected"). Isso im
 antivírus do Windows de escanear e apagar a amostra (o que fazia a prova sumir), e é o
 mesmo formato usado para compartilhar malware entre analistas.
 """
+import hashlib
 import json
 import shlex
 import shutil
@@ -40,7 +41,11 @@ def _extrair_apks(pasta, meta, destino):
             z.setpassword(SENHA_APKS)
             for nome in meta["arquivos"]:
                 z.extract(nome, destino)
-                apks.append(str(Path(destino) / nome))
+                alvo = Path(destino) / nome
+                esperado = (meta.get("hashes") or {}).get(nome)
+                if esperado and _sha256(alvo) != esperado:  # cópia estragada no disco do PC
+                    raise ValueError(f"a cópia de {nome} na quarentena está corrompida (hash diferente)")
+                apks.append(str(alvo))
     else:  # quarentenas antigas: arquivos .quarentena soltos
         for a in meta["arquivos"]:
             alvo = Path(destino) / a.replace(".quarentena", "")
@@ -57,10 +62,37 @@ def _gravar(pasta, meta):
     (pasta / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _nova_pasta(nome: str) -> Path:
+    """Pasta nova e exclusiva. Antes, duas ações no mesmo segundo (ex.: permissões de dois apps) caíam na
+    mesma pasta e a segunda apagava o "desfazer" da primeira."""
+    DIRQ.mkdir(parents=True, exist_ok=True)
+    base = f"{datetime.now():%Y%m%d_%H%M%S}_{nome}"
+    for i in range(1000):
+        pasta = DIRQ / (base if i == 0 else f"{base}_{i}")
+        try:
+            pasta.mkdir()
+            return pasta
+        except FileExistsError:
+            continue
+    raise OSError("não consegui criar a pasta da quarentena")
+
+
+def _sha256(caminho) -> str:
+    h = hashlib.sha256()
+    with open(caminho, "rb") as f:
+        while bloco := f.read(1 << 20):
+            h.update(bloco)
+    return h.hexdigest()
+
+
+def _tamanho_remoto(ap, caminho: str) -> int | None:
+    saida = ap.sh(f"stat -c %s {shlex.quote(caminho)}").strip()
+    return int(saida) if saida.isdigit() else None
+
+
 def criar(ap, pacote, dados=None, copiar_apk=True):
-    pasta = DIRQ / f"{datetime.now():%Y%m%d_%H%M%S}_{pacote}"
-    pasta.mkdir(parents=True, exist_ok=True)
-    arquivos, protegido = [], False
+    pasta = _nova_pasta(pacote)
+    arquivos, protegido, hashes, completa = [], False, {}, False
     if copiar_apk:
         caminhos = [linha[8:] for linha in ap.sh(f"pm path {pacote}").splitlines() if linha.startswith("package:")]
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,20 +100,29 @@ def criar(ap, pacote, dados=None, copiar_apk=True):
             for i, c in enumerate(caminhos):
                 bruto = Path(tmp) / f"{i:02d}_{Path(c).name}"
                 ap.adb("pull", c, str(bruto), timeout=900)
-                if bruto.exists():
+                esperado = _tamanho_remoto(ap, c)
+                # cópia cortada (cabo caiu no meio) não serve para desfazer: descarta
+                if bruto.exists() and (esperado is None or bruto.stat().st_size == esperado):
                     locais.append((str(bruto), bruto.name))
+                    hashes[bruto.name] = _sha256(bruto)
             if locais:
                 arquivos = _guardar_apks(pasta, locais)
                 protegido = True
+            completa = bool(caminhos) and len(locais) == len(caminhos)
     d = dados or {}
     _gravar(pasta, {
-        "id": pasta.name, "pacote": pacote, "serial": ap.serial,
+        "id": pasta.name, "pacote": pacote, "nome": d.get("nome") or pacote, "serial": ap.serial,
         "data": datetime.now().isoformat(timespec="seconds"), "acao": None,
-        "arquivos": arquivos, "protegido": protegido,
+        "arquivos": arquivos, "protegido": protegido, "hashes": hashes, "copia_completa": completa,
         "motivos": d.get("motivos", []), "sha256": d.get("sha256"),
         "ajustes": [],
     })
     return pasta
+
+
+def copia_completa(pasta) -> bool:
+    """True se todos os APKs do app foram copiados e conferidos (dá para reinstalar no desfazer)."""
+    return bool(_ler(pasta).get("copia_completa"))
 
 
 def criar_ajuste(ap, ident, descricao, ajustes):
@@ -139,6 +180,16 @@ def _reverter_ajustes(ap, meta):
     return ok, msgs
 
 
+def tem_ajustes(pasta) -> bool:
+    return bool(_ler(pasta).get("ajustes"))
+
+
+def descartar(pasta) -> None:
+    """Apaga uma pasta da quarentena que não guardou nada (nem APK nem ajuste)."""
+    if Path(pasta).resolve().parent == DIRQ.resolve():
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
 def registrar(pasta, acao):
     meta = _ler(pasta)
     meta["acao"] = acao
@@ -161,6 +212,8 @@ def restaurar(ap, ident):
         return False, "ID não encontrado na quarentena"
     meta = _ler(pasta)
     pkg, acao = meta["pacote"], meta["acao"]
+    if meta.get("restaurado"):
+        return False, f"já desfeito em {meta['restaurado'].replace('T', ' ')}"
     if acao == "desativado":
         out = ap.sh(f"pm enable {pkg}", erro=True)
         ok = "enabled" in out
@@ -170,18 +223,22 @@ def restaurar(ap, ident):
     elif acao == "removido" and meta["arquivos"]:
         tmp = Path(tempfile.mkdtemp())
         try:
-            apks = _extrair_apks(pasta, meta, tmp)
+            try:
+                apks = _extrair_apks(pasta, meta, tmp)
+            except ValueError as e:
+                return False, str(e)
             cmd = "install-multiple" if len(apks) > 1 else "install"
             out = ap.adb(cmd, "-r", *apks, timeout=600, erro=True)
             ok = "Success" in out
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    elif acao == "ajuste":
+    elif acao in ("ajuste", "parcial") or (acao is None and meta.get("ajustes")):
+        # "parcial": a remoção falhou depois de já ter tirado acessibilidade/sobreposição; isso se desfaz aqui
         ok, msgs = _reverter_ajustes(ap, meta)
         out = "; ".join(msgs) or "nada a desfazer"
     else:
         return False, f"nada a restaurar (ação: {acao})"
-    if ok and acao != "ajuste" and meta.get("ajustes"):
+    if ok and acao not in ("ajuste", "parcial", None) and meta.get("ajustes"):
         _, msgs = _reverter_ajustes(ap, meta)
         out = f"{out}\n" + "; ".join(msgs)
     if ok:

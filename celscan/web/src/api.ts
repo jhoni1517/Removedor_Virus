@@ -154,7 +154,12 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
     let msg = `Erro ${r.status}`;
     try {
       const j = await r.json();
-      msg = typeof j.detail === "string" ? j.detail : msg;
+      if (typeof j.detail === "string") msg = j.detail;
+      // erro de validação (422) vem como lista: mostra o primeiro motivo em vez de só "Erro 422"
+      else if (Array.isArray(j.detail) && j.detail[0]?.msg) {
+        const campo = (j.detail[0].loc ?? []).slice(-1)[0];
+        msg = `Dado inválido${campo ? ` (${campo})` : ""}: ${String(j.detail[0].msg).replace(/^Value error, /, "")}`;
+      }
     } catch {
       /* resposta sem JSON */
     }

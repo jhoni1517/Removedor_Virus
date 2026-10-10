@@ -63,7 +63,7 @@ def aplicar(ap: Aparelho, pkg: str, acoes: list[str], permissoes_revogar: list[s
     invalidas = [a for a in acoes if a not in ACOES]
     if invalidas:
         raise ValueError(f"ação desconhecida: {', '.join(invalidas)}")
-    pasta = quarentena.criar_ajuste(ap, "permissoes", f"Permissões de {pkg}", [])
+    pasta = quarentena.criar_ajuste(ap, f"permissoes_{pkg}", f"Permissões de {pkg}", [])
     feitas: list[str] = []
     for acao in acoes:
         if acao == "parar":

@@ -92,11 +92,58 @@ def copia_de_seguranca(origem: Path | str | None = None, manter: int = 7, motivo
 _LOCAL = threading.local()
 
 
+_CONFERIDOS: set[str] = set()
+
+
+def _integro(arquivo: Path) -> bool:
+    try:
+        con = sqlite3.connect(str(arquivo), timeout=15)
+        try:
+            return con.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        finally:
+            con.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
+def _recuperar_se_corrompido(arquivo: Path) -> None:
+    """Na 1ª abertura do dia: se o banco estiver corrompido (queda de energia, disco cheio), guarda o arquivo
+    estragado ao lado e volta a cópia de segurança mais recente. O histórico de clientes não some."""
+    chave = str(arquivo.resolve()) if arquivo.exists() else str(arquivo)
+    if chave in _CONFERIDOS or not arquivo.exists() or arquivo.stat().st_size == 0:
+        _CONFERIDOS.add(chave)
+        return
+    _CONFERIDOS.add(chave)
+    if _integro(arquivo):
+        return
+    estragado = arquivo.with_name(f"{arquivo.stem}.corrompido-{datetime.now():%Y%m%d-%H%M%S}{arquivo.suffix}")
+    arquivo.replace(estragado)
+    for sufixo in ("-wal", "-shm"):
+        Path(str(arquivo) + sufixo).unlink(missing_ok=True)
+    copias = sorted(COPIAS.glob("celscan-*.db"), reverse=True) if COPIAS.exists() else []
+    boa = next((c for c in copias if _integro(c)), None)
+    if boa:
+        import shutil
+
+        shutil.copy2(boa, arquivo)
+    from celscan.core.log import LOGGER
+
+    LOGGER.error("banco corrompido guardado em %s; %s", estragado,
+                 f"restaurada a cópia {boa.name}" if boa else "nenhuma cópia boa: começando um banco novo")
+
+
 def _abrir(caminho: Path | str | None) -> sqlite3.Connection:
+    arquivo = Path(caminho or ARQUIVO)
+    _recuperar_se_corrompido(arquivo)
     # timeout: várias tarefas gravam ao mesmo tempo (varredura + remoção); espera em vez de "database is locked"
-    con = sqlite3.connect(str(caminho or ARQUIVO), check_same_thread=False, timeout=15)
+    con = sqlite3.connect(str(arquivo), check_same_thread=False, timeout=15)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    try:  # WAL: o histórico pode ser lido enquanto uma varredura grava, sem travar a interface
+        con.execute("PRAGMA journal_mode = WAL")
+        con.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.DatabaseError:
+        pass
     versao = con.execute("PRAGMA user_version").fetchone()[0]
     if 0 < versao < len(MIGRACOES):  # antes de mudar o esquema, guarda uma cópia
         try:
@@ -104,8 +151,9 @@ def _abrir(caminho: Path | str | None) -> sqlite3.Connection:
         except (sqlite3.Error, OSError):
             pass
     for i, sql in enumerate(MIGRACOES[versao:], start=versao + 1):
-        con.executescript(sql)
-        con.execute(f"PRAGMA user_version = {i}")
+        # migração e número da versão na MESMA transação: se o programa fechar no meio, nada fica pela
+        # metade (antes a tabela era criada, a versão não subia e o CelScan não abria mais: "table exists")
+        con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {i};\nCOMMIT;")
     con.commit()
     return con
 
@@ -186,6 +234,11 @@ def varreduras(con: sqlite3.Connection, serial: str | None = None, limite: int =
 def retrato(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None:
     row = con.execute("SELECT resultado_json FROM varreduras WHERE id = ?", (varredura_id,)).fetchone()
     return json.loads(row[0]) if row else None
+
+
+def serial_da_varredura(con: sqlite3.Connection, varredura_id: int) -> str | None:
+    row = con.execute("SELECT serial FROM varreduras WHERE id = ?", (varredura_id,)).fetchone()
+    return str(row[0]) if row else None
 
 
 def varredura_anterior(con: sqlite3.Connection, serial: str, antes_de: int) -> int | None:

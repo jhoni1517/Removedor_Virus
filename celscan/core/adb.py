@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 import zipfile
 from collections.abc import Callable, Iterator
 
@@ -55,10 +56,20 @@ def instalar_platform_tools() -> str:
     url = URL_PT.format(SO.get(platform.system(), "linux"))
     r = requests.get(url, timeout=300)
     r.raise_for_status()
-    zipfile.ZipFile(io.BytesIO(r.content)).extractall(DIR)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    if z.testzip() is not None:  # download cortado/corrompido: não instala um adb quebrado
+        raise AdbErro("O download do Platform Tools veio corrompido. Tente de novo.")
+    z.extractall(DIR)
     adb = DIR / "platform-tools" / EXE
     if os.name != "nt":
         adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
+    try:
+        versao = subprocess.run([str(adb), "version"], capture_output=True, text=True, timeout=30,
+                                creationflags=SEM_JANELA).stdout
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise AdbErro(f"O adb baixado não abriu: {e}") from e
+    if "Android Debug Bridge" not in versao:
+        raise AdbErro("O adb baixado não respondeu como esperado.")
     global _ADB
     _ADB = str(adb)
     return _ADB
@@ -87,6 +98,10 @@ def run(args: list[str], timeout: int = 120, entrada: str | None = None) -> subp
     except subprocess.TimeoutExpired as e:
         log.comando(args, None, time.perf_counter() - inicio, 0)
         raise AdbErro(f"'adb {' '.join(map(str, args[:4]))}' excedeu {timeout}s") from e
+    except FileNotFoundError as e:  # adb apagado/movido depois de localizado (antivírus, atualização)
+        global _ADB
+        _ADB = None
+        raise AdbAusente("ADB não encontrado (o arquivo sumiu). Use o botão para baixar de novo.") from e
     log.comando(args, r.returncode, time.perf_counter() - inicio, len(r.stdout or ""))
     return r
 
@@ -208,7 +223,9 @@ class Aparelho:
                                          encoding="utf-8", newline="\n") as f:
             f.write(texto)
             local = f.name
-        remoto = "/data/local/tmp/celscan.sh"
+        # nome único: duas operações no mesmo aparelho (ex.: diagnóstico + varredura) não sobrescrevem
+        # nem apagam o script uma da outra
+        remoto = f"/data/local/tmp/celscan_{uuid.uuid4().hex[:10]}.sh"
         try:
             from celscan.core import adb_direto
 
@@ -218,19 +235,29 @@ class Aparelho:
                 r = run(["-s", self.serial, "push", local, remoto], timeout=60)
                 if r.returncode != 0:
                     raise AdbErro(f"falha ao enviar script: {r.stderr.strip()}") from None
-            saida = self.sh(f"sh {remoto}", timeout=timeout)
-            self.sh(f"rm -f {remoto}")
+            try:
+                saida = self.sh(f"sh {remoto}", timeout=timeout)
+            finally:
+                try:
+                    self.sh(f"rm -f {remoto}", timeout=30)
+                except AdbErro:
+                    pass  # aparelho sumiu: o script fica em /data/local/tmp (o Android limpa ao reiniciar)
         finally:
             os.unlink(local)
         return secoes(saida)
 
-    def linhas(self, comando: str) -> Iterator[str]:
-        """Executa e entrega a saída linha a linha (para barra de progresso)."""
+    def linhas(self, comando: str, silencio: float = 180) -> Iterator[str]:
+        """Executa e entrega a saída linha a linha (para barra de progresso).
+
+        `silencio`: se o aparelho ficar esse tempo sem mandar nada (travou, cabo com mau contato), encerra
+        com AdbErro em vez de deixar a varredura parada para sempre."""
         from celscan.core import adb_direto
 
         try:
-            yield from adb_direto.linhas(self.serial, comando)
+            yield from adb_direto.linhas(self.serial, comando, silencio)
             return
+        except adb_direto.Timeout as e:
+            raise AdbErro(f"o aparelho parou de responder por {int(silencio)} s") from e
         except adb_direto.Indisponivel:
             pass
         inicio, n = time.perf_counter(), 0
@@ -238,11 +265,28 @@ class Aparelho:
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                              encoding="utf-8", errors="replace", creationflags=SEM_JANELA)
         assert p.stdout is not None
+        ultimo = [time.monotonic()]
+        parado = threading.Event()
+
+        def vigiar() -> None:
+            while p.poll() is None:
+                if time.monotonic() - ultimo[0] > silencio:
+                    parado.set()
+                    p.kill()
+                    return
+                time.sleep(1)
+
+        threading.Thread(target=vigiar, daemon=True).start()
         try:
             for linha in p.stdout:
+                ultimo[0] = time.monotonic()
                 n += len(linha)
                 yield linha.rstrip("\r\n")
         finally:
             p.stdout.close()
+            if p.poll() is None:
+                p.kill()  # quem consumia parou no meio (cancelado): não deixa o processo pendurado
             p.wait()
             log.comando(["shell", comando], p.returncode, time.perf_counter() - inicio, n)
+        if parado.is_set():
+            raise AdbErro(f"o aparelho parou de responder por {int(silencio)} s")

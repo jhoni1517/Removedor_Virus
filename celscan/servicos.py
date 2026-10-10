@@ -37,8 +37,7 @@ ETAPAS = {
     "coleta": ("Lendo apps e configurações do aparelho", 25),
     "iocs": ("Carregando a lista de ameaças conhecidas", 5),
     "hashes": ("Calculando a impressão digital de cada app", 40),
-    "assinaturas": ("Conferindo a assinatura dos apps suspeitos", 15),
-    "rotulos": ("Lendo o nome e o ícone dos apps", 12),
+    "rotulos": ("Lendo nome, ícone e assinatura de cada app", 25),
     "virustotal": ("Consultando o VirusTotal", 0),
     "analise": ("Analisando e montando o resultado", 2),
 }
@@ -175,10 +174,9 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
             for i, pkg in enumerate(sc.calcular_hashes(), 1):
                 passos.etapa("hashes", i, total, pkg)
 
-        cands = sc.candidatos()
-        with log.etapa("assinaturas"):
-            _em_paralelo(cands, sc.ler_certificado, lambda i, pkg: passos.etapa("assinaturas", i, len(cands), pkg))
-        # nome e ícone de TODOS os apps (não só dos suspeitos): a lista inteira fica legível
+        # nome, ícone, manifesto e assinatura de TODOS os apps (cache por hash: só o 1º atendimento demora).
+        # Antes, com o Agente ligado, os apps com nome vindo dele ficavam sem a leitura do manifesto
+        # (redes de anúncio, disfarces...) e a assinatura só era conferida nos suspeitos.
         todos = list(sc.apps)
         sem_nome = todos
         if preferencias.ler().get("usar_agente") and agente_mod.disponivel():
@@ -188,7 +186,6 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
                     for pkg, dados in ag.apps(icones=True).items():
                         if pkg in sc.apps:
                             sc.apps[pkg].nome, sc.apps[pkg].icone = dados["nome"], dados["icone"]
-                sem_nome = [p for p in todos if not sc.apps[p].nome]
             except AdbErro as e:  # inclui AgenteIndisponivel: cai para a leitura do APK
                 avisos.append(f"CelScan Agente indisponível ({e}); nomes lidos direto dos APKs.")
         with log.etapa("rotulos"):
@@ -234,7 +231,10 @@ def remover_apps(ap: Aparelho, alvos: list[dict], progresso: Progresso = _nada,
         qid = r.get("quarentena_id")
         if ok:
             db.registrar_acao(con, ap.serial, "remocao", r["pacote"], msg, qid)
-        feitos.append({"pacote": r["pacote"], "ok": ok, "mensagem": msg, "quarentena_id": qid})
+        elif qid and r.get("parcial"):  # não removeu, mas já tirou poderes do app: fica no histórico para desfazer
+            db.registrar_acao(con, ap.serial, "permissoes", r["pacote"], f"remoção incompleta: {msg}", qid)
+        feitos.append({"pacote": r["pacote"], "ok": ok, "mensagem": msg, "quarentena_id": qid,
+                       "parcial": bool(r.get("parcial"))})
     return feitos
 
 
