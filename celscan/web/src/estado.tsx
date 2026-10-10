@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urlWebSocket, type Dispositivo, type Estado, type Tarefa } from "./api";
-import { aplicarTema } from "./tema";
+import { aplicarModelo, aplicarTema } from "./tema";
 
 export interface Toast {
   id: number;
@@ -24,6 +24,8 @@ interface Contexto {
   mudarTema: (t: string) => void;
   escala: number;
   mudarEscala: (e: number) => void;
+  modelo: string;
+  mudarModelo: (m: string) => void;
   erroBackend: string | null;
 }
 
@@ -43,6 +45,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [avisos, setAvisos] = useState<Toast[]>([]);
   const [tema, setTema] = useState(() => localStorage.getItem("celscan-tema") ?? "sistema");
   const [escala, setEscala] = useState(() => Number(localStorage.getItem("celscan-escala")) || 1);
+  const [modelo, setModelo] = useState(() => localStorage.getItem("celscan-modelo") ?? "estudio");
   const proximo = useRef(1);
 
   const [erroBackend, setErroBackend] = useState<string | null>(null);
@@ -120,6 +123,11 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", ouvir);
   }, [tema, escala]);
 
+  useEffect(() => {
+    aplicarModelo(modelo);
+    localStorage.setItem("celscan-modelo", modelo);
+  }, [modelo]);
+
   const esperar = useCallback(<R,>(t: Tarefa<R>) => {
     setTarefas((ts) => ({ ...ts, [t.id]: t as Tarefa }));
     // Consulta periódica como garantia, caso alguma mensagem do WebSocket se perca.
@@ -154,7 +162,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema, escala, mudarEscala: setEscala, erroBackend }}
+      value={{ estado, online, dispositivos, tarefas, recarregar, esperar, avisar, fecharAviso, avisos, tema, mudarTema: setTema, escala, mudarEscala: setEscala, modelo, mudarModelo: setModelo, erroBackend }}
     >
       {children}
     </Ctx.Provider>

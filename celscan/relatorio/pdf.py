@@ -139,10 +139,45 @@ def _achado(a: dict, e: dict, nivel: str | None = None) -> list:
             Paragraph(f"<b>O que fazer:</b> {_t(a['fazer'])}", e["normal"]), Spacer(1, 5)]
 
 
+def _icone_pdf(r: dict, lado: float):
+    """Ícone do app para o PDF (PNG/WebP); SVG e ausência voltam None."""
+    uri = r.get("icone") or ""
+    if not uri.startswith(("data:image/png;base64,", "data:image/webp;base64,")):
+        return None
+    try:
+        import base64
+
+        from PIL import Image as PILImage
+        from reportlab.platypus import Image as RLImage
+        im = PILImage.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))).convert("RGBA")
+        im.thumbnail((96, 96))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        buf.seek(0)
+        return RLImage(buf, width=lado, height=lado)
+    except Exception:
+        return None
+
+
+def _nome(r: dict) -> str:
+    return r.get("nome") if r.get("nome") and r.get("nome") != r["pacote"] else r["pacote"]
+
+
+def _data_br(iso: Any) -> str:
+    try:
+        return datetime.fromisoformat(str(iso)).strftime("%d/%m/%Y")
+    except ValueError:
+        return "?"
+
+
 def _cartao_app(r: dict, e: dict, tecnico: bool) -> KeepTogether:
     cor = COR_NIVEL.get(r["nivel"], CINZA)
-    itens = [Paragraph(f'<font face="Courier-Bold">{_t(r["pacote"])}</font> '
-                       f'<font color="{cor.hexval()}"><b>{_t(r["nivel"])} · {r["score"]}</b></font>', e["normal"])]
+    origem = r.get("loja") or ("app do sistema" if r.get("sistema") else r.get("origem") or "fora da loja")
+    itens = [Paragraph(f'<b>{_t(_nome(r))}</b> '
+                       f'<font color="{cor.hexval()}"><b>{_t(r["nivel"])} · {r["score"]}</b></font>', e["normal"]),
+             Paragraph(f'<font face="Courier">{_t(r["pacote"])}</font>'
+                       + (f" · instalado em {_data_br(r['instalado'])}" if r.get("instalado") else "")
+                       + f" · {_t(origem)}", e["fraco"])]
     if r.get("ameaca"):
         itens.append(Paragraph(f'<font color="{VERMELHO.hexval()}"><b>{_t(r["ameaca"])}</b></font>', e["normal"]))
     for a in r.get("achados", []):
@@ -156,10 +191,11 @@ def _cartao_app(r: dict, e: dict, tecnico: bool) -> KeepTogether:
         extras = [f"instalador: {r.get('instalador') or 'desconhecido'}", f"versão: {r.get('versao') or '?'}",
                   f"SHA-256 do APK: {r.get('sha256') or '?'}", f"certificado: {cert or '?'}"]
         itens += [Paragraph(_t(x), e["mono"]) for x in extras]
-    caixa = Table([[itens]], colWidths=[172 * mm])
+    icone = _icone_pdf(r, 10 * mm)
+    caixa = Table([[icone, itens]] if icone else [[itens]], colWidths=[13 * mm, 159 * mm] if icone else [172 * mm])
     caixa.setStyle(TableStyle([("LINEBEFORE", (0, 0), (0, -1), 3, cor), ("BOX", (0, 0), (-1, -1), 0.4, LINHA),
                                ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5),
-                               ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+                               ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
     return KeepTogether([caixa, Spacer(1, 5)])
 
 
@@ -167,8 +203,10 @@ def _tabela_apps(apps: list[dict], e: dict) -> Table:
     dados = [[Paragraph(f"<b>{x}</b>", e["fraco"]) for x in ("Pontos", "Nível", "App", "Origem")]]
     for r in apps:
         dados.append([Paragraph(str(r["score"]), e["fraco"]), Paragraph(_t(r["nivel"]), e["fraco"]),
-                      Paragraph(_t(r["pacote"]), e["mono"]), Paragraph(_t(r.get("loja") or r.get("instalador")
-                                                                             or "desconhecida"), e["fraco"])])
+                      Paragraph(f'<b>{_t(_nome(r))}</b><br/><font face="Courier" size="7">{_t(r["pacote"])}</font>',
+                                e["fraco"]),
+                      Paragraph(_t(r.get("loja") or r.get("origem") or r.get("instalador") or "desconhecida"),
+                                e["fraco"])])
     t = Table(dados, colWidths=[16 * mm, 22 * mm, 90 * mm, 44 * mm], repeatRows=1)
     t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINHA), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
     return t

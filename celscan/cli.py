@@ -574,6 +574,34 @@ def cmd_bases(a):
     con.print(t)
 
 
+def cmd_na_tela(a):
+    """Qual app está na tela agora (pegar no flagra o app do pop-up)."""
+    from celscan.acoes import na_tela
+
+    x = na_tela.ler(escolher_aparelho(a.serial))
+    if not x:
+        sys.exit("Não deu para identificar o app na tela. Desbloqueie o celular e tente de novo.")
+    con.print(Panel(f"[bold]{x['pacote']}[/]\nTela: {x['classe']}"
+                    + (f"\n[red]É um anúncio da rede {x['anuncio']}[/]" if x["anuncio"] else ""),
+                    title="App na tela agora", border_style="red" if x["anuncio"] else "cyan"))
+
+
+def cmd_consumo(a):
+    """Internet gasta por app desde a última carga completa."""
+    from celscan.acoes import consumo
+
+    d = consumo.ler(escolher_aparelho(a.serial))
+    if not d["disponivel"]:
+        sys.exit("Este aparelho não expôs o consumo por app pelo cabo.")
+    t = Table(header_style="bold")
+    for c in ("App", "Dados móveis", "Wi-Fi", "Enviado"):
+        t.add_column(c, justify="right" if c != "App" else "left")
+    for r in d["apps"][:a.limite]:
+        t.add_row(r["pacote"], f"{r['movel_mb']} MB", f"{r['wifi_mb']} MB", f"{r['enviado_mb']} MB")
+    con.print(t)
+    con.print(f"[dim]{d['observacao']}[/]")
+
+
 def cmd_iocs(a):
     from celscan.analise import iocs as iocmod
     with con.status("Baixando indicadores..."):
@@ -683,9 +711,19 @@ def main():
     s.add_argument("pacote")
     s.add_argument("--serial")
     s.add_argument("--acoes", nargs="*",
-                   help="acessibilidade, notificacoes, sobreposicao, captura_tela, instalar_apps, parar")
+                   help="acessibilidade, notificacoes, sobreposicao, captura_tela, instalar_apps, segundo_plano, "
+                        "silenciar, parar")
     s.add_argument("--revogar", nargs="*", help="permissões Android a revogar (ex: android.permission.READ_SMS)")
     s.set_defaults(func=cmd_permissoes)
+
+    s = sub.add_parser("na-tela", help="Mostra qual app está na tela agora (pega o app do pop-up no flagra)")
+    s.add_argument("--serial")
+    s.set_defaults(func=cmd_na_tela)
+
+    s = sub.add_parser("consumo", help="Internet gasta por app (dados móveis e Wi-Fi)")
+    s.add_argument("--serial")
+    s.add_argument("--limite", type=int, default=20)
+    s.set_defaults(func=cmd_consumo)
 
     s = sub.add_parser("certificados-bancos",
                        help="Registra os certificados oficiais dos apps de banco deste celular (Play Store)")

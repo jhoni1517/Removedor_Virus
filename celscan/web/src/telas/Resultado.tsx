@@ -2,7 +2,8 @@ import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, SlidersHori
 import { useEffect, useMemo, useState } from "react";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
-import { Botao, Cartao, Medidor, Selo, Vazio } from "../ui";
+import { Botao, Cartao, IconeApp, Medidor, RaioX, Selo, Vazio, dataBr, nomeApp } from "../ui";
+import { AbaAnuncios, AbaInternet, AbaSensores, AbaTodos } from "./AbasResultado";
 
 type Filtro = "alerta" | "ALTO" | "MÉDIO" | "BAIXO" | "todos";
 const FILTROS: [Filtro, string][] = [["alerta", "Com alerta"], ["ALTO", "Alto"], ["MÉDIO", "Médio"], ["BAIXO", "Baixo"], ["todos", "Todos"]];
@@ -24,35 +25,40 @@ const ACOES_APP: [string, string][] = [
   ["sobreposicao", "Bloquear janelas sobre outros apps"],
   ["captura_tela", "Bloquear captura de tela"],
   ["instalar_apps", "Bloquear instalar apps"],
+  ["segundo_plano", "Bloquear em segundo plano"],
+  ["silenciar", "Silenciar notificações"],
   ["parar", "Forçar parada agora"],
 ];
 
-function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, podeAgir }: {
+function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, podeAgir, foco }: {
   r: AppResultado; selecionado: boolean; alternar: () => void; remover: () => void;
-  permissoes: (pkg: string, acoes: string[]) => void; removido: boolean; podeAgir: boolean;
+  permissoes: (pkg: string, acoes: string[]) => void; removido: boolean; podeAgir: boolean; foco?: boolean;
 }) {
   const [aberto, setAberto] = useState(r.nivel === "ALTO");
+  useEffect(() => { if (foco) setAberto(true); }, [foco]);
   const [ajustar, setAjustar] = useState(false);
   const achados = r.achados.filter((a) => a.chave !== "ameaca_conhecida");
   const acionavel = !r.sistema && r.nivel !== "OK" && r.nivel !== "PERMITIDO" && !removido;
   return (
-    <Cartao className={`entrar border-l-4 ${COR_BORDA[r.nivel] ?? "border-l-ok"} ${removido ? "opacity-60" : ""}`}>
+    <Cartao id={`app-${r.pacote}`} className={`entrar cartao-app border-l-4 ${COR_BORDA[r.nivel] ?? "border-l-ok"} ${removido ? "opacity-60" : ""} ${foco ? "ring-2 ring-destaque" : ""}`}>
       <div className="flex items-start gap-3 p-4">
         {acionavel && (
           <input type="checkbox" className="mt-1.5 h-4 w-4 accent-[var(--destaque)]" checked={selecionado} onChange={alternar}
             aria-label={`Selecionar ${r.pacote}`} disabled={!podeAgir} />
         )}
+        <IconeApp nome={r.nome} pacote={r.pacote} icone={r.icone} tamanho={44} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            {r.icone && <img src={r.icone} alt="" className="h-5 w-5 rounded" />}
-            {r.nome && r.nome !== r.pacote && <span className="font-semibold">{r.nome}</span>}
-            <span className="truncate font-mono text-xs text-fraco">{r.pacote}</span>
+            <span className="text-base font-semibold">{nomeApp(r)}</span>
             <Selo nivel={r.nivel} />
             <span className="numeros font-mono text-xs text-fraco">{r.score} pts</span>
             {removido && <span className="rounded bg-ok-suave px-1.5 py-0.5 text-xs font-semibold text-ok">Removido</span>}
           </div>
+          <p className="truncate font-mono text-xs text-fraco">{r.pacote}</p>
           <p className="mt-0.5 text-xs text-fraco">
-            {r.loja ? `Instalado pela ${r.loja}` : r.sistema ? "App do sistema" : `Instalado fora da loja (${r.instalador ?? "origem desconhecida"})`}
+            {r.instalado ? `Instalado em ${dataBr(r.instalado)} · ` : ""}
+            {r.loja ? `pela ${r.loja}` : r.sistema ? "app do sistema" : `fora da loja (${r.origem ?? r.instalador ?? "origem desconhecida"})`}
+            {r.ultimo_uso ? ` · último uso ${dataBr(r.ultimo_uso)}` : ""}
             {r.versao ? ` · versão ${r.versao}` : ""}
           </p>
           {r.ameaca && (
@@ -231,6 +237,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
   const [removidos, setRemovidos] = useState<Set<string>>(new Set());
   const [confirmando, setConfirmando] = useState<string[] | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [aba, setAba] = useState<"problemas" | "todos" | "anuncios" | "sensores" | "internet">("problemas");
+  const [foco, setFoco] = useState<string | null>(null);
   const conectado = dispositivos.some((d) => d.serial === v.info.serial && d.estado === "device");
 
   const contagem = useMemo(() => {
@@ -300,12 +308,30 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     }
   }
 
+  // Clique no Raio-X ou numa tabela: mostra o cartão do app (troca para a aba certa e rola até ele)
+  function abrirApp(pacote: string) {
+    const r = v.resultados.find((x) => x.pacote === pacote);
+    if (!r) return;
+    setAba("problemas");
+    if (!["ALTO", "MÉDIO", "BAIXO"].includes(r.nivel) || (filtro !== "todos" && filtro !== "alerta" && filtro !== r.nivel)) setFiltro("todos");
+    setFoco(pacote);
+    setTimeout(() => document.getElementById(`app-${pacote}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+  }
+
+  const abas: [typeof aba, string, number][] = [
+    ["problemas", "Problemas", contagem.ALTO + contagem["MÉDIO"] + v.achados.length],
+    ["todos", "Todos os apps", v.resultados.length],
+    ["anuncios", "Anúncios", v.resultados.filter((r) => r.anuncios && (r.anuncios.tela_cheia || r.anuncios.fora_do_app)).length],
+    ["sensores", "Câmera e microfone", v.resultados.filter((r) => Object.values(r.sensores ?? {}).some((s) => s < 7 * 86400)).length],
+    ["internet", "Internet por app", 0],
+  ];
+
   function alternar(p: string) {
     setSelecao((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   }
 
   return (
-    <div className="max-w-5xl pb-24">
+    <div className="resultado max-w-6xl pb-24">
       <Cartao className="mb-6 flex flex-wrap items-center gap-6 p-6">
         <Medidor nota={v.nota} veredito={v.veredito} />
         <div className="min-w-[220px] flex-1">
@@ -336,6 +362,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </div>
       </Cartao>
 
+      <div className="resultado-grade">
+      <RaioX apps={v.resultados} aoEscolher={abrirApp} removidos={removidos} />
+      <div className="min-w-0">
       <DesdeUltimaVisita vid={v.varredura_id} />
 
       {v.avisos.length > 0 && (
@@ -345,6 +374,18 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </details>
       )}
 
+      <div className="abas mb-5" role="tablist" aria-label="Partes do resultado">
+        {abas.map(([id, nome, n]) => (
+          <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>
+            {nome}{n > 0 && <span className="abas-n numeros">{n}</span>}
+          </button>
+        ))}
+      </div>
+      {aba === "todos" && <AbaTodos v={v} aoAbrir={abrirApp} />}
+      {aba === "anuncios" && <AbaAnuncios v={v} aoAbrir={abrirApp} conectado={conectado} />}
+      {aba === "sensores" && <AbaSensores v={v} aoAbrir={abrirApp} />}
+      {aba === "internet" && <AbaInternet v={v} aoAbrir={abrirApp} conectado={conectado} />}
+      {aba === "problemas" && <>
       <h2 className="mb-3 text-lg font-semibold">Configurações do aparelho</h2>
       {v.achados.length === 0 ? <Vazio>Nenhum problema nas configurações.</Vazio> : (
         <div className="mb-8 space-y-3">
@@ -370,13 +411,21 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </div>
       </div>
       {!conectado && <p className="mb-3 text-sm text-fraco">Conecte o celular para remover apps.</p>}
+      {conectado && contagem.ALTO > 1 && (
+        <Botao className="mb-3" onClick={() => setSelecao(new Set(v.resultados.filter((r) => r.nivel === "ALTO" && !r.sistema && !removidos.has(r.pacote)).map((r) => r.pacote)))}>
+          Selecionar os {contagem.ALTO} de risco alto
+        </Botao>
+      )}
       <div className="space-y-3">
         {visiveis.length === 0 ? <Vazio>Nenhum app neste filtro. Ótimo sinal.</Vazio> :
           visiveis.map((r) => (
             <CartaoApp key={r.pacote} r={r} selecionado={selecao.has(r.pacote)} alternar={() => alternar(r.pacote)}
               removido={removidos.has(r.pacote)} podeAgir={conectado && !ocupado} remover={() => setConfirmando([r.pacote])}
-              permissoes={ajustarPermissoes} />
+              permissoes={ajustarPermissoes} foco={foco === r.pacote} />
           ))}
+      </div>
+      </>}
+      </div>
       </div>
 
       {selecao.size > 0 && (

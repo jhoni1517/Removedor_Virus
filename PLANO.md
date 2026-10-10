@@ -9,6 +9,40 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.1.0b1 (10/10/2026) — versão unificada (GitHub + CelScan 3.0 do chat)
+
+Comparação feita entre esta base (3.0.0b11) e a versão 3.0 gerada no chat. Esta base estava muito à
+frente (interface React, instalador, Agente, balcão, MTP, 50+ testes); a outra tinha funções que
+faltavam aqui. Juntei as duas sobre esta base:
+
+| Veio da versão do chat | Situação |
+|---|---|
+| Nome/ícone de **todos** os apps (antes só dos suspeitos), pt-BR, ícone vetorial/adaptativo | ✅ |
+| Pop-ups de anúncio pelo histórico de uso + redes de anúncio + gatilhos no manifesto | ✅ |
+| "Quem está na tela agora?" | ✅ interface e `celscan na-tela` |
+| Origem do APK (Chrome, WhatsApp...), disfarce de ícone, imitação pelo nome, falso app do sistema | ✅ |
+| Sensores (quem usou câmera/microfone/localização/SMS e quando) | ✅ |
+| Rede: VPN sempre ligada / conectada, DNS privado (leitura apenas) | ✅ (era pendência do b6) |
+| Raio-X do celular, Assistente e Modo cliente | ✅ |
+
+| Upgrades novos | Situação |
+|---|---|
+| 6 modelos de interface que mudam a estrutura (Estúdio, Compacto, Toque, Revista, Assistente, Cliente) | ✅ |
+| Internet por app + alerta de app escondido enviando muitos dados | ✅ (era pendência do b6) |
+| Notificações em excesso; ações "bloquear em 2º plano" e "silenciar" (com desfazer) | ✅ |
+| Laudo PDF com nome e ícone do app, data de instalação e origem | ✅ |
+| Lista completa com busca, ordem e CSV; "Selecionar os de risco alto" | ✅ |
+
+| Bugs corrigidos | |
+|---|---|
+| Lista e laudo mostravam `com.xxx` para quase todos os apps (nome só era lido dos suspeitos) | ✅ |
+| WebSocket nunca subia no .exe: a lib `websockets` não estava nas dependências (o build coletava um módulo inexistente) | ✅ |
+| Cache de rótulo gravava o nome do pacote para sempre quando o APK não trazia nome | ✅ |
+| Avisos informativos (BAIXO) tiravam 10 pontos da nota | ✅ não tiram mais |
+
+**Falta confirmar no aparelho real:** formato do `dumpsys usagestats` (eventos) e do
+`batterystats --checkin` por fabricante; ícones SVG não aparecem no PDF (só PNG/WebP).
+
 ## Beta 3.0.0b11 (04/10/2026) — Resgate de fotos sem depuração (MTP)
 
 Para quando a depuração não dá para ligar: com o celular desbloqueado em "Transferência de

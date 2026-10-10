@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { api, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
-import { aplicarTema, coresDoLogo, lerCoresLoja, salvarCoresLoja, TEMAS } from "../tema";
+import { aplicarTema, coresDoLogo, lerCoresLoja, MODELOS, salvarCoresLoja, TEMAS } from "../tema";
 
 interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean }
 
 export default function Configuracoes() {
-  const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar } = useApp();
+  const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar, modelo, mudarModelo } = useApp();
   const pronto = dispositivos.find((d) => d.estado === "device");
 
   async function registrarCertificados() {
@@ -72,6 +72,22 @@ export default function Configuracoes() {
             onChange={(e) => salvar({ offline: e.target.checked })} />
           <span>Modo offline: não baixar nada. Usa só as cópias locais da lista de ameaças (pode ficar desatualizada).</span>
         </label>
+      </Cartao>
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Modelo da interface</h2>
+        <p className="mt-1 text-sm text-fraco">Muda a forma do programa inteiro: onde fica o menu, o tamanho das coisas,
+          as letras e o que aparece. Combina com qualquer tema de cor abaixo.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="Modelo da interface">
+          {MODELOS.map((m) => (
+            <button key={m.id} role="radio" aria-checked={modelo === m.id} onClick={() => mudarModelo(m.id)}
+              className={`flex items-start gap-3 rounded-lg border p-3 text-left text-sm transition ${modelo === m.id ? "border-destaque bg-destaque-suave" : "border-linha hover:bg-superficie-2"}`}>
+              <span className={`miniatura-modelo miniatura-${m.id}`} aria-hidden><i /><i /><i /></span>
+              <span><span className={`block ${modelo === m.id ? "font-semibold" : "font-medium"}`}>{m.nome}</span>
+                <span className="block text-xs text-fraco">{m.descricao}</span></span>
+            </button>
+          ))}
+        </div>
       </Cartao>
 
       <Cartao className="p-5">

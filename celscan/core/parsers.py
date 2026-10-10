@@ -88,7 +88,8 @@ def pkgdump(txt: str) -> dict[str, dict]:
         m = re.match(r"^\s{1,4}Package \[([\w.]+)\] \(", linha)
         if m:
             # A primeira ocorrência vale (a seção "Hidden system packages" repete nomes).
-            cur = pkgs.setdefault(m.group(1), {"perms": set(), "versao": None, "instalado": None})
+            cur = pkgs.setdefault(m.group(1), {"perms": set(), "versao": None, "instalado": None,
+                                               "atualizado": None, "origem": None})
             continue
         if re.match(r"^\S", linha):  # nova seção de primeiro nível (ex.: "Hidden system packages:")
             cur = None
@@ -100,6 +101,13 @@ def pkgdump(txt: str) -> dict[str, dict]:
             cur["versao"] = s.split("=", 1)[1]
         elif s.startswith("firstInstallTime=") and not cur["instalado"]:
             cur["instalado"] = data(s.split("=", 1)[1])
+        elif s.startswith("lastUpdateTime=") and not cur["atualizado"]:
+            cur["atualizado"] = data(s.split("=", 1)[1])
+        elif s.startswith(("installOriginatingPackageName=", "installInitiatingPackageName=")):
+            # quem abriu o instalador: Chrome, WhatsApp, gerenciador de arquivos... (Android 11+)
+            v = s.split("=", 1)[1].strip()
+            if v and v != "null" and "packageinstaller" not in v and (not cur["origem"] or "Originating" in s):
+                cur["origem"] = v
         else:
             m = re.match(r"(android\.permission\.[A-Z0-9_]+): granted=true", s)
             if m:
@@ -315,3 +323,98 @@ def tamanhos_pastas(txt: str) -> dict[str, int]:
         if m:
             res[m.group(2)] = int(m.group(1))
     return res
+
+
+# ---------------------------------------------------------------- uso, anúncios, sensores e rede
+
+def duracao(txt: str | None) -> float:
+    """'1d2h3m4s500ms' -> segundos."""
+    mult = {"d": 86400, "h": 3600, "m": 60, "s": 1, "ms": 0.001}
+    return sum(int(n) * mult[u] for n, u in re.findall(r"(\d+)(ms|d|h|m|s)", txt or ""))
+
+
+def appops_tempos(txt: str, interesse: set[str]) -> dict[str, dict[str, float]]:
+    """Blocos '@@PKG' + `cmd appops get` -> {pacote: {OP: segundos desde o último uso}}.
+
+    Aceita o formato antigo ("OP: allow; time=+1h2m ago") e o do Android 11+
+    (bloco com "Access: [fg-s] 2026-10-10 09:00:00.000 (-3h2m10s)")."""
+    res: dict[str, dict[str, float]] = {}
+    pkg_atual: dict[str, float] | None = None
+    op: str | None = None
+    for linha in txt.splitlines():
+        if linha.startswith("@@PKG "):
+            pkg_atual, op = res.setdefault(linha[6:].strip(), {}), None
+            continue
+        if pkg_atual is None:
+            continue
+        m = re.match(r"^\s*(?:Uid mode:\s*)?([A-Z_]{3,}):\s*(\w+)(.*)$", linha)
+        if m:
+            op = m.group(1) if m.group(1) in interesse else None
+            t = re.search(r"\btime=\+(\S+?) ago", m.group(3))
+            if op and t:
+                pkg_atual[op] = min(pkg_atual.get(op, 1e12), duracao(t.group(1)))
+            continue
+        if op and "Access:" in linha:
+            t = re.search(r"\(-([0-9dhms]+)\)", linha)
+            if t:
+                pkg_atual[op] = min(pkg_atual.get(op, 1e12), duracao(t.group(1)))
+    return {p: v for p, v in res.items() if v}
+
+
+EVENTO = re.compile(r'time="([^"]+)"\s+type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)'
+                    r'\s+package=(\S+)(?:\s+class=(\S+))?')
+
+
+def uso(txt: str) -> tuple[list[tuple[datetime, str, str]], dict[str, datetime], dict[str, int]]:
+    """Trecho de `dumpsys usagestats` -> (telas abertas em ordem, último uso por app, notificações por app)."""
+    telas, notif, ultimo = set(), {}, {}
+    vistas_notif = set()
+    for linha in txt.splitlines():
+        m = EVENTO.search(linha)
+        if m:
+            t = data(m.group(1)[:19])
+            if not t:
+                continue
+            if m.group(2) == "NOTIFICATION_INTERRUPTION":
+                if (t, m.group(3)) not in vistas_notif:  # o dump repete eventos em intervalos diferentes
+                    vistas_notif.add((t, m.group(3)))
+                    notif[m.group(3)] = notif.get(m.group(3), 0) + 1
+            else:
+                telas.add((t, m.group(3), m.group(4) or ""))
+            continue
+        m = re.search(r'package=(\S+).*?lastTimeUsed="([^"]+)"', linha)
+        if m:
+            t = data(m.group(2)[:19])
+            if t and t.year > 2000 and (m.group(1) not in ultimo or t > ultimo[m.group(1)]):
+                ultimo[m.group(1)] = t
+    return sorted(telas), ultimo, notif
+
+
+def anuncios(telas: list[tuple[datetime, str, str]], sdk_de) -> dict[str, dict]:
+    """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up)."""
+    res: dict[str, dict] = {}
+    anterior = None
+    for t, pkg, classe in telas:
+        sdk = sdk_de(classe) if classe else None
+        if sdk:
+            r = res.setdefault(pkg, {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": set()})
+            r["tela_cheia"] += 1
+            r["sdks"].add(sdk)
+            r["ultimo"] = max(r["ultimo"], t) if r["ultimo"] else t
+            if anterior and anterior != pkg:
+                r["fora_do_app"] += 1
+        anterior = pkg
+    return res
+
+
+def rede(txt: str) -> dict[str, object]:
+    """Seção 'rede' do script: DNS privado, VPN sempre ativa e VPN conectada."""
+    linhas = [linha.strip() for linha in txt.splitlines()] + ["", "", "", ""]
+    limpo = [("" if v in ("null", "") else v) for v in linhas[:4]]
+    return {"dns_modo": limpo[0], "dns_servidor": limpo[1], "vpn_sempre": limpo[2],
+            "vpn_ativa": limpo[3].isdigit() and int(limpo[3]) > 0}
+
+
+def home(txt: str) -> str | None:
+    achados = re.findall(r"^\s*([\w.]+)/[\w.$]+\s*$", txt, re.M)
+    return achados[-1] if achados else None

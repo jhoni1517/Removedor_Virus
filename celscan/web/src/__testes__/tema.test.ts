@@ -33,3 +33,17 @@ describe("cor da marca a partir do logo", () => {
     expect(corDominante(pixels(Array(40).fill([120, 120, 120])))).toBeNull();
   });
 });
+
+import { MODELOS, modeloValido } from "../tema";
+
+describe("modelos de interface", () => {
+  it("aceita o modelo escolhido e cai no Estúdio se o nome for desconhecido", () => {
+    expect(modeloValido("compacto")).toBe("compacto");
+    expect(modeloValido("nao-existe")).toBe("estudio");
+    expect(modeloValido(null)).toBe("estudio");
+  });
+  it("tem os seis modelos com descrição", () => {
+    expect(MODELOS.map((m) => m.id)).toEqual(["estudio", "compacto", "toque", "revista", "assistente", "cliente"]);
+    expect(MODELOS.every((m) => m.descricao.length > 20)).toBe(true);
+  });
+});

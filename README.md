@@ -3,8 +3,27 @@
 Segurança, diagnóstico e otimização de celulares Android pelo cabo USB, no Windows.
 O CelScan substitui o antigo "Removedor de Vírus Android".
 
-> **Versão 3.0 beta 3.** A interface nova ainda não foi testada num celular real. Se algo der
-> errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
+> **Versão 3.1 beta 1.** As novidades desta versão ainda não foram testadas num celular real. Se algo
+> der errado, mande o arquivo `celscan.log` da pasta `%USERPROFILE%\.celscan\logs`.
+
+## Novidades da 3.1
+
+- **Nome e ícone reais de todos os apps**, em português quando o app tem tradução, inclusive ícones
+  vetoriais e adaptativos. Some o `com.xxx` da lista e do laudo PDF.
+- **Pop-ups de anúncio:** o CelScan aponta qual app abriu propaganda por cima da tela inicial ou de
+  outro app (com data e hora) e quais estão preparados para isso. Botão **"Quem está na tela agora?"**
+  para pegar o pop-up no flagra (também `celscan na-tela`).
+- **De onde veio o app:** "arquivo baixado pelo Chrome", "recebido pelo WhatsApp"...
+- **Golpes:** app que mostra o nome de um banco sem ser o oficial, app que finge ser do Android e
+  app com ícone de disfarce pronto (ex.: virar "Calculadora").
+- **Câmera, microfone, localização e SMS:** quem usou e quando.
+- **Internet por app** (`celscan consumo`) e alerta para app escondido que **enviou muitos dados**.
+- **Notificações em excesso** e ações novas: **bloquear em segundo plano** e **silenciar notificações**.
+- **Rede:** VPN sempre ligada, VPN conectada e DNS privado.
+- **Raio-X do celular:** a tela do aparelho desenhada com os ícones reais, perigosos em vermelho.
+- **6 modelos de interface** (Configurações > Modelo da interface), que mudam a estrutura e não só a cor:
+  Estúdio, Compacto, Toque (balcão/tablet), Revista, Assistente (para leigos) e Modo cliente (2ª tela).
+- Lista completa de apps com busca, ordem e **exportação para planilha (CSV)**.
 
 ## Download e instalação
 

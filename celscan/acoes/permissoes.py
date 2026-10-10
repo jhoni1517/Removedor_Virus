@@ -18,6 +18,8 @@ ACOES = {
     "sobreposicao": "Bloquear janelas sobre outros apps",
     "captura_tela": "Bloquear a captura/transmissão de tela",
     "instalar_apps": "Bloquear a instalação de outros apps",
+    "segundo_plano": "Bloquear em segundo plano (para pop-ups e gasto de bateria)",
+    "silenciar": "Silenciar as notificações do app",
     "parar": "Forçar a parada do app agora",
 }
 # permissão perigosa -> texto para o usuário
@@ -33,7 +35,8 @@ PERMISSOES = {
     "android.permission.READ_CONTACTS": "Ler contatos",
 }
 _APPOP = {"sobreposicao": "SYSTEM_ALERT_WINDOW", "captura_tela": "PROJECT_MEDIA",
-          "instalar_apps": "REQUEST_INSTALL_PACKAGES"}
+          "instalar_apps": "REQUEST_INSTALL_PACKAGES", "segundo_plano": "RUN_ANY_IN_BACKGROUND",
+          "silenciar": "POST_NOTIFICATION"}
 
 
 def _tirar_componente(ap: Aparelho, pkg: str, chave: str, pasta) -> bool:
