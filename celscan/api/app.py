@@ -376,7 +376,9 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(404, "Varredura não encontrada")
         meta = con.execute("SELECT id, serial, data, modo, nota, veredito, duracao_s FROM varreduras WHERE id=?",
                            (vid,)).fetchone()
-        return {**dict(meta), **retrato}
+        from celscan.analise import pontuacao
+        decomposicao = pontuacao.decompor(retrato.get("achados_aparelho", []), retrato.get("apps", []))
+        return {**dict(meta), **retrato, "decomposicao": decomposicao}
 
     @app.get("/api/varreduras/{vid}/diferencas")
     def diferencas_varredura(vid: int) -> dict[str, Any]:
@@ -865,6 +867,14 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(422, str(e)) from e
         except adb.AdbErro as e:
             raise HTTPException(502, f"Não foi possível tirar o print: {e}") from e
+
+    @app.get("/api/autodiagnostico")
+    def autodiagnostico() -> dict[str, Any]:
+        """Confere a instalação do CelScan (ADB, componentes, pasta, banco, bases)."""
+        from celscan.core import autodiagnostico as ad
+
+        itens = ad.verificar()
+        return {"itens": itens, "resumo": ad.resumo(itens)}
 
     @app.post("/api/na-tela")
     def app_na_tela(p: PedidoSerial) -> dict[str, Any]:

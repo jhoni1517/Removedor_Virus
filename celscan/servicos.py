@@ -15,6 +15,7 @@ from typing import Any
 
 from celscan.acoes import quarentena
 from celscan.analise import iocs as iocs_mod
+from celscan.analise import pontuacao
 from celscan.analise.pontuacao import nota
 from celscan.analise.virustotal import VirusTotal
 from celscan.core import adb, bases, db, log, preferencias
@@ -77,7 +78,9 @@ class ResultadoVarredura:
     duracao_s: float = 0.0
 
     def como_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["decomposicao"] = pontuacao.decompor(self.achados, self.resultados)
+        return d
 
 
 def _nada(_: Evento) -> None:

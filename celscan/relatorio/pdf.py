@@ -229,6 +229,43 @@ def _veredito_bateria(pct: Any) -> tuple[str, colors.Color]:
     return "recomenda-se trocar", VERMELHO
 
 
+def _tabela_simples(cabecalho: tuple[str, ...], linhas: list[list[str]], larguras: list[float], e: dict) -> Table:
+    dados = [[Paragraph(f"<b>{_t(c)}</b>", e["fraco"]) for c in cabecalho]]
+    dados += [[Paragraph(_t(c), e["fraco"]) for c in linha] for linha in linhas]
+    t = Table(dados, colWidths=[w * mm for w in larguras], repeatRows=1)
+    t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINHA), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    return t
+
+
+def _secao_anuncios_e_sensores(apps: list[dict], e: dict) -> list:
+    """Pop-ups de anúncio e uso recente de câmera/microfone/localização (só se houver o que mostrar)."""
+    from celscan.analise.pontuacao import quando
+
+    hist: list = []
+    anuncios = [r for r in apps
+                if (r.get("anuncios") or {}).get("fora_do_app") or (r.get("anuncios") or {}).get("tela_cheia")]
+    if anuncios:
+        anuncios.sort(key=lambda r: (-r["anuncios"]["fora_do_app"], -r["anuncios"]["tela_cheia"]))
+        hist.append(Paragraph("Anúncios e pop-ups", e["h2"]))
+        hist.append(Paragraph("Pop-up fora do app é a propaganda que aparece na tela inicial ou por cima de outro app.",
+                              e["fraco"]))
+        hist.append(_tabela_simples(
+            ("App", "Pop-ups fora do app", "Em tela cheia", "Último", "Redes de anúncio"),
+            [[_nome(r), str(r["anuncios"]["fora_do_app"]), str(r["anuncios"]["tela_cheia"]),
+              _data_br(r["anuncios"].get("ultimo")) if r["anuncios"].get("ultimo") else "—",
+              ", ".join(r["anuncios"].get("sdks") or []) or "—"] for r in anuncios[:15]],
+            [52, 28, 24, 24, 44], e))
+    usos = sorted(((r, s, seg) for r in apps for s, seg in (r.get("sensores") or {}).items() if seg < 7 * 86400),
+                  key=lambda x: x[2])
+    if usos:
+        hist.append(Paragraph("Câmera, microfone e localização (últimos 7 dias)", e["h2"]))
+        hist.append(_tabela_simples(("App", "Usou", "Quando", "Origem"),
+                                    [[_nome(r), s, quando(seg), r.get("loja") or ("sistema" if r.get("sistema")
+                                                                                  else "fora da loja")]
+                                     for r, s, seg in usos[:20]], [62, 34, 34, 42], e))
+    return hist
+
+
 def _tabela_campos(campos: list[tuple[str, Any]], e: dict) -> Table:
     t = Table([[Paragraph(_t(k), e["fraco"]), Paragraph(f"<b>{_t(v)}</b>", e["normal"])] for k, v in campos],
               colWidths=[55 * mm, 117 * mm])
@@ -313,13 +350,15 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
     if not risco:
         historia.append(Paragraph("Nenhum app com risco médio ou alto.", e["normal"]))
     historia += [_cartao_app(r, e, tecnico) for r in risco]
+    historia += _secao_anuncios_e_sensores(apps, e)
 
     if acoes:
+        nomes = {r["pacote"]: _nome(r) for r in apps}
         historia.append(Paragraph("Ações realizadas", e["h2"]))
         for a in acoes:
             desfeita = " (desfeita depois)" if a.get("desfeita_em") else ""
-            historia.append(Paragraph(_t(f"- {a.get('pacote') or ''} {a.get('detalhe') or ''}{desfeita}"),
-                                      e["normal"]))
+            quem = nomes.get(a.get("pacote") or "", a.get("pacote") or "")
+            historia.append(Paragraph(_t(f"- {quem}: {a.get('detalhe') or ''}{desfeita}"), e["normal"]))
     avisos = retrato.get("avisos") or []
     if avisos:
         historia.append(Paragraph("Verificações não disponíveis neste aparelho", e["h2"]))

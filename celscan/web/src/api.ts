@@ -66,6 +66,7 @@ export interface Varredura {
   avisos: string[];
   duracao_s: number;
   data?: string;
+  decomposicao?: { texto: string; pontos: number }[];
 }
 
 export interface Dispositivo {
@@ -184,5 +185,6 @@ export async function obterVarredura(id: number): Promise<Varredura> {
     avisos: v.avisos ?? [],
     duracao_s: v.duracao_s ?? 0,
     data: v.data,
+    decomposicao: v.decomposicao ?? [],
   };
 }

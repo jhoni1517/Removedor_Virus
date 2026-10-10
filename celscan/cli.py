@@ -602,6 +602,70 @@ def cmd_consumo(a):
     con.print(f"[dim]{d['observacao']}[/]")
 
 
+def cmd_autodiagnostico(a):
+    """Confere a instalação do CelScan."""
+    from celscan.core import autodiagnostico as ad
+
+    itens = ad.verificar()
+    t = Table(header_style="bold", title="Autodiagnóstico do CelScan")
+    for c in ("", "Item", "Situação", "O que fazer"):
+        t.add_column(c, overflow="fold")
+    for i in itens:
+        marca = "[green]✔[/]" if i["ok"] else "[red]✘[/]" if i["ok"] is False else "[dim]•[/]"
+        t.add_row(marca, i["item"], i["detalhe"], i["dica"])
+    con.print(t)
+    con.print(ad.resumo(itens))
+    sys.exit(1 if any(i["ok"] is False for i in itens) else 0)
+
+
+def _celula_csv(v) -> str:
+    """Mesma proteção da interface: texto que começa com = + - @ viraria fórmula no Excel."""
+    t = "" if v is None else str(v)
+    return "'" + t if t[:1] in ("=", "+", "-", "@", "\t", "\r") else t
+
+
+def cmd_apps(a):
+    """Lista os apps de uma varredura salva (a última do aparelho, ou --id), com nome real e datas."""
+    import csv
+    import json as _json
+
+    from celscan.core import db
+    con_db = db.conectar()
+    vid = a.id
+    if vid is None:
+        linhas = db.varreduras(con_db, a.serial, 1)
+        if not linhas:
+            sys.exit("Nenhuma varredura salva" + (f" para {a.serial}" if a.serial else "") + ".")
+        vid = linhas[0]["id"]
+    retrato = db.retrato(con_db, vid)
+    if retrato is None:
+        sys.exit(f"Varredura {vid} não encontrada.")
+    apps = retrato.get("apps", [])
+    if a.json:
+        print(_json.dumps(apps, ensure_ascii=False, indent=2, default=str))
+        return
+    colunas = ("nome", "pacote", "instalado", "ultimo_uso", "origem", "nivel", "score")
+    if a.csv:
+        with open(a.csv, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(colunas)
+            for r in apps:
+                valores = [r.get(c) if c != "origem" else (r.get("loja") or r.get("origem")) for c in colunas]
+                w.writerow([_celula_csv(v) for v in valores])
+        con.print(f"Planilha salva em {a.csv}")
+        return
+    t = Table(header_style="bold", title=f"Varredura nº {vid}")
+    for c in ("App", "Pacote", "Instalado", "Último uso", "Origem", "Risco"):
+        t.add_column(c, overflow="fold")
+    for r in apps:
+        cor = {"ALTO": "red", "MÉDIO": "yellow"}.get(r["nivel"], "green")
+        t.add_row(r.get("nome") or r["pacote"], r["pacote"], (r.get("instalado") or "")[:10],
+                  (r.get("ultimo_uso") or "")[:10], r.get("loja") or r.get("origem") or ("sistema" if r.get("sistema")
+                                                                                       else "fora da loja"),
+                  f"[{cor}]{r['score']} {r['nivel']}[/]")
+    con.print(t)
+
+
 def cmd_iocs(a):
     from celscan.analise import iocs as iocmod
     with con.status("Baixando indicadores..."):
@@ -715,6 +779,16 @@ def main():
                         "silenciar, parar")
     s.add_argument("--revogar", nargs="*", help="permissões Android a revogar (ex: android.permission.READ_SMS)")
     s.set_defaults(func=cmd_permissoes)
+
+    s = sub.add_parser("autodiagnostico", help="Confere se a instalação do CelScan está inteira")
+    s.set_defaults(func=cmd_autodiagnostico)
+
+    s = sub.add_parser("apps", help="Lista os apps de uma varredura salva (nome real, datas, origem, risco)")
+    s.add_argument("--serial")
+    s.add_argument("--id", type=int, help="Número da varredura (padrão: a última)")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--csv", metavar="ARQUIVO", help="Salva em planilha CSV")
+    s.set_defaults(func=cmd_apps)
 
     s = sub.add_parser("na-tela", help="Mostra qual app está na tela agora (pega o app do pop-up no flagra)")
     s.add_argument("--serial")

@@ -278,9 +278,52 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
 
 def pontuar(dados: DadosAparelho, iocs: Any = None, permitidos: set[str] | None = None,
             agora: datetime | None = None, regras: Regras | None = None) -> tuple[list[Achado], list[dict[str, Any]]]:
-    resultados = [pontuar_app(app, dados, iocs, permitidos, agora, regras) for app in dados.apps.values()]
-    resultados.sort(key=lambda r: r["score"], reverse=True)
+    r = regras or regras_padrao()
+    resultados = [pontuar_app(app, dados, iocs, permitidos, agora, r) for app in dados.apps.values()]
+    _mesmo_autor(resultados, r)
+    # ordem estável: risco, depois nome (a lista não "pula" entre varreduras iguais)
+    resultados.sort(key=lambda x: (-x["score"], (x.get("nome") or x["pacote"]).lower(), x["pacote"]))
     return achados_aparelho(dados, regras, agora), resultados
+
+
+def _mesmo_autor(resultados: list[dict[str, Any]], regras: Regras) -> None:
+    """App de fora da loja assinado pelo mesmo certificado de um app de risco alto: mesmo autor."""
+    regra = regras.apps.get("mesmo_autor")
+    if regra is None:
+        return
+    perigosos: dict[str, str] = {}
+    for x in resultados:
+        cert = (x.get("cert") or {}).get("sha256")
+        if cert and x["nivel"] == "ALTO" and not x.get("loja") and not x.get("sistema"):
+            perigosos.setdefault(cert, x.get("nome") or x["pacote"])
+    lim = regras.limites
+    for x in resultados:
+        cert = (x.get("cert") or {}).get("sha256")
+        dono = perigosos.get(cert) if cert else None
+        if not dono or x["nivel"] in ("ALTO", "PERMITIDO") or x.get("loja") or x.get("sistema"):
+            continue
+        ach = regra.achado(dono)
+        x["achados"].append(ach)
+        x["achados"].sort(key=lambda a: a["peso"], reverse=True)
+        x["motivos"] = [a["titulo"] for a in x["achados"]]
+        x["score"] = min(lim.get("maximo", 100), sum(a["peso"] for a in x["achados"]))
+        x["nivel"] = nivel(x["score"], regras)
+
+
+def decompor(achados: list[Achado], resultados: list[dict[str, Any]], regras: Regras | None = None) -> list[dict]:
+    """O que tirou pontos da nota, do maior para o menor (mostrado ao lado do medidor)."""
+    cfg = (regras or regras_padrao()).nota
+    itens = []
+    for a in achados:
+        p = cfg.get("aparelho_alto", 25) if a["nivel"] == "ALTO" else cfg.get("aparelho_outro", 10) \
+            if a["nivel"] == "MÉDIO" else 0
+        if p:
+            itens.append({"texto": a["titulo"], "pontos": -p})
+    for r in resultados:
+        p = cfg.get("app_alto", 30) if r["nivel"] == "ALTO" else cfg.get("app_medio", 8) if r["nivel"] == "MÉDIO" else 0
+        if p:
+            itens.append({"texto": r.get("nome") or r["pacote"], "pontos": -p})
+    return sorted(itens, key=lambda i: i["pontos"])
 
 
 def nota(achados: list[Achado], resultados: list[dict[str, Any]], regras: Regras | None = None) -> tuple[int, str]:

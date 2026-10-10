@@ -155,6 +155,11 @@ apps:
     titulo: "Usou {detalhe}"
     significa: "Um app escondido ou de fora da loja acessou câmera, microfone, localização ou SMS nos últimos dias."
     fazer: "Se você não abriu esse app nesse período, remova."
+  mesmo_autor:
+    peso: 30
+    titulo: "Mesmo autor do app perigoso '{detalhe}'"
+    significa: "Este app foi assinado com o mesmo certificado de um app de risco alto encontrado no celular. Quem fez um, fez o outro."
+    fazer: "Remova junto com o app perigoso, a não ser que você conheça e confie neste."
   nome_com_truque:
     peso: 40
     titulo: "Nome com caracteres escondidos"
