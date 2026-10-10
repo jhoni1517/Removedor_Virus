@@ -10,6 +10,21 @@ export const TEMAS: { id: string; nome: string; amostra: [string, string, string
   { id: "loja", nome: "Minha loja", amostra: ["#eef0f4", "#888888", "#141a22"] },
 ];
 
+// Modelos de interface: mudam a ESTRUTURA (onde fica o menu, densidade, tipografia, formas e o que
+// aparece), não só as cores. Combinam com qualquer tema de cor.
+export const MODELOS: { id: string; nome: string; descricao: string }[] = [
+  { id: "estudio", nome: "Estúdio", descricao: "Menu lateral com nomes, cartões arejados. O padrão." },
+  { id: "compacto", nome: "Compacto", descricao: "Trilho só de ícones, letra menor, cantos retos e listas densas. Cabe muito mais na tela." },
+  { id: "toque", nome: "Toque", descricao: "Barra de botões grandes embaixo, tudo maior e espaçado. Para tablet ou tela de toque no balcão." },
+  { id: "revista", nome: "Revista", descricao: "Menu no topo, títulos serifados e leitura em coluna central. Bom para mostrar ao cliente." },
+  { id: "assistente", nome: "Assistente", descricao: "Sem menus: um passo por vez (conectar, analisar, resolver) com botões grandes. Para leigos." },
+  { id: "cliente", nome: "Modo cliente", descricao: "Para uma segunda tela virada ao cliente: nota, Raio-X e o que foi encontrado, atualizando sozinho." },
+];
+
+export function aplicarModelo(modelo: string) {
+  document.documentElement.setAttribute("data-modelo", MODELOS.some((m) => m.id === modelo) ? modelo : "estudio");
+}
+
 // Temas que usam o atributo data-tema (em vez da classe .escuro)
 const TEMAS_ATRIBUTO = new Set(["terminal", "contraste", "oficina"]);
 

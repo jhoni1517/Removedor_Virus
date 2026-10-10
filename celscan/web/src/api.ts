@@ -26,7 +26,25 @@ export interface AppResultado {
   sha256: string | null;
   nome: string | null;
   icone: string | null;
+  atualizado?: string | null;
+  ultimo_uso?: string | null;
+  origem?: string | null;
+  tamanho?: number | null;
+  sem_icone?: boolean;
+  disfarces?: string[];
+  sensores?: Record<string, number>;
+  anuncios?: { tela_cheia: number; fora_do_app: number; ultimo: string | null; sdks: string[]; gatilhos: string[] };
+  notificacoes?: number;
+  sobreposicao?: boolean;
 }
+
+export interface Consumo {
+  disponivel: boolean;
+  observacao: string;
+  apps: { pacote: string; movel_mb: number; wifi_mb: number; enviado_mb: number; total_mb: number }[];
+}
+
+export interface NaTela { pacote: string; classe: string; anuncio: string | null }
 
 export interface InfoAparelho {
   fabricante: string;

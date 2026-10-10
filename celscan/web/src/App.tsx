@@ -1,6 +1,7 @@
 import { Activity, ClipboardList, FileSearch, History, MonitorSmartphone, ScanLine, Settings, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, obterVarredura, type Tarefa, type Varredura } from "./api";
+import ModoCliente from "./telas/ModoCliente";
 import { useApp } from "./estado";
 import Configuracoes from "./telas/Configuracoes";
 import Balcao from "./telas/Balcao";
@@ -42,7 +43,7 @@ function Marca() {
             fill="none" stroke="var(--superficie)" strokeWidth="1.5" opacity="0.85" />
         </svg>
       </span>
-      <span className="marca-grad font-mono text-xl font-bold tracking-tight">CelScan</span>
+      <span className="marca-grad nav-texto font-mono text-xl font-bold tracking-tight">CelScan</span>
     </div>
   );
 }
@@ -75,8 +76,19 @@ function AvisoAtualizacao() {
   );
 }
 
+function Passos({ fluxo }: { fluxo: Fluxo }) {
+  const atual = fluxo.tela === "conectar" ? 0 : fluxo.tela === "modo" ? 1 : fluxo.tela === "varrendo" ? 1 : 2;
+  return (
+    <ol className="passos" aria-label="Etapas">
+      {["Conectar o celular", "Analisar", "Resolver e entregar o laudo"].map((n, i) => (
+        <li key={n} className={i < atual ? "feito" : i === atual ? "atual" : ""} aria-current={i === atual ? "step" : undefined}>{n}</li>
+      ))}
+    </ol>
+  );
+}
+
 export default function App() {
-  const { estado, online, dispositivos, avisar, erroBackend } = useApp();
+  const { estado, online, dispositivos, avisar, erroBackend, modelo, mudarModelo } = useApp();
   const [secao, setSecao] = useState<Secao>("varredura");
   const [fluxo, setFluxo] = useState<Fluxo>({ tela: "conectar" });
 
@@ -111,10 +123,101 @@ export default function App() {
 
   const prontos = dispositivos.filter((d) => d.estado === "device");
 
+  const telaVarredura = (
+    fluxo.tela === "conectar" ? <Conectar onEscolher={(serial) => setFluxo({ tela: "modo", serial })} /> :
+    fluxo.tela === "modo" ? <Modo serial={fluxo.serial} onIniciar={(m) => iniciar(fluxo.serial, m)}
+      onVoltar={() => setFluxo({ tela: "conectar" })} onConfig={() => setSecao("config")} /> :
+    fluxo.tela === "varrendo" ? <Varrendo tarefa={fluxo.tarefa} modo={fluxo.modo} onFim={aoTerminar} onCancelado={aoCancelar} /> :
+    <Resultado v={fluxo.v} onNova={() => setFluxo({ tela: "conectar" })} />
+  );
+  const erro = erroBackend && (
+    <div className="mb-4 rounded-lg border border-perigo/50 bg-perigo-suave p-3 text-sm text-perigo" role="alert">
+      Não consegui falar com o CelScan ({erroBackend}). Feche e abra o programa. Se continuar, me mande o
+      arquivo celscan.log da pasta .celscan\logs.
+    </div>
+  );
+  const voltarPainel = (
+    <button className="sair-modelo" onClick={() => mudarModelo("estudio")}>Voltar ao modo completo</button>
+  );
+
+  // Modo cliente: segunda tela, sem menus nem botões de ação.
+  if (modelo === "cliente") {
+    return (
+      <div className="h-full overflow-auto">
+        <main id="conteudo" className="bancada min-h-full px-6 py-8" tabIndex={-1}><ModoCliente /></main>
+        {voltarPainel}
+        <Avisos />
+      </div>
+    );
+  }
+  // Assistente: um passo por vez, só a varredura, botões grandes.
+  if (modelo === "assistente") {
+    return (
+      <div className="h-full overflow-auto">
+        <a href="#conteudo" className="pular-link">Pular para o conteúdo</a>
+        <header className="assistente-topo"><Marca /><Passos fluxo={fluxo} /></header>
+        <main id="conteudo" className="bancada assistente-corpo" tabIndex={-1}>{erro}{telaVarredura}</main>
+        {voltarPainel}
+        <Avisos />
+      </div>
+    );
+  }
+
+  const conteudo = (
+    <>
+      {erro}
+      {secao === "balcao" && <Balcao />}
+      {secao === "diagnostico" && <Diagnostico />}
+      {secao === "recuperar" && <Recuperar />}
+      {secao === "resgate" && <Resgate />}
+      {secao === "historico" && <Historico onAbrir={abrirHistorico} />}
+      {secao === "config" && <Configuracoes />}
+      {secao === "varredura" && telaVarredura}
+    </>
+  );
+  const status = (
+    <p className="flex items-center gap-2">
+      <span className={`inline-block h-2 w-2 rounded-full ${online ? "bg-ok" : "pulsar bg-atencao"}`} aria-hidden />
+      {online ? "Conectado ao CelScan" : "Reconectando..."}
+      {estado?.offline && <span className="rounded bg-superficie-2 px-1">offline</span>}
+    </p>
+  );
+
+  // Revista (menu no topo) e Toque (barra embaixo): navegação horizontal.
+  if (modelo === "revista" || modelo === "toque") {
+    const barra = (
+      <nav className={modelo === "revista" ? "nav-topo" : "nav-baixo"} aria-label="Seções">
+        {modelo === "revista" && <Marca />}
+        <ul>
+          {SECOES.map((s) => {
+            const Icone = s.icone;
+            return (
+              <li key={s.id}>
+                <button onClick={() => setSecao(s.id)} aria-current={secao === s.id ? "page" : undefined}>
+                  <Icone size={modelo === "toque" ? 24 : 16} aria-hidden /><span>{s.nome}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {modelo === "revista" && <div className="nav-topo-status">{status}<AvisoAtualizacao /></div>}
+      </nav>
+    );
+    return (
+      <div className={`casca-${modelo} h-full`}>
+        <a href="#conteudo" className="pular-link">Pular para o conteúdo</a>
+        {modelo === "revista" && barra}
+        <main id="conteudo" className="bancada" tabIndex={-1}>{conteudo}</main>
+        {modelo === "toque" && barra}
+        <Avisos />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full">
       <a href="#conteudo" className="pular-link">Pular para o conteúdo</a>
-      <nav className="flex w-60 shrink-0 flex-col border-r border-linha bg-superficie py-5 shadow-[var(--sombra)]" aria-label="Seções">
+      <nav className="nav-lateral flex w-60 shrink-0 flex-col border-r border-linha bg-superficie py-5 shadow-[var(--sombra)]" aria-label="Seções">
         <Marca />
         <ul className="mt-8 space-y-1 px-3">
           {SECOES.map((s, i) => {
@@ -122,17 +225,17 @@ export default function App() {
             const ativo = secao === s.id;
             return (
               <li key={s.id}>
-                <button onClick={() => setSecao(s.id)} aria-current={ativo ? "page" : undefined}
+                <button onClick={() => setSecao(s.id)} aria-current={ativo ? "page" : undefined} title={s.nome}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
                     ativo ? "nav-ativo font-semibold text-destaque" : "text-fraco hover:bg-superficie-2 hover:text-tinta"}`}>
-                  <Icone size={17} aria-hidden /> <span className="flex-1 text-left">{s.nome}</span>
-                  <kbd className="font-mono text-[10px] text-fraco">Alt {i + 1}</kbd>
+                  <Icone size={17} aria-hidden /> <span className="nav-texto flex-1 text-left">{s.nome}</span>
+                  <kbd className="nav-texto font-mono text-[10px] text-fraco">Alt {i + 1}</kbd>
                 </button>
               </li>
             );
           })}
         </ul>
-        <div className="mt-auto space-y-3 px-5 text-xs text-fraco">
+        <div className="nav-texto mt-auto space-y-3 px-5 text-xs text-fraco">
           <div className="space-y-1.5" aria-live="polite">
             {prontos.length === 0 ? <p>Nenhum celular conectado</p> : prontos.map((d) => (
               <p key={d.serial} className="flex items-center gap-2 text-tinta">
@@ -141,37 +244,13 @@ export default function App() {
               </p>
             ))}
           </div>
-          <p className="flex items-center gap-2">
-            <span className={`inline-block h-2 w-2 rounded-full ${online ? "bg-ok" : "pulsar bg-atencao"}`} aria-hidden />
-            {online ? "Conectado ao CelScan" : "Reconectando..."}
-            {estado?.offline && <span className="rounded bg-superficie-2 px-1">offline</span>}
-          </p>
+          {status}
           <AvisoAtualizacao />
           <p className="font-mono">v{estado?.versao}</p>
         </div>
       </nav>
 
-      <main id="conteudo" className="bancada flex-1 overflow-auto px-10 py-8" tabIndex={-1}>
-        {erroBackend && (
-          <div className="mb-4 rounded-lg border border-perigo/50 bg-perigo-suave p-3 text-sm text-perigo" role="alert">
-            Não consegui falar com o CelScan ({erroBackend}). Feche e abra o programa. Se continuar, me mande o
-            arquivo celscan.log da pasta .celscan\logs.
-          </div>
-        )}
-        {secao === "balcao" && <Balcao />}
-        {secao === "diagnostico" && <Diagnostico />}
-        {secao === "recuperar" && <Recuperar />}
-        {secao === "resgate" && <Resgate />}
-        {secao === "historico" && <Historico onAbrir={abrirHistorico} />}
-        {secao === "config" && <Configuracoes />}
-        {secao === "varredura" && (
-          fluxo.tela === "conectar" ? <Conectar onEscolher={(serial) => setFluxo({ tela: "modo", serial })} /> :
-          fluxo.tela === "modo" ? <Modo serial={fluxo.serial} onIniciar={(m) => iniciar(fluxo.serial, m)}
-            onVoltar={() => setFluxo({ tela: "conectar" })} onConfig={() => setSecao("config")} /> :
-          fluxo.tela === "varrendo" ? <Varrendo tarefa={fluxo.tarefa} modo={fluxo.modo} onFim={aoTerminar} onCancelado={aoCancelar} /> :
-          <Resultado v={fluxo.v} onNova={() => setFluxo({ tela: "conectar" })} />
-        )}
-      </main>
+      <main id="conteudo" className="bancada flex-1 overflow-auto px-10 py-8" tabIndex={-1}>{conteudo}</main>
       <Avisos />
     </div>
   );

@@ -16,6 +16,12 @@ FIXTURES = os.path.join(AQUI, "fixtures", os.getenv("CELSCAN_FIXTURE", "sintetic
 EST = os.getenv("CELSCAN_FAKE_ESTADO") or os.path.join(AQUI, ".estado")
 os.makedirs(EST, exist_ok=True)
 APK_REAL = os.getenv("APK_TESTE", "/tmp/fdroid.apk")  # qualquer APK real
+APKS = os.getenv("CELSCAN_APKS", "")  # opcional: pasta com <pacote>.apk para cada app ter nome/ícone próprios
+
+
+def apk_de(pkg):
+    alvo = os.path.join(APKS, f"{pkg}.apk") if APKS and pkg else ""
+    return alvo if alvo and os.path.exists(alvo) else APK_REAL
 PACOTES = ["com.whatsapp", "com.systemservice", "com.x8bit.bitwarden", "com.exemplo.jogo"]
 
 
@@ -87,7 +93,8 @@ if a[0] == "exec-out" and "screencap" in a[1]:
 if a[0] == "exec-out":
     m = re.search(r"dd if=(\S+) bs=(\d+) skip=(\d+) count=(\d+)", a[1])
     bs, sk, ct = int(m.group(2)), int(m.group(3)), int(m.group(4))
-    with open(APK_REAL, "rb") as f:
+    pk = re.search(r"/([\w.]+)-Y==/", m.group(1))
+    with open(apk_de(pk.group(1) if pk else None), "rb") as f:
         f.seek(bs * sk)
         sys.stdout.buffer.write(f.read(bs * ct))
     sys.exit(0)
@@ -153,9 +160,10 @@ if a[0] == "shell":
         m = re.search(r"^\[" + re.escape(chave) + r"\]: \[(.*)\]$", fixture("coleta.txt"), re.M)
         fim(m.group(1) if m else "")
     if "sha256sum" in c:
-        tam = os.path.getsize(APK_REAL)
         for pkg, h in zip(PACOTES, "abcd", strict=True):
-            print(f"@@H\t{tam}\t{h * 64}\t/data/app/~~X==/{pkg}-Y==/base.apk")
+            tam = os.path.getsize(apk_de(pkg))
+            # hash muda conforme o APK servido, para o cache de nomes/ícones não misturar apps
+            print(f"@@H\t{tam}\t{(h * 56) + format(tam % 2**32, '08x')}\t/data/app/~~X==/{pkg}-Y==/base.apk")
         fim()
     if c.startswith("pm path"):
         fim("package:/data/app/~~X==/" + c.split()[-1] + "-Y==/base.apk")

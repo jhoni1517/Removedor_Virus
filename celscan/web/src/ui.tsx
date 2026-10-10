@@ -30,8 +30,8 @@ export function Botao({
   );
 }
 
-export function Cartao({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`realce rounded-xl border border-linha bg-superficie shadow-[var(--sombra)] ${className}`}>{children}</section>;
+export function Cartao({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
+  return <section id={id} className={`cartao realce rounded-xl border border-linha bg-superficie shadow-[var(--sombra)] ${className}`}>{children}</section>;
 }
 
 /** Miniatura do celular conectado: moldura desenhada (sem internet) com a marca e o modelo na tela. */
@@ -162,4 +162,70 @@ export function Avisos() {
 
 export function Vazio({ children }: { children: ReactNode }) {
   return <p className="rounded-lg border border-dashed border-linha p-6 text-center text-fraco">{children}</p>;
+}
+
+/** Ícone real do app (PNG/WebP/SVG); sem ícone, uma inicial com cor estável por pacote. */
+export function IconeApp({ nome, pacote, icone, tamanho = 40 }: { nome?: string | null; pacote: string; icone?: string | null; tamanho?: number }) {
+  const matiz = [...pacote].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  return (
+    <span className="icone-app grid shrink-0 place-items-center overflow-hidden" aria-hidden
+      style={{ width: tamanho, height: tamanho, background: icone ? "transparent" : `hsl(${matiz} 38% 42%)` }}>
+      {icone ? <img src={icone} alt="" className="h-full w-full object-contain" loading="lazy" />
+        : <span className="font-bold text-white" style={{ fontSize: tamanho * 0.45 }}>{(nome || pacote)[0]?.toUpperCase()}</span>}
+    </span>
+  );
+}
+
+export function nomeApp(r: { nome?: string | null; pacote: string }): string {
+  return r.nome && r.nome !== r.pacote ? r.nome : r.pacote.split(".").filter((p) => !["com", "br", "org", "android", "app"].includes(p)).pop()
+    ?.replace(/[_-]/g, " ").replace(/^./, (c) => c.toUpperCase()) ?? r.pacote;
+}
+
+export function dataBr(iso?: string | null, hora = false): string {
+  if (!iso) return "—";
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR") + (hora ? ` ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "");
+}
+
+export function quando(seg?: number | null): string {
+  if (seg == null) return "—";
+  if (seg < 120) return "agora há pouco";
+  if (seg < 3600) return `há ${Math.floor(seg / 60)} min`;
+  if (seg < 86400) return `há ${Math.floor(seg / 3600)} h`;
+  return `há ${Math.floor(seg / 86400)} dia(s)`;
+}
+
+/** Raio-X: a tela do celular desenhada com os ícones reais; os perigosos ganham anel e selo. */
+export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
+  apps: { pacote: string; nome: string | null; icone: string | null; nivel: string; score: number; sistema: boolean }[];
+  aoEscolher?: (pacote: string) => void; removidos?: Set<string>;
+}) {
+  const lista = [...apps].filter((a) => !a.sistema).sort((a, b) => b.score - a.score).slice(0, 24);
+  const vermelhos = lista.filter((a) => a.nivel === "ALTO" && !removidos.has(a.pacote)).length;
+  const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <figure className="raio-x" aria-label="Raio-X dos apps do celular">
+      <div className="raio-x-tela">
+        <p className="raio-x-hora numeros">{hora}</p>
+        <p className="raio-x-legenda">{vermelhos ? `${vermelhos} app(s) em vermelho` : "Nenhum app em vermelho"}</p>
+        <ul className="raio-x-grade">
+          {lista.map((a) => (
+            <li key={a.pacote}>
+              <button type="button" onClick={() => aoEscolher?.(a.pacote)} data-nivel={a.nivel}
+                className={removidos.has(a.pacote) ? "removido" : ""} title={`${nomeApp(a)}: risco ${a.score}`}>
+                <span className="relative">
+                  <IconeApp nome={a.nome} pacote={a.pacote} icone={a.icone} tamanho={46} />
+                  {(a.nivel === "ALTO" || a.nivel === "MÉDIO") && !removidos.has(a.pacote) &&
+                    <i className={`raio-x-selo ${a.nivel === "MÉDIO" ? "medio" : ""}`}>{a.score}</i>}
+                </span>
+                <span className="raio-x-nome">{nomeApp(a)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <figcaption>{apps.filter((a) => !a.sistema).length} apps analisados. Toque num ícone para ver os detalhes.</figcaption>
+    </figure>
+  );
 }
