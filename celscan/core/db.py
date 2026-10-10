@@ -61,11 +61,44 @@ def _agora() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+COPIAS = DIR / "copias_banco"
+
+
+def copia_de_seguranca(origem: Path | str | None = None, manter: int = 7, motivo: str = "diaria") -> Path | None:
+    """Cópia consistente do banco (API de backup do SQLite) em ~/.celscan/copias_banco; guarda as últimas `manter`.
+
+    A diária só é feita uma vez por dia. Histórico, clientes e ordens de serviço não se perdem se o arquivo
+    corromper ou uma atualização der errado."""
+    origem = Path(origem or ARQUIVO)
+    if not origem.exists() or origem.stat().st_size == 0:
+        return None
+    COPIAS.mkdir(parents=True, exist_ok=True)
+    destino = COPIAS / f"celscan-{datetime.now():%Y%m%d}-{motivo}.db"
+    if motivo == "diaria" and destino.exists():
+        return destino
+    fonte = sqlite3.connect(str(origem))
+    alvo = sqlite3.connect(str(destino))
+    try:
+        fonte.backup(alvo)
+    finally:
+        alvo.close()
+        fonte.close()
+    for velha in sorted(COPIAS.glob("celscan-*.db"))[:-manter]:
+        velha.unlink(missing_ok=True)
+    return destino
+
+
 def conectar(caminho: Path | str | None = None) -> sqlite3.Connection:
-    con = sqlite3.connect(str(caminho or ARQUIVO), check_same_thread=False)
+    # timeout: várias tarefas gravam ao mesmo tempo (varredura + remoção); espera em vez de "database is locked"
+    con = sqlite3.connect(str(caminho or ARQUIVO), check_same_thread=False, timeout=15)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     versao = con.execute("PRAGMA user_version").fetchone()[0]
+    if 0 < versao < len(MIGRACOES):  # antes de mudar o esquema, guarda uma cópia
+        try:
+            copia_de_seguranca(caminho, motivo=f"antes-v{len(MIGRACOES)}")
+        except sqlite3.Error:
+            pass
     for i, sql in enumerate(MIGRACOES[versao:], start=versao + 1):
         con.executescript(sql)
         con.execute(f"PRAGMA user_version = {i}")

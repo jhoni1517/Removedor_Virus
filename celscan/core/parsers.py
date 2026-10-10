@@ -418,3 +418,10 @@ def rede(txt: str) -> dict[str, object]:
 def home(txt: str) -> str | None:
     achados = re.findall(r"^\s*([\w.]+)/[\w.$]+\s*$", txt, re.M)
     return achados[-1] if achados else None
+
+
+def teclado(txt: str) -> str | None:
+    """'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME' -> pacote do teclado."""
+    v = (txt or "").strip().splitlines()[0].strip() if (txt or "").strip() else ""
+    pkg = v.split("/")[0]
+    return pkg if pkg and pkg != "null" and re.fullmatch(r"[\w.]+", pkg) else None

@@ -6,11 +6,13 @@ import shlex
 
 from celscan.acoes import quarentena
 from celscan.core.adb import Aparelho
+from celscan.core.seguranca import essencial, exigir_pacote
 
 
 def neutralizar(ap: Aparelho, pkg: str, pasta, admins: list[str]) -> list[str]:
     """Tira os "poderes" do app antes de remover. Tudo fica registrado para desfazer."""
     avisos = []
+    exigir_pacote(pkg)
     ap.sh(f"am force-stop {pkg}")
     for chave in ("enabled_accessibility_services", "enabled_notification_listeners"):
         atual = quarentena.ler_setting(ap, "secure", chave)
@@ -31,7 +33,10 @@ def neutralizar(ap: Aparelho, pkg: str, pasta, admins: list[str]) -> list[str]:
 
 def remover(ap: Aparelho, r: dict) -> tuple[bool, str]:
     """Remove o app. O id da quarentena fica em r["quarentena_id"] (para desfazer)."""
-    pkg = r["pacote"]
+    pkg = exigir_pacote(r["pacote"])
+    if essencial(pkg) or r.get("essencial"):
+        return False, ("não removido: é um app essencial do Android (sem ele o celular pode travar, ficar sem "
+                       "tela inicial ou sem teclado)")
     pasta = quarentena.criar(ap, pkg, r, copiar_apk=True)
     r["quarentena_id"] = pasta.name
     avisos = neutralizar(ap, pkg, pasta, r.get("admins") or [])

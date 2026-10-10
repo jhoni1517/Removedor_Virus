@@ -26,6 +26,11 @@ def subir(porta: int = 0) -> tuple[uvicorn.Server, str]:
     """Inicia o servidor numa thread e devolve (servidor, url com token)."""
     token = secrets.token_urlsafe(24)
     porta = porta or porta_livre()
+    try:  # cópia diária do histórico/clientes (uma por dia, guarda 7)
+        from celscan.core import db
+        db.copia_de_seguranca()
+    except Exception as e:  # nunca impede o programa de abrir
+        LOGGER.info("cópia do banco não feita: %s", e)
     # log_config=None: no programa com janela não existe console para o uvicorn escrever.
     servidor = uvicorn.Server(uvicorn.Config(criar_app(token), host="127.0.0.1", port=porta, log_level="warning",
                                              log_config=None))

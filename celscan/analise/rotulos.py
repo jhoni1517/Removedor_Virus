@@ -28,7 +28,8 @@ logging.getLogger("pyaxmlparser").setLevel(logging.ERROR)  # avisos internos de 
 CACHE = DIR / "icones"
 NS = "{http://schemas.android.com/apk/res/android}"
 MAX_ICONE = 512 * 1024
-VERSAO_CACHE = 3
+MAX_ENTRADA = 48 * 1024 * 1024  # teto por arquivo lido do APK (o resources.arsc dos maiores apps fica em ~20 MB)
+VERSAO_CACHE = 4
 
 # Classes de SDKs de anúncio que abrem tela cheia (intersticial / pop-up)
 SDK_ANUNCIO = {
@@ -73,6 +74,8 @@ class Rotulo:
     gatilhos: list[str] = field(default_factory=list)
     disfarces: list[str] = field(default_factory=list)  # nomes de atalhos de ícone desativados
     anuncio_escondido: bool = False  # tela de anúncio fora da lista de recentes
+    nome_truque: bool = False  # o nome tinha caracteres invisíveis ou de inversão de texto
+    sem_rotulo: bool = False  # o APK foi lido, mas não tem nome para mostrar
 
 
 class _ZipRemoto:
@@ -112,8 +115,10 @@ class _ZipRemoto:
     def tamanho_de(self, nome: str) -> int:
         return self._diretorio[nome][1]
 
-    def ler_arquivo(self, nome: str) -> bytes:
+    def ler_arquivo(self, nome: str, limite: int = MAX_ENTRADA) -> bytes:
         off_local, tam_comp, metodo = self._diretorio[nome]
+        if tam_comp > limite:
+            raise ValueError(f"{nome} grande demais ({tam_comp // 1048576} MB)")
         # uma leitura só: cabeçalho local + margem para o "extra" (o zipalign usa para alinhar) + dados
         bloco = self.ler(off_local, 30 + 1024 + tam_comp)
         n_nome, n_extra = struct.unpack_from("<HH", bloco, 26)
@@ -121,8 +126,14 @@ class _ZipRemoto:
         dados = bloco[ini:ini + tam_comp]
         if len(dados) < tam_comp:
             dados += self.ler(off_local + ini + len(dados), tam_comp - len(dados))
-        # método 8 = deflate cru (sem cabeçalho zlib): wbits negativo
-        return dados if metodo == 0 else zlib.decompress(dados, -15)
+        if metodo == 0:
+            return dados
+        # método 8 = deflate cru (sem cabeçalho zlib). Com teto: um APK malicioso não estoura a memória
+        d = zlib.decompressobj(-15)
+        saida = d.decompress(dados, limite)
+        if d.unconsumed_tail:
+            raise ValueError(f"{nome} descomprimido passaria de {limite // 1048576} MB")
+        return saida
 
 
 def _resolver(arsc, ref: str):
@@ -327,8 +338,11 @@ def analisar(z: _ZipRemoto, pacote: str = "") -> Rotulo:
     if principal is not None:
         rotulo = principal.get(NS + "label") or rotulo
         icone = principal.get(NS + "icon") or icone
-    r.nome = _texto(arsc, rotulo) or ""
-    r.disfarces = sorted({d for d in (_texto(arsc, a.get(NS + "label")) for a in desativadas) if d and d != r.nome})
+    from celscan.core.seguranca import limpar_nome
+    nome, r.nome_truque = limpar_nome(_texto(arsc, rotulo))
+    r.nome = nome or ""
+    disf = (limpar_nome(_texto(arsc, a.get(NS + "label")))[0] for a in desativadas)
+    r.disfarces = sorted({d for d in disf if d and d != r.nome})
 
     sdks, gatilhos = set(), set()
     for comp in app:
@@ -417,6 +431,7 @@ def obter(ap, pacote: str, apk: str, tamanho: int, sha256: str | None) -> Rotulo
     except Exception as e:
         LOGGER.info("rótulo de %s indisponível: %s", pacote, e)
         r, ok = Rotulo(pacote, ""), False
+    r.sem_rotulo = ok and not r.nome
     if sha256 and ok and r.nome:  # sem nome lido do APK não grava: tenta de novo na próxima varredura
         _gravar_cache(sha256, r)
     r.nome = r.nome or pacote

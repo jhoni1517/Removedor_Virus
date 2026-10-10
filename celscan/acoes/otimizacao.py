@@ -204,6 +204,11 @@ def sugestoes_debloat(ap, nivel="recomendado"):
 
 
 def desativar(ap, pkg):
+    from celscan.core.seguranca import essencial, exigir_pacote
+
+    exigir_pacote(pkg)
+    if essencial(pkg):
+        return False  # nunca desativa app essencial, mesmo que alguma lista sugira
     pasta = quarentena.criar(ap, pkg, {"motivos": ["debloat"]}, copiar_apk=False)
     out = ap.sh(f"pm disable-user --user 0 {pkg}", erro=True)
     if "disabled" in out:

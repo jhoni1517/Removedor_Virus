@@ -12,6 +12,7 @@ from celscan.analise import certificados as certificados_mod
 from celscan.analise import pix, rotulos
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
+from celscan.core import seguranca
 from celscan.config import LOJAS, SMS_CONHECIDOS
 from celscan.core.coleta import AppBruto, DadosAparelho
 
@@ -70,9 +71,35 @@ def quando(seg: float | None) -> str:
     return f"há {int(seg // 86400)} dia(s)"
 
 
-def origem_legivel(app: AppBruto) -> str:
+def relacoes(dados: DadosAparelho) -> dict[str, Any]:
+    """Quem instalou quem (droppers) e apps de fora da loja que chegaram em lote. Calculado uma vez."""
+    cache = getattr(dados, "_relacoes", None)
+    if cache is not None:
+        return cache
+    filhos: dict[str, list[str]] = {}
+    for pkg, app in dados.apps.items():
+        for pai in {app.instalador, app.origem} - {None, "", pkg}:
+            if pai in dados.apps and not dados.apps[pai].sistema and pai not in LOJAS:
+                filhos.setdefault(pai, []).append(pkg)
+    fora = sorted(((a.instalado, p) for p, a in dados.apps.items()
+                   if a.instalado and not a.sistema and (a.instalador or "") not in LOJAS), key=lambda x: x[0])
+    lote: dict[str, list[str]] = {}
+    for t, pkg in fora:  # outros apps de fora da loja instalados até 10 min antes ou depois
+        vizinhos = [q for t2, q in fora if q != pkg and abs((t2 - t).total_seconds()) <= 600]
+        if len(vizinhos) >= 2:
+            lote[pkg] = vizinhos
+    rel = {"filhos": filhos, "lote": lote}
+    try:
+        dados._relacoes = rel  # type: ignore[attr-defined]
+    except AttributeError:
+        pass
+    return rel
+
+
+def origem_legivel(app: AppBruto, dados: DadosAparelho | None = None) -> str:
     if app.origem:
-        return ORIGEM.get(app.origem, f"aberto pelo app {app.origem}")
+        pai = dados.apps.get(app.origem) if dados else None
+        return ORIGEM.get(app.origem, f"aberto pelo app {(pai.nome if pai and pai.nome else app.origem)}")
     return INSTALADORES.get(app.instalador or "", app.instalador or "origem desconhecida")
 
 
@@ -153,7 +180,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         if sem_icone:
             a.append(ra["sem_icone"].achado())
         if not loja:
-            a.append(ra["fora_da_loja"].achado(origem_legivel(app)))
+            a.append(ra["fora_da_loja"].achado(origem_legivel(app, dados)))
     imitado = pix.imitacao(pkg) if not app.sistema and not loja else None
     if imitado:
         a.append(ra["imita_app_conhecido"].achado(imitado))
@@ -161,6 +188,16 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         a.append(ra["imita_pelo_nome"].achado(pelo_nome))
     if not app.sistema and not loja and (finge := pix.finge_sistema(pkg, app.nome)):
         a.append(ra["finge_sistema"].achado(finge))
+    if not app.sistema and app.nome_truque:
+        a.append(ra["nome_com_truque"].achado())
+    if not app.sistema and not loja and app.sem_rotulo:
+        a.append(ra["sem_nome"].achado())
+    rel = relacoes(dados)
+    if pkg in rel["filhos"]:
+        nomes = [dados.apps[f].nome or f for f in rel["filhos"][pkg]]
+        a.append(ra["instalou_outros"].achado(", ".join(sorted(nomes)[:4]) + ("..." if len(nomes) > 4 else "")))
+    if pkg in rel["lote"]:
+        a.append(ra["lote_suspeito"].achado(f"{len(rel['lote'][pkg])} outros apps de fora da loja"))
     for disf in app.disfarces[:1]:
         a.append((ra["disfarce_escondido"] if sem_icone else ra["disfarce"]).achado(disf))
     # anúncios: pop-ups vistos no histórico do Android e apps preparados para isso
@@ -227,7 +264,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "nome": app.nome, "icone": app.icone,
         "atualizado": app.atualizado.isoformat() if app.atualizado else None,
         "ultimo_uso": app.ultimo_uso.isoformat() if app.ultimo_uso else None,
-        "origem": None if loja or app.sistema else origem_legivel(app),
+        "origem": None if loja or app.sistema else origem_legivel(app, dados),
+        "essencial": seguranca.essencial(pkg, {dados.home or "", dados.teclado or ""}),
         "tamanho": app.tamanho, "sem_icone": sem_icone, "disfarces": app.disfarces,
         "sensores": dict(sorted(app.sensores.items(), key=lambda x: x[1])),
         "anuncios": {"tela_cheia": an.get("tela_cheia", 0), "fora_do_app": an.get("fora_do_app", 0),

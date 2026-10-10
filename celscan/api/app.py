@@ -15,24 +15,26 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
 from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
+from celscan.core import seguranca
 from celscan.api.tarefas import Gerenciador
 from celscan.core import adb, agente, balcao, db, log, preferencias
 
 WEB = config.PACOTE / "web" / "dist"
-HOSTS = ("127.0.0.1", "localhost", "testserver")
+HOSTS = ("127.0.0.1", "localhost")
+HOSTS_TESTE = ("testserver",)  # nome usado pelo TestClient; só vale quando o app é criado para testes
 MARCAS: dict[str, Any] = yaml.safe_load((config.DADOS / "conexao.yaml").read_text(encoding="utf-8"))
 RESGATE: dict[str, Any] = yaml.safe_load((config.DADOS / "resgate.yaml").read_text(encoding="utf-8"))
 
@@ -46,6 +48,21 @@ def marca_de(fabricante: str | None) -> str:
 
 
 # ---------------------------------------------------------------- modelos de entrada
+
+def _pacote(v: str) -> str:
+    if not seguranca.pacote_valido(v):
+        raise ValueError("nome de pacote inválido")
+    return v
+
+
+def _id_quarentena(v: str) -> str:
+    if not seguranca.id_quarentena_valido(v):
+        raise ValueError("ID da quarentena inválido")
+    return v
+
+
+Pacote = Annotated[str, AfterValidator(_pacote)]
+
 
 class PedidoVarredura(BaseModel):
     serial: str
@@ -101,7 +118,7 @@ class PedidoEsquecidos(BaseModel):
 
 class PedidoDebloat(BaseModel):
     serial: str
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
 
 
 class PedidoLimpeza(BaseModel):
@@ -112,20 +129,21 @@ class PedidoLimpeza(BaseModel):
 class PedidoRemocao(BaseModel):
     serial: str
     varredura_id: int
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
     ciente_vitima: bool = False  # a pessoa leu o aviso de que remover app espião pode alertar quem instalou
+    confirmar_sistema: bool = False  # apps de fábrica só saem com confirmação explícita
 
 
 class PedidoEvidencias(BaseModel):
     serial: str
     varredura_id: int
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
     print_tela: bool = True
 
 
 class PedidoDesfazer(BaseModel):
     serial: str
-    quarentena_id: str
+    quarentena_id: Annotated[str, AfterValidator(_id_quarentena)]
 
 
 class PedidoConfig(BaseModel):
@@ -172,7 +190,7 @@ class PedidoBackup(BaseModel):
 
 class PedidoPermissoes(BaseModel):
     serial: str
-    pacote: str
+    pacote: Pacote
     acoes: list[str] = Field(default_factory=list)
     revogar: list[str] = Field(default_factory=list)
 
@@ -283,11 +301,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     app = FastAPI(title="CelScan", version=__version__, lifespan=ciclo, docs_url=None, redoc_url=None)
     app.state.token, app.state.tarefas, app.state.aparelhos = token, tarefas, aparelhos
+    app.state.testes = "PYTEST_CURRENT_TEST" in os.environ  # libera o host "testserver" só no pytest
 
     @app.middleware("http")
     async def proteger(request: Request, chamar):
         host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
-        if host not in HOSTS:
+        if host not in HOSTS and not (app.state.testes and host in HOSTS_TESTE):
             return JSONResponse({"detail": "host não permitido"}, status_code=403)
         if request.url.path.startswith("/api/"):
             recebido = request.headers.get("x-celscan-token") or request.query_params.get("t")
@@ -390,6 +409,14 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         if faltando:
             raise HTTPException(422, f"Apps fora desta varredura: {', '.join(faltando)}")
         alvos = [dict(por_pacote[x]) for x in p.pacotes]
+        bloqueados = [a["pacote"] for a in alvos if seguranca.essencial(a["pacote"]) or a.get("essencial")]
+        if bloqueados:
+            raise HTTPException(422, "Estes apps são essenciais do Android e não podem ser removidos (o celular "
+                                     "pode travar ou ficar sem tela inicial/teclado): " + ", ".join(bloqueados))
+        de_fabrica = [a["pacote"] for a in alvos if a.get("sistema")]
+        if de_fabrica and not p.confirmar_sistema:
+            raise HTTPException(409, "SISTEMA: estes apps vieram de fábrica. Remover pode tirar funções do aparelho; "
+                                     "confirme (confirmar_sistema) para continuar: " + ", ".join(de_fabrica))
         espioes = [a["pacote"] for a in alvos if evidencias.eh_vigilancia(a)]
         if espioes and not p.ciente_vitima:
             raise HTTPException(409, "MODO_VITIMA: remover app espião pode alertar quem instalou. "

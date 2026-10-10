@@ -152,8 +152,12 @@ def listar():
 
 
 def restaurar(ap, ident):
+    from celscan.core.seguranca import id_quarentena_valido
+
+    if not id_quarentena_valido(ident):
+        return False, "ID da quarentena inválido"
     pasta = DIRQ / ident
-    if not (pasta / "meta.json").exists():
+    if pasta.resolve().parent != DIRQ.resolve() or not (pasta / "meta.json").exists():
         return False, "ID não encontrado na quarentena"
     meta = _ler(pasta)
     pkg, acao = meta["pacote"], meta["acao"]

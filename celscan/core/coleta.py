@@ -35,6 +35,7 @@ sec launcher; cmd package query-activities --brief -a android.intent.action.MAIN
 sec idle; dumpsys deviceidle whitelist 2>&1
 sec su; for f in /system/bin/su /system/xbin/su /sbin/su /su/bin/su /debug_ramdisk/su; do [ -e "$f" ] && echo "$f"; done
 sec pkgdump; dumpsys package packages 2>&1
+sec teclado; settings get secure default_input_method
 sec home; cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>&1
 sec rede; settings get global private_dns_mode; settings get global private_dns_specifier; settings get secure always_on_vpn_app; dumpsys connectivity 2>/dev/null | grep -ciE 'Transports: [A-Z|]*VPN|VPN CONNECTED'
 sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed='
@@ -119,6 +120,8 @@ class AppBruto:
     sensores: dict[str, float] = field(default_factory=dict)  # câmera/microfone/... -> segundos desde o uso
     ultimo_uso: datetime | None = None
     enviado_mb: float | None = None  # dados enviados pela internet desde a última carga completa
+    nome_truque: bool = False  # nome com caracteres invisíveis/de inversão de texto
+    sem_rotulo: bool = False  # APK lido, mas sem nome para mostrar
 
 
 @dataclass
@@ -141,6 +144,7 @@ class DadosAparelho:
     notificacoes: dict[str, int] = field(default_factory=dict)  # pacote -> notificações que tocaram
     rede: dict[str, object] = field(default_factory=dict)
     home: str | None = None
+    teclado: str | None = None
     periodo_uso: tuple[datetime, datetime] | None = None
 
     def info(self) -> dict[str, str]:
@@ -208,6 +212,7 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         notificacoes=notificacoes,
         rede=parsers.rede(s.get("rede", "")),
         home=parsers.home(s.get("home", "")),
+        teclado=parsers.teclado(s.get("teclado", "")),
         periodo_uso=(telas[0][0], telas[-1][0]) if telas else None,
     )
     from celscan.analise.rotulos import sdk_de
@@ -254,6 +259,6 @@ def ler_rotulo(ap: Aparelho, app: AppBruto) -> None:
         app.nome = r.nome
         app.icone = rotulos.icone_data_uri(r)
         app.sdks_anuncio, app.gatilhos, app.disfarces = r.sdks_anuncio, r.gatilhos, r.disfarces
-        app.anuncio_escondido = r.anuncio_escondido
+        app.anuncio_escondido, app.nome_truque, app.sem_rotulo = r.anuncio_escondido, r.nome_truque, r.sem_rotulo
     except Exception:
         pass

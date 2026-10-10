@@ -155,6 +155,26 @@ apps:
     titulo: "Usou {detalhe}"
     significa: "Um app escondido ou de fora da loja acessou câmera, microfone, localização ou SMS nos últimos dias."
     fazer: "Se você não abriu esse app nesse período, remova."
+  nome_com_truque:
+    peso: 40
+    titulo: "Nome com caracteres escondidos"
+    significa: "O nome do app tem caracteres invisíveis ou que invertem o texto. É um truque para o nome parecer outro na tela."
+    fazer: "Apps sérios não fazem isso. Remova, a não ser que você saiba exatamente o que é."
+  instalou_outros:
+    peso: 35
+    titulo: "Instalou outros apps: {detalhe}"
+    significa: "Este app, que não é uma loja oficial, colocou outros apps no celular. É o comportamento de um 'dropper', que baixa vírus em etapas."
+    fazer: "Remova este app e também os apps que ele instalou, a não ser que você conheça e confie em todos."
+  lote_suspeito:
+    peso: 15
+    titulo: "Instalado junto com {detalhe}"
+    significa: "Vários apps de fora da loja apareceram no celular praticamente ao mesmo tempo. Isso acontece quando um vírus instala um pacote de apps de uma vez."
+    fazer: "Confira se você instalou esses apps de propósito. Se não, remova todos."
+  sem_nome:
+    peso: 20
+    titulo: "App sem nome"
+    significa: "O app não tem um nome para mostrar. Apps normais sempre têm; apps maliciosos às vezes deixam em branco para passar despercebidos."
+    fazer: "Se você não sabe o que é, remova."
   envio_dados:
     peso: 25
     titulo: "Enviou {detalhe} pela internet"

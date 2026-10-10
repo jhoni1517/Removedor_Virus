@@ -194,7 +194,12 @@ export function AbaTodos({ v, aoAbrir }: { v: Varredura; aoAbrir: (p: string) =>
 
 /** Planilha da lista de apps (abre no Excel com acentos corretos). */
 function exportarCsv(v: Varredura, lista: AppResultado[]) {
-  const cel = (x: unknown) => `"${String(x ?? "").replace(/"/g, '""')}"`;
+  // Nome de app vem do APK (controlado por quem fez o app): "=HYPERLINK(...)" viraria fórmula no Excel.
+  const cel = (x: unknown) => {
+    let t = String(x ?? "");
+    if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+    return `"${t.replace(/"/g, '""')}"`;
+  };
   const linhas = [["App", "Pacote", "Versão", "Instalado em", "Último uso", "Origem", "Nível", "Pontos", "Motivos"].map(cel).join(";"),
     ...lista.map((r) => [nomeApp(r), r.pacote, r.versao, dataBr(r.instalado), dataBr(r.ultimo_uso),
       r.loja ?? (r.sistema ? "Sistema" : r.origem ?? "Fora da loja"), r.nivel, r.score, r.motivos.join(" | ")].map(cel).join(";"))];
