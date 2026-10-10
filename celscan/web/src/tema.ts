@@ -21,8 +21,12 @@ export const MODELOS: { id: string; nome: string; descricao: string }[] = [
   { id: "cliente", nome: "Modo cliente", descricao: "Para uma segunda tela virada ao cliente: nota, Raio-X e o que foi encontrado, atualizando sozinho." },
 ];
 
+export function modeloValido(modelo: string | null | undefined): string {
+  return MODELOS.some((m) => m.id === modelo) ? (modelo as string) : "estudio";
+}
+
 export function aplicarModelo(modelo: string) {
-  document.documentElement.setAttribute("data-modelo", MODELOS.some((m) => m.id === modelo) ? modelo : "estudio");
+  document.documentElement.setAttribute("data-modelo", modeloValido(modelo));
 }
 
 // Temas que usam o atributo data-tema (em vez da classe .escuro)

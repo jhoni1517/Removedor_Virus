@@ -166,6 +166,7 @@ export function AbaTodos({ v, aoAbrir }: { v: Varredura; aoAbrir: (p: string) =>
       <div className="flex flex-wrap gap-2">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome"
           aria-label="Buscar app" className="min-w-[220px] flex-1 rounded-md border border-linha bg-superficie px-3 py-2 text-sm" />
+        <Botao onClick={() => exportarCsv(v, lista)}>Exportar planilha (CSV)</Botao>
         <select value={ordem} onChange={(e) => setOrdem(e.target.value as typeof ordem)} aria-label="Ordenar"
           className="rounded-md border border-linha bg-superficie px-3 py-2 text-sm">
           <option value="risco">Maior risco primeiro</option><option value="nome">Nome (A-Z)</option>
@@ -189,4 +190,18 @@ export function AbaTodos({ v, aoAbrir }: { v: Varredura; aoAbrir: (p: string) =>
       </Cartao>
     </div>
   );
+}
+
+/** Planilha da lista de apps (abre no Excel com acentos corretos). */
+function exportarCsv(v: Varredura, lista: AppResultado[]) {
+  const cel = (x: unknown) => `"${String(x ?? "").replace(/"/g, '""')}"`;
+  const linhas = [["App", "Pacote", "Versão", "Instalado em", "Último uso", "Origem", "Nível", "Pontos", "Motivos"].map(cel).join(";"),
+    ...lista.map((r) => [nomeApp(r), r.pacote, r.versao, dataBr(r.instalado), dataBr(r.ultimo_uso),
+      r.loja ?? (r.sistema ? "Sistema" : r.origem ?? "Fora da loja"), r.nivel, r.score, r.motivos.join(" | ")].map(cel).join(";"))];
+  const blob = new Blob(["\ufeff" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `apps_${v.info.modelo.replace(/\W+/g, "_")}_${v.varredura_id}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

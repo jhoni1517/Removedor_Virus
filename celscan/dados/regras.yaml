@@ -20,6 +20,7 @@ parametros:
   recente_dias: 7
   sensor_dias: 7          # uso de câmera/microfone/etc. por app suspeito considerado recente
   notificacoes_dia: 20    # notificações por dia (média) para considerar excesso
+  envio_mb: 50            # MB enviados por app escondido/de fora da loja para virar alerta
 
 nota:               # nota do aparelho (0-100): começa em 100 e desconta
   aparelho_alto: 25
@@ -154,6 +155,11 @@ apps:
     titulo: "Usou {detalhe}"
     significa: "Um app escondido ou de fora da loja acessou câmera, microfone, localização ou SMS nos últimos dias."
     fazer: "Se você não abriu esse app nesse período, remova."
+  envio_dados:
+    peso: 25
+    titulo: "Enviou {detalhe} pela internet"
+    significa: "Um app escondido ou de fora da loja mandou muitos dados do celular para a internet. Apps espiões enviam fotos, áudios e mensagens assim."
+    fazer: "Se você não usa esse app para mandar arquivos, remova. Se suspeita de espionagem, guarde as provas antes."
   notificacoes_excesso:
     peso: 15
     titulo: "{detalhe}"

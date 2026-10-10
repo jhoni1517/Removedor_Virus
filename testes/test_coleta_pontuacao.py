@@ -64,6 +64,7 @@ def test_origem_sensores_e_datas():
     ss = por["com.systemservice"]
     assert ss["origem"] == "arquivo baixado pelo Chrome"
     assert any(m.startswith("Usou microfone") for m in ss["motivos"])
+    assert "Enviou 150 MB pela internet" in ss["motivos"]
     assert ss["atualizado"].startswith("2026-09-27")
     assert por["com.whatsapp"]["sensores"]["câmera"] == 3600
     assert por["com.whatsapp"]["ultimo_uso"].startswith("2026-09-29")

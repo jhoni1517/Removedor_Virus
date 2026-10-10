@@ -417,9 +417,9 @@ def obter(ap, pacote: str, apk: str, tamanho: int, sha256: str | None) -> Rotulo
     except Exception as e:
         LOGGER.info("rótulo de %s indisponível: %s", pacote, e)
         r, ok = Rotulo(pacote, ""), False
-    r.nome = r.nome or pacote
-    if sha256 and ok:
+    if sha256 and ok and r.nome:  # sem nome lido do APK não grava: tenta de novo na próxima varredura
         _gravar_cache(sha256, r)
+    r.nome = r.nome or pacote
     return r
 
 

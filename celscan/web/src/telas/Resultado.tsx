@@ -25,6 +25,8 @@ const ACOES_APP: [string, string][] = [
   ["sobreposicao", "Bloquear janelas sobre outros apps"],
   ["captura_tela", "Bloquear captura de tela"],
   ["instalar_apps", "Bloquear instalar apps"],
+  ["segundo_plano", "Bloquear em segundo plano"],
+  ["silenciar", "Silenciar notificações"],
   ["parar", "Forçar parada agora"],
 ];
 
@@ -409,6 +411,11 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </div>
       </div>
       {!conectado && <p className="mb-3 text-sm text-fraco">Conecte o celular para remover apps.</p>}
+      {conectado && contagem.ALTO > 1 && (
+        <Botao className="mb-3" onClick={() => setSelecao(new Set(v.resultados.filter((r) => r.nivel === "ALTO" && !r.sistema && !removidos.has(r.pacote)).map((r) => r.pacote)))}>
+          Selecionar os {contagem.ALTO} de risco alto
+        </Botao>
+      )}
       <div className="space-y-3">
         {visiveis.length === 0 ? <Vazio>Nenhum app neste filtro. Ótimo sinal.</Vazio> :
           visiveis.map((r) => (

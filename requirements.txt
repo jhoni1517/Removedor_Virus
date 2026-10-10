@@ -6,6 +6,7 @@ PyYAML>=6.0
 # Interface (Fase 2)
 fastapi>=0.110
 uvicorn>=0.29
+websockets>=12  # sem ela o tempo real (WebSocket) não sobe e a interface cai para consultas a cada 3 s
 qrcode>=7.4
 reportlab>=4.0
 pywebview>=5.0; sys_platform == "win32"

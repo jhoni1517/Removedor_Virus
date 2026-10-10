@@ -165,6 +165,11 @@ if a[0] == "shell":
             # hash muda conforme o APK servido, para o cache de nomes/ícones não misturar apps
             print(f"@@H\t{tam}\t{(h * 56) + format(tam % 2**32, '08x')}\t/data/app/~~X==/{pkg}-Y==/base.apk")
         fim()
+    if "dumpsys activity activities" in c:
+        fim("  mResumedActivity: ActivityRecord{1 u0 com.exemplo.jogo/com.google.android.gms.ads.AdActivity t9}")
+    if "batterystats --checkin" in c:
+        fim("9,0,i,uid,10250,com.systemservice\n9,0,i,uid,10101,com.whatsapp\n"
+            "9,10250,l,nt,0,0,52428800,157286400,1,2,3,4\n9,10101,l,nt,10485760,1048576,20971520,2097152,1,2\n")
     if c.startswith("pm path"):
         fim("package:/data/app/~~X==/" + c.split()[-1] + "-Y==/base.apk")
     # CELSCAN_FAKE_SETTINGS="always_finish_activities=1,zen_mode=2": configurações bagunçadas para a demo

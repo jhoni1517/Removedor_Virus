@@ -182,6 +182,9 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
             seg = app.sensores.get(sensor)
             if seg is not None and seg < limite:
                 a.append(ra["sensor_recente"].achado(f"{sensor} {quando(seg)}"))
+    if (not app.sistema and (sem_icone or not loja) and app.enviado_mb
+            and app.enviado_mb >= par.get("envio_mb", 50)):
+        a.append(ra["envio_dados"].achado(f"{app.enviado_mb:.0f} MB"))
     n_notif = dados.notificacoes.get(pkg, 0)
     if n_notif and pkg not in MENSAGEIROS and not app.sistema:
         dias = max(1, (dados.periodo_uso[1] - dados.periodo_uso[0]).days) if dados.periodo_uso else 1
@@ -230,7 +233,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "anuncios": {"tela_cheia": an.get("tela_cheia", 0), "fora_do_app": an.get("fora_do_app", 0),
                      "ultimo": an["ultimo"].isoformat() if an.get("ultimo") else None,
                      "sdks": sorted(set(app.sdks_anuncio) | set(an.get("sdks") or ())), "gatilhos": app.gatilhos},
-        "notificacoes": n_notif,
+        "notificacoes": n_notif, "enviado_mb": app.enviado_mb,
         "sobreposicao": "SYSTEM_ALERT_WINDOW" in app.appops,
     }
 

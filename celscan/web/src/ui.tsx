@@ -213,7 +213,8 @@ export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
           {lista.map((a) => (
             <li key={a.pacote}>
               <button type="button" onClick={() => aoEscolher?.(a.pacote)} data-nivel={a.nivel}
-                className={removidos.has(a.pacote) ? "removido" : ""} title={`${nomeApp(a)}: risco ${a.score}`}>
+                className={removidos.has(a.pacote) ? "removido" : ""} title={`${nomeApp(a)}: risco ${a.score}`}
+                aria-label={`${nomeApp(a)}, risco ${a.score}${removidos.has(a.pacote) ? ", removido" : ""}`}>
                 <span className="relative">
                   <IconeApp nome={a.nome} pacote={a.pacote} icone={a.icone} tamanho={46} />
                   {(a.nivel === "ALTO" || a.nivel === "MÉDIO") && !removidos.has(a.pacote) &&

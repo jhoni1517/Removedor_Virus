@@ -38,6 +38,7 @@ sec pkgdump; dumpsys package packages 2>&1
 sec home; cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>&1
 sec rede; settings get global private_dns_mode; settings get global private_dns_specifier; settings get secure always_on_vpn_app; dumpsys connectivity 2>/dev/null | grep -ciE 'Transports: [A-Z|]*VPN|VPN CONNECTED'
 sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed='
+sec consumo; dumpsys batterystats --checkin 2>/dev/null | grep -E '^9,[0-9]+,(i,uid|l,nt),'
 sec appops
 for p in $(pm list packages {F} | sed 's/^package://'); do
   echo "@@PKG $p"
@@ -117,6 +118,7 @@ class AppBruto:
     anuncio_escondido: bool = False
     sensores: dict[str, float] = field(default_factory=dict)  # câmera/microfone/... -> segundos desde o uso
     ultimo_uso: datetime | None = None
+    enviado_mb: float | None = None  # dados enviados pela internet desde a última carga completa
 
 
 @dataclass
@@ -168,6 +170,8 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
     ops = parsers.appops(s.get("appops", ""), set(APPOPS_COLETADOS))
     tempos = parsers.appops_tempos(s.get("appops", ""), set(SENSORES))
     telas, ultimo_uso, notificacoes = parsers.uso(s.get("uso", ""))
+    from celscan.acoes.consumo import parse as parse_consumo
+    rede_apps = parse_consumo(s.get("consumo", ""))
     # Apps de sistema atualizados pela loja migram para /data/app e perdem o caminho de sistema; por isso
     # perguntamos ao próprio Android quais são de sistema (pm list packages -s), além de olhar o caminho.
     syspkgs = parsers.desativados(s.get("syspkgs", ""))
@@ -179,7 +183,7 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
             sistema=caminho.startswith(PASTAS_SISTEMA) or pkg in syspkgs,
             perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
             appops=ops.get(pkg, set()), atualizado=d.get("atualizado"), origem=d.get("origem"),
-            ultimo_uso=ultimo_uso.get(pkg),
+            ultimo_uso=ultimo_uso.get(pkg), enviado_mb=(rede_apps.get(pkg) or {}).get("enviado_mb"),
         )
         for op, seg in tempos.get(pkg, {}).items():  # sensores: guarda o uso mais recente por tipo
             nome = SENSORES[op]

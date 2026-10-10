@@ -92,6 +92,9 @@ null
         time="2026-09-29 08:11:00" type=NOTIFICATION_INTERRUPTION package=com.exemplo.jogo channelId=promo flags=0x0
         package=com.whatsapp totalTimeUsed="10:00" lastTimeUsed="2026-09-29 08:00:00" totalTimeVisible="10:00"
         package=com.exemplo.jogo totalTimeUsed="1:00" lastTimeUsed="2026-09-28 21:02:00"
+@@SEC consumo
+9,0,i,uid,10250,com.systemservice
+9,10250,l,nt,0,0,52428800,157286400,1,2
 @@SEC appops
 @@PKG com.whatsapp
 CAMERA: allow; time=+1h ago; duration=+20s
