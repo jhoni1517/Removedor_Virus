@@ -15,6 +15,56 @@ import Resultado from "./telas/Resultado";
 import Varrendo from "./telas/Varrendo";
 import { Avisos } from "./ui";
 
+const ATALHOS: [string, string][] = [
+  ["Alt + 1…7", "Trocar de seção"], ["Ctrl + K", "Procurar um app no resultado"], ["?", "Mostrar esta lista"],
+  ["Esc", "Fechar janelas e diálogos"], ["Tab / Shift + Tab", "Andar pelos botões"],
+];
+
+function Atalhos({ fechar }: { fechar: () => void }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") fechar(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [fechar]);
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) fechar(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="atalhos-titulo" className="entrar w-full max-w-sm rounded-xl border border-linha bg-superficie p-5 shadow-2xl">
+        <h2 id="atalhos-titulo" className="mb-3 font-semibold">Atalhos do teclado</h2>
+        <dl className="space-y-2 text-sm">
+          {ATALHOS.map(([k, o]) => <div key={k} className="flex justify-between gap-4"><dt><kbd className="font-mono">{k}</kbd></dt><dd className="text-fraco">{o}</dd></div>)}
+        </dl>
+        <button autoFocus className="mt-4 w-full rounded-md border border-linha py-1.5 text-sm hover:bg-superficie-2" onClick={fechar}>Fechar</button>
+      </div>
+    </div>
+  );
+}
+
+/** Aviso de fim da varredura: bipe curto (se ligado em Configurações) e título piscando com a janela em segundo plano. */
+export function avisarFim(texto: string) {
+  let som = false;
+  try { som = localStorage.getItem("celscan-som") === "1"; } catch { /* sem storage */ }
+  if (som) {
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (Ctx) {
+        const ctx = new Ctx(), osc = ctx.createOscillator(), vol = ctx.createGain();
+        osc.frequency.value = 880; vol.gain.setValueAtTime(0.15, ctx.currentTime);
+        vol.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(vol).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.35);
+        osc.onended = () => { ctx.close().catch(() => undefined); };
+      }
+    } catch { /* sem áudio */ }
+  }
+  if (document.hidden) {
+    const original = document.title;
+    let n = 0;
+    const id = window.setInterval(() => {
+      document.title = n++ % 2 ? original : `✔ ${texto}`;
+      if (!document.hidden || n > 40) { window.clearInterval(id); document.title = original; }
+    }, 900);
+  }
+}
+
 type Fluxo =
   | { tela: "conectar" }
   | { tela: "modo"; serial: string }
@@ -91,10 +141,14 @@ export default function App() {
   const { estado, online, dispositivos, avisar, erroBackend, modelo, mudarModelo } = useApp();
   const [secao, setSecao] = useState<Secao>("varredura");
   const [fluxo, setFluxo] = useState<Fluxo>({ tela: "conectar" });
+  const [atalhos, setAtalhos] = useState(false);
 
-  // Alt+1..4 muda de seção
+  // Alt+1..7 muda de seção; "?" mostra os atalhos (fora de campos de texto)
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      const digitando = alvo && (alvo.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(alvo.tagName));
+      if (e.key === "?" && !digitando && !e.ctrlKey && !e.altKey) { e.preventDefault(); setAtalhos(true); return; }
       if (!e.altKey) return;
       const i = Number(e.key) - 1;
       if (SECOES[i]) { e.preventDefault(); setSecao(SECOES[i].id); }
@@ -111,15 +165,22 @@ export default function App() {
       avisar({ tipo: "erro", texto: (e as Error).message });
     }
   }, [avisar]);
-  const aoTerminar = useCallback((v: Varredura) => setFluxo({ tela: "resultado", v }), []);
+  const aoTerminar = useCallback((v: Varredura) => {
+    setFluxo({ tela: "resultado", v });
+    avisarFim(`Análise pronta: nota ${v.nota}`);
+  }, []);
   const aoCancelar = useCallback((erro: string) => {
     avisar({ tipo: "erro", texto: erro });
     setFluxo({ tela: "conectar" });
   }, [avisar]);
   const abrirHistorico = useCallback(async (id: number) => {
-    setFluxo({ tela: "resultado", v: await obterVarredura(id) });
-    setSecao("varredura");
-  }, []);
+    try {
+      setFluxo({ tela: "resultado", v: await obterVarredura(id) });
+      setSecao("varredura");
+    } catch (e) {
+      avisar({ tipo: "erro", texto: `Não consegui abrir a varredura ${id}: ${(e as Error).message}` });
+    }
+  }, [avisar]);
 
   const prontos = dispositivos.filter((d) => d.estado === "device");
 
@@ -146,7 +207,7 @@ export default function App() {
       <div className="h-full overflow-auto">
         <main id="conteudo" className="bancada min-h-full px-6 py-8" tabIndex={-1}><ModoCliente /></main>
         {voltarPainel}
-        <Avisos />
+        <Avisos />{atalhos && <Atalhos fechar={() => setAtalhos(false)} />}
       </div>
     );
   }
@@ -158,7 +219,7 @@ export default function App() {
         <header className="assistente-topo"><Marca /><Passos fluxo={fluxo} /></header>
         <main id="conteudo" className="bancada assistente-corpo" tabIndex={-1}>{erro}{telaVarredura}</main>
         {voltarPainel}
-        <Avisos />
+        <Avisos />{atalhos && <Atalhos fechar={() => setAtalhos(false)} />}
       </div>
     );
   }
@@ -209,7 +270,7 @@ export default function App() {
         {modelo === "revista" && barra}
         <main id="conteudo" className="bancada" tabIndex={-1}>{conteudo}</main>
         {modelo === "toque" && barra}
-        <Avisos />
+        <Avisos />{atalhos && <Atalhos fechar={() => setAtalhos(false)} />}
       </div>
     );
   }
@@ -251,7 +312,7 @@ export default function App() {
       </nav>
 
       <main id="conteudo" className="bancada flex-1 overflow-auto px-10 py-8" tabIndex={-1}>{conteudo}</main>
-      <Avisos />
+      <Avisos />{atalhos && <Atalhos fechar={() => setAtalhos(false)} />}
     </div>
   );
 }

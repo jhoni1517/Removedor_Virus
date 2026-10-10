@@ -1,12 +1,25 @@
-import { AlertTriangle, ChevronDown, FileText, Monitor, ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowUp, ChevronDown, Copy, Download, ExternalLink, FileText, MessageCircle, Monitor, RotateCcw, Search,
+  ShieldAlert, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BuscaRapida } from "./BuscaRapida";
+import { ehVigilancia, planoDeAcao } from "../plano";
+
+import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
-import { Botao, Cartao, IconeApp, Medidor, RaioX, Selo, Vazio, dataBr, nomeApp } from "../ui";
+import { Botao, Cartao, Data, IconeApp, Medidor, RaioX, Selo, Vazio, nomeApp, recente, tamanhoLegivel } from "../ui";
 import { AbaAnuncios, AbaInternet, AbaSensores, AbaTodos } from "./AbasResultado";
 
 type Filtro = "alerta" | "ALTO" | "MÉDIO" | "BAIXO" | "todos";
 const FILTROS: [Filtro, string][] = [["alerta", "Com alerta"], ["ALTO", "Alto"], ["MÉDIO", "Médio"], ["BAIXO", "Baixo"], ["todos", "Todos"]];
+type Aba = "problemas" | "todos" | "anuncios" | "sensores" | "internet";
+const ABAS_VALIDAS: Aba[] = ["problemas", "todos", "anuncios", "sensores", "internet"];
+function lerLocal<T extends string>(chave: string, validos: readonly T[], padrao: T): T {
+  try { const x = localStorage.getItem(chave) as T | null; return x && validos.includes(x) ? x : padrao; } catch { return padrao; }
+}
+function gravarLocal(chave: string, valor: string) { try { localStorage.setItem(chave, valor); } catch { /* sem storage */ } }
+
+
 const COR_BORDA: Record<string, string> = { ALTO: "border-l-perigo", "MÉDIO": "border-l-atencao", BAIXO: "border-l-linha" };
 
 function ItemAchado({ a }: { a: Achado }) {
@@ -51,15 +64,27 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold">{nomeApp(r)}</span>
             <Selo nivel={r.nivel} />
+            {recente(r.instalado) && <span className="rounded bg-destaque-suave px-1.5 py-0.5 text-xs font-semibold text-destaque">Novo</span>}
             <span className="numeros font-mono text-xs text-fraco">{r.score} pts</span>
             {removido && <span className="rounded bg-ok-suave px-1.5 py-0.5 text-xs font-semibold text-ok">Removido</span>}
           </div>
-          <p className="truncate font-mono text-xs text-fraco">{r.pacote}</p>
+          <p className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-fraco">
+            <span className="truncate">{r.pacote}</span>
+            <button className="shrink-0 rounded p-0.5 hover:bg-superficie-2" title="Copiar o nome do pacote" aria-label={`Copiar ${r.pacote}`}
+              onClick={() => navigator.clipboard?.writeText(r.pacote)}><Copy size={12} aria-hidden /></button>
+            {!r.sistema && (
+              <a className="inline-flex shrink-0 items-center gap-0.5 font-sans text-destaque hover:underline" target="_blank" rel="noreferrer"
+                href={`https://play.google.com/store/apps/details?id=${encodeURIComponent(r.pacote)}`}
+                title="Abre a página do app na Play Store para conferir quem publica">
+                Play Store <ExternalLink size={11} aria-hidden /></a>
+            )}
+          </p>
           <p className="mt-0.5 text-xs text-fraco">
-            {r.instalado ? `Instalado em ${dataBr(r.instalado)} · ` : ""}
+            {r.instalado && <>Instalado <Data iso={r.instalado} /> · </>}
             {r.loja ? `pela ${r.loja}` : r.sistema ? "app do sistema" : `fora da loja (${r.origem ?? r.instalador ?? "origem desconhecida"})`}
-            {r.ultimo_uso ? ` · último uso ${dataBr(r.ultimo_uso)}` : ""}
+            {r.ultimo_uso && <> · último uso <Data iso={r.ultimo_uso} /></>}
             {r.versao ? ` · versão ${r.versao}` : ""}
+            {r.tamanho ? ` · ${tamanhoLegivel(r.tamanho)}` : ""}
           </p>
           {r.ameaca && (
             <p className="mt-2 flex items-center gap-2 rounded-md bg-perigo-suave px-2 py-1 text-sm font-semibold text-perigo">
@@ -106,10 +131,6 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, removido, po
 
 interface Apoio { aviso: string; passos: { titulo: string; texto: string }[]; contatos: { nome: string; descricao: string; contato: string }[]; lgpd: string }
 
-export function ehVigilancia(ameaca: string | null | undefined): boolean {
-  const a = (ameaca ?? "").toLowerCase();
-  return !!a && ["stalkerware", "spyware", "pegasus", "predator", "espião"].some((p) => a.includes(p));
-}
 
 function PainelVitima({ v, espioes }: { v: Varredura; espioes: AppResultado[] }) {
   const { esperar, avisar } = useApp();
@@ -154,15 +175,43 @@ function PainelVitima({ v, espioes }: { v: Varredura; espioes: AppResultado[] })
   );
 }
 
+/** Mantém o Tab dentro do diálogo e devolve o foco a quem abriu quando fechar. */
+function useFocoPreso(ativo: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ativo) return;
+    const antes = document.activeElement as HTMLElement | null;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !ref.current) return;
+      const foco = [...ref.current.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])")]
+        .filter((el) => !el.hasAttribute("disabled"));
+      if (!foco.length) return;
+      const [primeiro, ultimo] = [foco[0], foco[foco.length - 1]];
+      if (e.shiftKey && document.activeElement === primeiro) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro.focus(); }
+    };
+    document.addEventListener("keydown", tecla);
+    return () => { document.removeEventListener("keydown", tecla); antes?.focus?.(); };
+  }, [ativo]);
+  return ref;
+}
+
 function Confirmar({ v, pacotes, confirmar, cancelar }: { v: Varredura; pacotes: string[]; confirmar: (ciente: boolean) => void; cancelar: () => void }) {
   const espioes = v.resultados.filter((r) => pacotes.includes(r.pacote) && ehVigilancia(r.ameaca));
   const [ciente, setCiente] = useState(false);
+  const ref = useFocoPreso(true);
+  const porPacote = new Map(v.resultados.map((r) => [r.pacote, r]));
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-confirmar"
+    <div ref={ref} className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-confirmar"
       onKeyDown={(e) => e.key === "Escape" && cancelar()}>
       <Cartao className="entrar max-h-[90vh] w-full max-w-xl overflow-auto p-6 shadow-xl">
         <h2 id="titulo-confirmar" className="text-lg font-semibold">Remover {pacotes.length} app(s)?</h2>
-        <ul className="my-3 max-h-40 overflow-auto font-mono text-sm">{pacotes.map((p) => <li key={p}>{p}</li>)}</ul>
+        <ul className="my-3 max-h-48 space-y-1.5 overflow-auto text-sm">{pacotes.map((p) => {
+          const r = porPacote.get(p);
+          return <li key={p} className="flex items-center gap-2">
+            {r && <IconeApp nome={r.nome} pacote={p} icone={r.icone} tamanho={24} />}
+            <span className="font-medium">{r ? nomeApp(r) : p}</span><span className="truncate font-mono text-xs text-fraco">{p}</span></li>;
+        })}</ul>
         {espioes.length > 0 && <PainelVitima v={v} espioes={espioes} />}
         <p className="text-sm text-fraco">
           Antes de remover, o CelScan guarda uma cópia de cada app na quarentena e tira as permissões perigosas.
@@ -232,22 +281,107 @@ function DesdeUltimaVisita({ vid }: { vid: number }) {
 
 export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => void }) {
   const { dispositivos, esperar, avisar } = useApp();
-  const [filtro, setFiltro] = useState<Filtro>("alerta");
+  const [filtro, setFiltroEstado] = useState<Filtro>(() => lerLocal("celscan-filtro", FILTROS.map(([f]) => f), "alerta"));
+  const setFiltro = (f: Filtro) => { setFiltroEstado(f); gravarLocal("celscan-filtro", f); };
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   const [removidos, setRemovidos] = useState<Set<string>>(new Set());
   const [confirmando, setConfirmando] = useState<string[] | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const [aba, setAba] = useState<"problemas" | "todos" | "anuncios" | "sensores" | "internet">("problemas");
+  const [aba, setAbaEstado] = useState<Aba>(() => lerLocal("celscan-aba", ABAS_VALIDAS, "problemas"));
+  const setAba = (a: Aba) => { setAbaEstado(a); gravarLocal("celscan-aba", a); };
+  const [tipo, setTipo] = useState<Categoria | null>(null);
   const [foco, setFoco] = useState<string | null>(null);
+  const [busca, setBusca] = useState<string | null>(null);
+  const [desfeitos, setDesfeitos] = useState<{ pacote: string; quarentena_id: string }[]>([]);
+  const [topo, setTopo] = useState(false);
   const conectado = dispositivos.some((d) => d.serial === v.info.serial && d.estado === "device");
+  const nomeDe = (pkg: string) => { const r = v.resultados.find((x) => x.pacote === pkg); return r ? nomeApp(r) : pkg; };
+
+  // Título da janela com o aparelho e a nota (aparece na barra de tarefas)
+  useEffect(() => {
+    const antes = document.title;
+    document.title = `CelScan — ${v.info.modelo}: ${v.nota}/100`;
+    return () => { document.title = antes; };
+  }, [v]);
+  // Ctrl+K: busca rápida de app
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setBusca(""); }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, []);
+  // Botão "voltar ao topo" quando a lista é longa
+  useEffect(() => {
+    const main = document.getElementById("conteudo");
+    const rolar = () => setTopo((main?.scrollTop ?? window.scrollY) > 900);
+    main?.addEventListener("scroll", rolar);
+    window.addEventListener("scroll", rolar);
+    return () => { main?.removeEventListener("scroll", rolar); window.removeEventListener("scroll", rolar); };
+  }, []);
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = { ALTO: 0, "MÉDIO": 0, BAIXO: 0 };
     v.resultados.forEach((r) => { if (r.nivel in c) c[r.nivel]++; });
     return c;
   }, [v]);
+  const porTipo = useMemo(() => {
+    const c = new Map<Categoria, number>();
+    v.resultados.filter((r) => r.nivel === "ALTO" || r.nivel === "MÉDIO").forEach((r) => categoriasDoApp(r).forEach((k) => c.set(k, (c.get(k) ?? 0) + 1)));
+    return c;
+  }, [v]);
+  const origens = useMemo(() => {
+    const c = { loja: 0, outras: 0, fora: 0, sistema: 0 };
+    v.resultados.forEach((r) => {
+      if (r.sistema) c.sistema++; else if (r.loja === "Google Play") c.loja++; else if (r.loja) c.outras++; else c.fora++;
+    });
+    return c;
+  }, [v]);
   const visiveis = v.resultados.filter((r) =>
-    filtro === "todos" ? true : filtro === "alerta" ? ["ALTO", "MÉDIO", "BAIXO"].includes(r.nivel) : r.nivel === filtro);
+    (filtro === "todos" ? true : filtro === "alerta" ? ["ALTO", "MÉDIO", "BAIXO"].includes(r.nivel) : r.nivel === filtro)
+    && (!tipo || categoriasDoApp(r).has(tipo)));
+  const plano = useMemo(() => planoDeAcao(v), [v]);
+  const mesesPatch = (() => {
+    const d = new Date(`${v.info.patch_seguranca}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : Math.floor((Date.now() - d.getTime()) / (30 * 86400000));
+  })();
+
+  function resumoTexto(): string {
+    const risco = v.resultados.filter((r) => r.nivel === "ALTO" || r.nivel === "MÉDIO");
+    const linhas = [`Análise do ${v.info.fabricante} ${v.info.modelo}: nota ${v.nota}/100 (${v.veredito}).`];
+    if (risco.length) linhas.push("", "Apps que precisam de atenção:", ...risco.slice(0, 8).map((r) => `- ${nomeApp(r)}: ${r.motivos[0] ?? r.nivel}`));
+    else linhas.push("Nenhum app perigoso encontrado.");
+    const aparelho = v.achados.filter((a) => a.nivel !== "BAIXO");
+    if (aparelho.length) linhas.push("", "No aparelho:", ...aparelho.map((a) => `- ${a.titulo}`));
+    if (removidos.size) linhas.push("", `Removidos: ${[...removidos].map(nomeDe).join(", ")}.`);
+    return linhas.join("\n");
+  }
+  async function copiarResumo() {
+    try { await navigator.clipboard.writeText(resumoTexto()); avisar({ tipo: "ok", texto: "Resumo copiado. Cole no WhatsApp do cliente." }); }
+    catch { avisar({ tipo: "erro", texto: "Não consegui copiar. Selecione e copie manualmente." }); }
+  }
+  function exportarJson() {
+    const blob = new Blob([JSON.stringify({ ...v, exportado_em: new Date().toISOString() }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `celscan_varredura_${v.varredura_id}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  async function desfazerTudo() {
+    const lista = [...desfeitos];
+    let ok = 0;
+    for (const d of lista.reverse()) {
+      const t = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", {
+        corpo: { serial: v.info.serial, quarentena_id: d.quarentena_id } }));
+      if (t.estado === "concluida" && t.resultado?.ok) {
+        ok++;
+        setRemovidos((s) => { const n = new Set(s); n.delete(d.pacote); return n; });
+      }
+    }
+    setDesfeitos([]);
+    avisar({ tipo: ok === lista.length ? "ok" : "erro", texto: `${ok} de ${lista.length} ação(ões) desfeita(s).` });
+  }
 
   async function desfazer(feitos: Remocao[]) {
     for (const f of feitos.filter((x) => x.ok && x.quarentena_id)) {
@@ -255,8 +389,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         corpo: { serial: v.info.serial, quarentena_id: f.quarentena_id } }));
       if (t.estado === "concluida" && t.resultado?.ok) {
         setRemovidos((s) => { const n = new Set(s); n.delete(f.pacote); return n; });
-        avisar({ tipo: "ok", texto: `${f.pacote} restaurado.` });
-      } else avisar({ tipo: "erro", texto: `Não consegui restaurar ${f.pacote}: ${t.erro ?? t.resultado?.mensagem ?? ""}` });
+        setDesfeitos((l) => l.filter((x) => x.quarentena_id !== f.quarentena_id));
+        avisar({ tipo: "ok", texto: `${nomeDe(f.pacote)} restaurado.` });
+      } else avisar({ tipo: "erro", texto: `Não consegui restaurar ${nomeDe(f.pacote)}: ${t.erro ?? t.resultado?.mensagem ?? ""}` });
     }
   }
 
@@ -270,8 +405,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
       const feitos = t.resultado;
       const ok = feitos.filter((f) => f.ok);
       setRemovidos((s) => new Set([...s, ...ok.map((f) => f.pacote)]));
+      setDesfeitos((l) => [...l, ...ok.filter((f) => f.quarentena_id).map((f) => ({ pacote: f.pacote, quarentena_id: f.quarentena_id! }))]);
       setSelecao(new Set());
-      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${f.pacote}: ${f.mensagem}` }));
+      feitos.filter((f) => !f.ok).forEach((f) => avisar({ tipo: "erro", texto: `${nomeDe(f.pacote)}: ${f.mensagem}` }));
       if (ok.length) {
         avisar({ tipo: "ok", texto: `${ok.length} app(s) removido(s). Cópia guardada na quarentena.`, duracao: 10000,
           acao: { rotulo: "Desfazer", executar: () => { desfazer(ok); } } });
@@ -298,10 +434,17 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         corpo: { serial: v.info.serial, pacote, acoes } }));
       if (t.estado !== "concluida" || !t.resultado) throw new Error(t.erro ?? "Não terminou.");
       const feitas = t.resultado.feitas;
-      avisar({ tipo: "ok", duracao: 10000, texto: feitas.length ? feitas.join("; ") : "O app já não tinha esse poder.",
+      const qid = t.resultado.quarentena_id;
+      if (feitas.length) setDesfeitos((l) => [...l, { pacote, quarentena_id: qid }]);
+      avisar({ tipo: "ok", duracao: 10000, texto: feitas.length ? `${nomeDe(pacote)}: ${feitas.join("; ")}` : "O app já não tinha esse poder.",
         acao: feitas.length ? { rotulo: "Desfazer", executar: async () => {
-          await api("/desfazer", { corpo: { serial: v.info.serial, quarentena_id: t.resultado!.quarentena_id } }).catch(() => undefined);
-          avisar({ tipo: "ok", texto: "Desfeito." });
+          try {
+            const d = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", { corpo: { serial: v.info.serial, quarentena_id: qid } }));
+            if (d.estado === "concluida" && d.resultado?.ok) {
+              setDesfeitos((l) => l.filter((x) => x.quarentena_id !== qid));
+              avisar({ tipo: "ok", texto: "Desfeito." });
+            } else avisar({ tipo: "erro", texto: `Não consegui desfazer: ${d.erro ?? d.resultado?.mensagem ?? ""}` });
+          } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
         } } : undefined });
     } catch (e) {
       avisar({ tipo: "erro", texto: (e as Error).message });
@@ -337,7 +480,9 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         <div className="min-w-[220px] flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">{v.info.fabricante} {v.info.modelo}</h1>
           <p className="font-mono text-sm text-fraco">
-            Android {v.info.android} · patch {v.info.patch_seguranca} · {v.info.serial}
+            Android {v.info.android} · patch {v.info.patch_seguranca}
+            {mesesPatch !== null && mesesPatch >= 1 && <span className={mesesPatch >= 12 ? "text-perigo" : mesesPatch >= 6 ? "text-atencao" : ""}> ({mesesPatch} {mesesPatch === 1 ? "mês" : "meses"} atrás)</span>}
+            {" · "}{v.info.serial}
           </p>
           <dl className="numeros mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div><dt className="inline text-fraco">Apps: </dt><dd className="inline font-semibold">{v.resultados.length}</dd></div>
@@ -346,6 +491,20 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
             <div><dt className="inline text-fraco">Duração: </dt><dd className="inline font-semibold">{Math.round(v.duracao_s)} s</dd></div>
             <div><dt className="inline text-fraco">Varredura nº </dt><dd className="inline font-semibold">{v.varredura_id}</dd></div>
           </dl>
+          <p className="numeros mt-1 text-xs text-fraco" title="De onde vieram os apps">
+            Play Store {origens.loja} · outras lojas {origens.outras} · fora da loja <span className={origens.fora ? "text-atencao" : ""}>{origens.fora}</span> · de fábrica {origens.sistema}
+          </p>
+          {(v.decomposicao?.length ?? 0) > 0 && (
+            <details className="decomposicao mt-2 text-sm">
+              <summary className="cursor-pointer text-fraco">Por que {v.nota}? ({v.decomposicao!.length} item(ns) tiraram pontos)</summary>
+              <ul className="mt-1 space-y-0.5">
+                {v.decomposicao!.slice(0, 12).map((d, i) => (
+                  <li key={i} className="flex justify-between gap-4"><span className="truncate">{d.texto}</span><span className="numeros font-semibold text-perigo">{d.pontos}</span></li>
+                ))}
+                {v.decomposicao!.length > 12 && <li className="text-fraco">+{v.decomposicao!.length - 12}…</li>}
+              </ul>
+            </details>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
@@ -358,6 +517,14 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           <Botao onClick={verTela} disabled={!conectado} title={conectado ? "Abre a tela do celular numa janela" : "Conecte o celular"}>
             <Monitor size={15} aria-hidden /> Ver a tela
           </Botao>
+          <Botao onClick={copiarResumo} title="Texto curto para mandar ao cliente"><MessageCircle size={15} aria-hidden /> Copiar resumo</Botao>
+          <Botao onClick={exportarJson} title="Todos os dados desta varredura em JSON"><Download size={15} aria-hidden /> Exportar JSON</Botao>
+          <Botao onClick={() => setBusca("")} title="Procurar um app (Ctrl+K)"><Search size={15} aria-hidden /> Procurar app</Botao>
+          {desfeitos.length > 0 && conectado && (
+            <Botao onClick={desfazerTudo} title="Restaura tudo que foi removido ou alterado nesta sessão">
+              <RotateCcw size={15} aria-hidden /> Desfazer tudo ({desfeitos.length})
+            </Botao>
+          )}
           <Botao variante="fantasma" onClick={onNova}>Nova varredura</Botao>
         </div>
       </Cartao>
@@ -386,6 +553,12 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
       {aba === "sensores" && <AbaSensores v={v} aoAbrir={abrirApp} />}
       {aba === "internet" && <AbaInternet v={v} aoAbrir={abrirApp} conectado={conectado} />}
       {aba === "problemas" && <>
+      {plano.length > 0 && (
+        <Cartao className="plano mb-6 p-4">
+          <h2 className="mb-2 font-semibold">Plano de ação</h2>
+          <ol className="list-decimal space-y-1 pl-5 text-sm">{plano.map((p, i) => <li key={i}>{p}</li>)}</ol>
+        </Cartao>
+      )}
       <h2 className="mb-3 text-lg font-semibold">Configurações do aparelho</h2>
       {v.achados.length === 0 ? <Vazio>Nenhum problema nas configurações.</Vazio> : (
         <div className="mb-8 space-y-3">
@@ -410,6 +583,16 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           ))}
         </div>
       </div>
+      {porTipo.size > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Filtrar por tipo de problema">
+          {CATEGORIAS.filter((c) => porTipo.has(c.id)).map((c) => (
+            <button key={c.id} role="radio" aria-checked={tipo === c.id} onClick={() => setTipo(tipo === c.id ? null : c.id)}
+              className={`rounded-md border px-2.5 py-0.5 text-xs ${tipo === c.id ? "border-destaque bg-destaque-suave text-destaque" : "border-linha text-fraco hover:bg-superficie-2"}`}>
+              {c.nome} <span className="numeros">{porTipo.get(c.id)}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {!conectado && <p className="mb-3 text-sm text-fraco">Conecte o celular para remover apps.</p>}
       {conectado && contagem.ALTO > 1 && (
         <Botao className="mb-3" onClick={() => setSelecao(new Set(v.resultados.filter((r) => r.nivel === "ALTO" && !r.sistema && !removidos.has(r.pacote)).map((r) => r.pacote)))}>
@@ -441,6 +624,13 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           </div>
         </div>
       )}
+      {topo && (
+        <button className="voltar-topo" aria-label="Voltar ao topo" title="Voltar ao topo"
+          onClick={() => { document.getElementById("conteudo")?.scrollTo({ top: 0, behavior: "smooth" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+          <ArrowUp size={18} aria-hidden />
+        </button>
+      )}
+      {busca !== null && <BuscaRapida apps={v.resultados} fechar={() => setBusca(null)} escolher={(p) => { setBusca(null); abrirApp(p); }} />}
       {confirmando && <Confirmar v={v} pacotes={confirmando} confirmar={(ciente) => executarRemocao(confirmando, ciente)} cancelar={() => setConfirmando(null)} />}
     </div>
   );

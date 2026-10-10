@@ -111,6 +111,9 @@ def cmd_android(a):
     ap = escolher_aparelho(a.serial)
     modo = a.modo or ("completo" if preferencias.chave_virustotal() else "rapido")
     opcoes = servicos.OpcoesVarredura(modo=modo, sistema=a.sistema, usar_iocs=not a.sem_iocs, vt_todos=a.vt_todos)
+    if getattr(a, "json", False):  # saída só com o JSON (para scripts e integrações), sem barra nem laudo
+        _json(servicos.executar_varredura(ap, opcoes).como_dict())
+        return
     con.print(f"[dim]Modo: {servicos.MODOS[modo]}[/]")
 
     with barra() as p:
@@ -574,11 +577,21 @@ def cmd_bases(a):
     con.print(t)
 
 
+def _json(obj) -> None:
+    """Imprime JSON puro no stdout (sem cores do rich), com acentos legíveis."""
+    import json
+
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False, indent=2, default=str) + "\n")
+
+
 def cmd_na_tela(a):
     """Qual app está na tela agora (pegar no flagra o app do pop-up)."""
     from celscan.acoes import na_tela
 
     x = na_tela.ler(escolher_aparelho(a.serial))
+    if a.json:
+        _json(x)
+        return
     if not x:
         sys.exit("Não deu para identificar o app na tela. Desbloqueie o celular e tente de novo.")
     con.print(Panel(f"[bold]{x['pacote']}[/]\nTela: {x['classe']}"
@@ -591,6 +604,9 @@ def cmd_consumo(a):
     from celscan.acoes import consumo
 
     d = consumo.ler(escolher_aparelho(a.serial))
+    if a.json:
+        _json({**d, "apps": d["apps"][:a.limite]})
+        return
     if not d["disponivel"]:
         sys.exit("Este aparelho não expôs o consumo por app pelo cabo.")
     t = Table(header_style="bold")
@@ -627,22 +643,22 @@ def _celula_csv(v) -> str:
 def cmd_apps(a):
     """Lista os apps de uma varredura salva (a última do aparelho, ou --id), com nome real e datas."""
     import csv
-    import json as _json
+    from contextlib import closing
 
     from celscan.core import db
-    con_db = db.conectar()
-    vid = a.id
-    if vid is None:
-        linhas = db.varreduras(con_db, a.serial, 1)
-        if not linhas:
-            sys.exit("Nenhuma varredura salva" + (f" para {a.serial}" if a.serial else "") + ".")
-        vid = linhas[0]["id"]
-    retrato = db.retrato(con_db, vid)
+    with closing(db.conectar()) as con_db:
+        vid = a.id
+        if vid is None:
+            linhas = db.varreduras(con_db, a.serial, 1)
+            if not linhas:
+                sys.exit("Nenhuma varredura salva" + (f" para {a.serial}" if a.serial else "") + ".")
+            vid = linhas[0]["id"]
+        retrato = db.retrato(con_db, vid)
     if retrato is None:
         sys.exit(f"Varredura {vid} não encontrada.")
     apps = retrato.get("apps", [])
     if a.json:
-        print(_json.dumps(apps, ensure_ascii=False, indent=2, default=str))
+        _json(apps)
         return
     colunas = ("nome", "pacote", "instalado", "ultimo_uso", "origem", "nivel", "score")
     if a.csv:
@@ -692,6 +708,7 @@ def main():
     s.add_argument("--loja", help="Nome da loja/assistência no laudo")
     s.add_argument("--saida", default="laudos")
     s.add_argument("--nao-abrir", action="store_true", help="Não abre o laudo no navegador")
+    s.add_argument("--json", action="store_true", help="Só imprime o resultado em JSON (sem laudo nem remoção)")
     s.set_defaults(func=cmd_android)
 
     s = sub.add_parser("otimizar", help="Diagnóstico e otimização do Android")
@@ -792,11 +809,13 @@ def main():
 
     s = sub.add_parser("na-tela", help="Mostra qual app está na tela agora (pega o app do pop-up no flagra)")
     s.add_argument("--serial")
+    s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_na_tela)
 
     s = sub.add_parser("consumo", help="Internet gasta por app (dados móveis e Wi-Fi)")
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
+    s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_consumo)
 
     s = sub.add_parser("certificados-bancos",

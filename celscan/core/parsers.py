@@ -390,6 +390,16 @@ def uso(txt: str) -> tuple[list[tuple[datetime, str, str]], dict[str, datetime],
     return sorted(telas), ultimo, notif
 
 
+def periodo_eventos(txt: str) -> tuple[datetime, datetime] | None:
+    """Primeiro e último evento do usagestats (telas E notificações): base para 'por dia'.
+
+    Antes o período vinha só das telas; num aparelho com poucas telas registradas e muitas notificações
+    o período virava 1 dia e qualquer app comum parecia mandar notificação em excesso.
+    """
+    ts = [t for m in EVENTO.finditer(txt) if (t := data(m.group(1)[:19]))]
+    return (min(ts), max(ts)) if ts else None
+
+
 def anuncios(telas: list[tuple[datetime, str, str]], sdk_de) -> dict[str, dict]:
     """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up)."""
     res: dict[str, dict] = {}

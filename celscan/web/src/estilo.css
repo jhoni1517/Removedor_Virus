@@ -421,3 +421,31 @@ body {
 .miniatura-cliente i:nth-child(1) { left: 6px; top: 6px; width: 16px; height: 28px; border-radius: 4px; opacity: .45; }
 .miniatura-cliente i:nth-child(2) { left: 28px; top: 8px; width: 18px; height: 18px; border-radius: 50%; }
 .miniatura-cliente i:nth-child(3) { display: none; }
+
+/* ===== v3.2 ===== */
+.raio-x-mais { display: grid; place-items: center; }
+.raio-x-mais span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: rgba(255, 255, 255, .12);
+  color: #e8f2f5; font-size: .8rem; font-weight: 600; }
+.raio-x-legenda-cores { display: inline-flex; align-items: center; gap: 6px; }
+.raio-x-legenda-cores i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.raio-x-legenda-cores i.alto { background: #ff5a4f; }
+.raio-x-legenda-cores i.medio { background: #ffb340; margin-left: 6px; }
+.selo-mini { display: inline-block; margin-top: 2px; padding: 0 6px; border-radius: 6px; font-size: .68rem; font-weight: 600;
+  background: var(--atencao-suave, rgba(255, 179, 64, .15)); color: var(--atencao, #b26a00); }
+.voltar-topo { position: fixed; right: 24px; bottom: 84px; z-index: 15; display: grid; place-items: center; width: 42px; height: 42px;
+  border-radius: 50%; border: 1px solid var(--linha); background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra); cursor: pointer; }
+.voltar-topo:hover { background: var(--superficie-2); }
+.decomposicao summary { list-style: revert; }
+.decomposicao ul { max-width: 420px; }
+:root[data-modelo="compacto"] .tabela tbody tr:nth-child(even) td { background: var(--superficie-2); }
+@media (prefers-reduced-motion: reduce) { .voltar-topo { transition: none; } }
+
+/* Impressão: só o conteúdo, sem menus, botões flutuantes ou barras de ação */
+@media print {
+  nav, .pular-link, .voltar-topo, .sair-modelo, .abas, [role="radiogroup"], button, .fixed { display: none !important; }
+  main { overflow: visible !important; padding: 0 !important; }
+  body, .bancada { background: #fff !important; color: #000 !important; }
+  .cartao, .rounded-xl { box-shadow: none !important; break-inside: avoid; }
+  .raio-x { position: static; }
+  a[href]::after { content: ""; }
+}

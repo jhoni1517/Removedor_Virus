@@ -5,6 +5,7 @@ Não fala com o aparelho. Cada achado vem com título curto, "o que significa" e
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -223,8 +224,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
             and app.enviado_mb >= par.get("envio_mb", 50)):
         a.append(ra["envio_dados"].achado(f"{app.enviado_mb:.0f} MB"))
     n_notif = dados.notificacoes.get(pkg, 0)
+    dias = dias_de_uso(dados)
     if n_notif and pkg not in MENSAGEIROS and not app.sistema:
-        dias = max(1, (dados.periodo_uso[1] - dados.periodo_uso[0]).days) if dados.periodo_uso else 1
         if n_notif / dias >= par.get("notificacoes_dia", 20):
             a.append(ra["notificacoes_excesso"].achado(f"{n_notif} notificações em {dias} dia(s)"))
     if pix.padrao_trojan(pkg, dados.acess, app.appops) and not (loja and pkg in (permitidos or set())):
@@ -271,7 +272,8 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "anuncios": {"tela_cheia": an.get("tela_cheia", 0), "fora_do_app": an.get("fora_do_app", 0),
                      "ultimo": an["ultimo"].isoformat() if an.get("ultimo") else None,
                      "sdks": sorted(set(app.sdks_anuncio) | set(an.get("sdks") or ())), "gatilhos": app.gatilhos},
-        "notificacoes": n_notif, "enviado_mb": app.enviado_mb,
+        "notificacoes": n_notif, "notificacoes_dia": round(n_notif / dias, 1) if n_notif else 0,
+        "enviado_mb": app.enviado_mb,
         "sobreposicao": "SYSTEM_ALERT_WINDOW" in app.appops,
     }
 
@@ -310,6 +312,14 @@ def _mesmo_autor(resultados: list[dict[str, Any]], regras: Regras) -> None:
         x["nivel"] = nivel(x["score"], regras)
 
 
+def dias_de_uso(dados) -> int:
+    """Dias cobertos pelo histórico de uso (mínimo 1; 36 h contam como 2 dias)."""
+    if not dados.periodo_uso:
+        return 1
+    seg = (dados.periodo_uso[1] - dados.periodo_uso[0]).total_seconds()
+    return max(1, math.ceil(seg / 86400))
+
+
 def decompor(achados: list[Achado], resultados: list[dict[str, Any]], regras: Regras | None = None) -> list[dict]:
     """O que tirou pontos da nota, do maior para o menor (mostrado ao lado do medidor)."""
     cfg = (regras or regras_padrao()).nota
@@ -323,7 +333,13 @@ def decompor(achados: list[Achado], resultados: list[dict[str, Any]], regras: Re
         p = cfg.get("app_alto", 30) if r["nivel"] == "ALTO" else cfg.get("app_medio", 8) if r["nivel"] == "MÉDIO" else 0
         if p:
             itens.append({"texto": r.get("nome") or r["pacote"], "pontos": -p})
-    return sorted(itens, key=lambda i: i["pontos"])
+    itens.sort(key=lambda i: (i["pontos"], i["texto"]))
+    # o teto por ameaça conhecida também tira pontos: sem esta linha a soma não batia com a nota
+    soma = max(0, 100 + sum(i["pontos"] for i in itens))
+    teto = cfg.get("teto_com_ameaca", 20)
+    if any(r.get("ameaca") for r in resultados) and soma > teto:
+        itens.insert(0, {"texto": "Ameaça conhecida: nota limitada", "pontos": teto - soma})
+    return itens
 
 
 def nota(achados: list[Achado], resultados: list[dict[str, Any]], regras: Regras | None = None) -> tuple[int, str]:

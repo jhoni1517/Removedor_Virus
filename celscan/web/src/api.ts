@@ -35,6 +35,7 @@ export interface AppResultado {
   sensores?: Record<string, number>;
   anuncios?: { tela_cheia: number; fora_do_app: number; ultimo: string | null; sdks: string[]; gatilhos: string[] };
   notificacoes?: number;
+  notificacoes_dia?: number;
   enviado_mb?: number | null;
   sobreposicao?: boolean;
 }

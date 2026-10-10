@@ -213,7 +213,7 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         rede=parsers.rede(s.get("rede", "")),
         home=parsers.home(s.get("home", "")),
         teclado=parsers.teclado(s.get("teclado", "")),
-        periodo_uso=(telas[0][0], telas[-1][0]) if telas else None,
+        periodo_uso=parsers.periodo_eventos(s.get("uso", "")),
     )
     from celscan.analise.rotulos import sdk_de
     dados.anuncios = parsers.anuncios(telas, sdk_de)

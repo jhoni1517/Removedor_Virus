@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -88,7 +89,10 @@ def copia_de_seguranca(origem: Path | str | None = None, manter: int = 7, motivo
     return destino
 
 
-def conectar(caminho: Path | str | None = None) -> sqlite3.Connection:
+_LOCAL = threading.local()
+
+
+def _abrir(caminho: Path | str | None) -> sqlite3.Connection:
     # timeout: várias tarefas gravam ao mesmo tempo (varredura + remoção); espera em vez de "database is locked"
     con = sqlite3.connect(str(caminho or ARQUIVO), check_same_thread=False, timeout=15)
     con.row_factory = sqlite3.Row
@@ -97,13 +101,46 @@ def conectar(caminho: Path | str | None = None) -> sqlite3.Connection:
     if 0 < versao < len(MIGRACOES):  # antes de mudar o esquema, guarda uma cópia
         try:
             copia_de_seguranca(caminho, motivo=f"antes-v{len(MIGRACOES)}")
-        except sqlite3.Error:
+        except (sqlite3.Error, OSError):
             pass
     for i, sql in enumerate(MIGRACOES[versao:], start=versao + 1):
         con.executescript(sql)
         con.execute(f"PRAGMA user_version = {i}")
     con.commit()
     return con
+
+
+def conectar(caminho: Path | str | None = None, nova: bool = False) -> sqlite3.Connection:
+    """Conexão com o banco, reaproveitada por fio de execução (thread).
+
+    Antes cada requisição da API abria uma conexão nova (e conferia as migrações) e nunca fechava: com o
+    programa aberto o dia todo, centenas de conexões ficavam penduradas. Agora cada thread reaproveita a
+    sua; uma conexão fechada por quem a usou é reaberta. Não desfazemos transação pendente aqui: a mesma
+    thread pode estar no meio de uma gravação (chamada aninhada). `nova=True` devolve uma conexão exclusiva.
+    """
+    if nova:
+        return _abrir(caminho)
+    chave = str(Path(caminho or ARQUIVO).resolve())
+    cache: dict[str, sqlite3.Connection] = _LOCAL.__dict__.setdefault("cons", {})
+    con = cache.get(chave)
+    if con is not None:
+        try:
+            con.execute("SELECT 1")
+            return con
+        except sqlite3.ProgrammingError:  # fechada por quem usou
+            pass
+    con = cache[chave] = _abrir(caminho)
+    return con
+
+
+def fechar_conexoes() -> None:
+    """Fecha as conexões desta thread (testes e encerramento)."""
+    for con in getattr(_LOCAL, "cons", {}).values():
+        try:
+            con.close()
+        except sqlite3.Error:
+            pass
+    _LOCAL.__dict__["cons"] = {}
 
 
 def registrar_aparelho(con: sqlite3.Connection, info: dict[str, str]) -> None:

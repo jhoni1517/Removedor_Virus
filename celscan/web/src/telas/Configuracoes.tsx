@@ -4,6 +4,67 @@ import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 import { aplicarTema, coresDoLogo, lerCoresLoja, MODELOS, salvarCoresLoja, TEMAS } from "../tema";
 
+interface ItemDiag { item: string; ok: boolean | null; detalhe: string; dica: string }
+
+/** "Verificar o CelScan": confere a instalação (ADB, componentes, banco, bases) antes de culpar o celular. */
+function Autodiagnostico() {
+  const [itens, setItens] = useState<ItemDiag[] | null>(null);
+  const [lendo, setLendo] = useState(false);
+  const [erro, setErro] = useState("");
+  async function verificar() {
+    setLendo(true); setErro("");
+    try { setItens((await api<{ itens: ItemDiag[] }>("/autodiagnostico")).itens); }
+    catch (e) { setErro((e as Error).message); }
+    finally { setLendo(false); }
+  }
+  const falhas = itens?.filter((i) => i.ok === false).length ?? 0;
+  return (
+    <Cartao className="p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Verificar o CelScan</h2>
+          <p className="mt-1 text-sm text-fraco">Confere se a instalação está inteira: ADB, componentes, banco do histórico e listas de ameaças.</p>
+        </div>
+        <Botao onClick={verificar} disabled={lendo}>{lendo ? "Verificando..." : itens ? "Verificar de novo" : "Verificar agora"}</Botao>
+      </div>
+      {erro && <p className="mt-3 text-sm text-perigo" role="alert">{erro}</p>}
+      {itens && (
+        <>
+          <p className={`mt-3 text-sm font-semibold ${falhas ? "text-perigo" : "text-ok"}`} role="status">
+            {falhas ? `${falhas} problema(s) na instalação.` : "Tudo certo com o CelScan."}
+          </p>
+          <ul className="mt-2 divide-y divide-linha text-sm">
+            {itens.map((i) => (
+              <li key={i.item} className="py-1.5">
+                <span className={`mr-2 font-mono ${i.ok === false ? "text-perigo" : i.ok ? "text-ok" : "text-fraco"}`} aria-hidden>{i.ok === false ? "✗" : i.ok ? "✓" : "•"}</span>
+                <span className="font-medium">{i.item}</span> <span className="text-fraco">— {i.detalhe}</span>
+                {i.dica && <span className="block pl-6 text-xs text-atencao">{i.dica}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Cartao>
+  );
+}
+
+function SomAoTerminar() {
+  const [ligado, setLigado] = useState(() => { try { return localStorage.getItem("celscan-som") === "1"; } catch { return false; } });
+  function trocar(v: boolean) {
+    setLigado(v);
+    try { localStorage.setItem("celscan-som", v ? "1" : "0"); } catch { /* sem storage */ }
+  }
+  return (
+    <Cartao className="p-5">
+      <label className="flex cursor-pointer items-center justify-between gap-4">
+        <span><span className="block font-semibold">Bipe ao terminar a análise</span>
+          <span className="text-sm text-fraco">Útil quando você deixa o celular analisando e vai atender outro cliente.</span></span>
+        <input type="checkbox" className="h-5 w-5" checked={ligado} onChange={(e) => trocar(e.target.checked)} />
+      </label>
+    </Cartao>
+  );
+}
+
 interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean }
 
 export default function Configuracoes() {
@@ -39,6 +100,9 @@ export default function Configuracoes() {
   return (
     <div className="max-w-3xl space-y-6">
       <Titulo sub={`CelScan ${estado?.versao ?? ""}`}>Configurações</Titulo>
+
+      <Autodiagnostico />
+      <SomAoTerminar />
 
       <Cartao className="p-5">
         <h2 className="font-semibold">VirusTotal</h2>
