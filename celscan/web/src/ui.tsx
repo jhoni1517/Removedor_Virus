@@ -2,6 +2,9 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { Nivel } from "./api";
 import { useApp } from "./estado";
+import { nomeApp } from "./nomes";
+
+export { nomeApp };
 
 type Variante = "primario" | "secundario" | "perigo" | "fantasma";
 
@@ -164,22 +167,54 @@ export function Vazio({ children }: { children: ReactNode }) {
   return <p className="rounded-lg border border-dashed border-linha p-6 text-center text-fraco">{children}</p>;
 }
 
-/** Ícone real do app (PNG/WebP/SVG); sem ícone, uma inicial com cor estável por pacote. */
+/** Ícone real do app (PNG/WebP/SVG); sem ícone (ou se a imagem falhar), uma inicial com cor estável por pacote. */
 export function IconeApp({ nome, pacote, icone, tamanho = 40 }: { nome?: string | null; pacote: string; icone?: string | null; tamanho?: number }) {
+  const [falhou, setFalhou] = useState(false);
   const matiz = [...pacote].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  const mostrar = icone && !falhou;
   return (
     <span className="icone-app grid shrink-0 place-items-center overflow-hidden" aria-hidden
-      style={{ width: tamanho, height: tamanho, background: icone ? "transparent" : `hsl(${matiz} 38% 42%)` }}>
-      {icone ? <img src={icone} alt="" className="h-full w-full object-contain" loading="lazy" />
+      style={{ width: tamanho, height: tamanho, background: mostrar ? "transparent" : `hsl(${matiz} 38% 42%)` }}>
+      {mostrar ? <img src={icone} alt="" className="h-full w-full object-contain" loading="lazy" onError={() => setFalhou(true)} />
         : <span className="font-bold text-white" style={{ fontSize: tamanho * 0.45 }}>{(nome || pacote)[0]?.toUpperCase()}</span>}
     </span>
   );
 }
 
-export function nomeApp(r: { nome?: string | null; pacote: string }): string {
-  return r.nome && r.nome !== r.pacote ? r.nome : r.pacote.split(".").filter((p) => !["com", "br", "org", "android", "app"].includes(p)).pop()
-    ?.replace(/[_-]/g, " ").replace(/^./, (c) => c.toUpperCase()) ?? r.pacote;
+/** "há 3 dias" (com a data exata para o title). */
+export function dataRelativa(iso?: string | null): { texto: string; exata: string } {
+  if (!iso) return { texto: "—", exata: "" };
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return { texto: "—", exata: "" };
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const texto = dias < 0 ? dataBr(iso) : dias === 0 ? "hoje" : dias === 1 ? "ontem" : dias < 31 ? `há ${dias} dias`
+    : dias < 365 ? `há ${Math.floor(dias / 30)} mês(es)` : `há ${Math.floor(dias / 365)} ano(s)`;
+  return { texto, exata: dataBr(iso, true) };
 }
+
+export function Data({ iso }: { iso?: string | null }) {
+  const r = dataRelativa(iso);
+  return <time dateTime={iso ?? undefined} title={r.exata}>{r.texto}</time>;
+}
+
+export function tamanhoLegivel(bytes?: number | null): string {
+  if (!bytes) return "—";
+  return bytes >= 1073741824 ? `${(bytes / 1073741824).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })} GB` : `${Math.max(1, Math.round(bytes / 1048576))} MB`;
+}
+
+/** Data ISO -> Date; "AAAA-MM-DD" vira meia-noite LOCAL (new Date("2026-10-10") seria UTC e cairia no dia anterior no Brasil). */
+export function lerData(iso?: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function recente(iso?: string | null, dias = 7): boolean {
+  if (!iso) return false;
+  const d = lerData(iso) ?? new Date(NaN);
+  return !Number.isNaN(d.getTime()) && Date.now() - d.getTime() < dias * 86400000;
+}
+
 
 export function dataBr(iso?: string | null, hora = false): string {
   if (!iso) return "—";
@@ -198,10 +233,12 @@ export function quando(seg?: number | null): string {
 
 /** Raio-X: a tela do celular desenhada com os ícones reais; os perigosos ganham anel e selo. */
 export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
-  apps: { pacote: string; nome: string | null; icone: string | null; nivel: string; score: number; sistema: boolean }[];
+  apps: { pacote: string; nome: string | null; icone: string | null; nivel: string; score: number; sistema: boolean; motivos?: string[] }[];
   aoEscolher?: (pacote: string) => void; removidos?: Set<string>;
 }) {
-  const lista = [...apps].filter((a) => !a.sistema).sort((a, b) => b.score - a.score).slice(0, 24);
+  const todos = [...apps].filter((a) => !a.sistema).sort((a, b) => b.score - a.score || nomeApp(a).localeCompare(nomeApp(b), "pt-BR"));
+  const lista = todos.slice(0, 24);
+  const resto = todos.length - lista.length;
   const vermelhos = lista.filter((a) => a.nivel === "ALTO" && !removidos.has(a.pacote)).length;
   const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   return (
@@ -213,7 +250,8 @@ export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
           {lista.map((a) => (
             <li key={a.pacote}>
               <button type="button" onClick={() => aoEscolher?.(a.pacote)} data-nivel={a.nivel}
-                className={removidos.has(a.pacote) ? "removido" : ""} title={`${nomeApp(a)}: risco ${a.score}`}
+                className={removidos.has(a.pacote) ? "removido" : ""}
+                title={`${nomeApp(a)}: risco ${a.score}${a.motivos?.[0] ? `\n${a.motivos[0]}` : ""}`}
                 aria-label={`${nomeApp(a)}, risco ${a.score}${removidos.has(a.pacote) ? ", removido" : ""}`}>
                 <span className="relative">
                   <IconeApp nome={a.nome} pacote={a.pacote} icone={a.icone} tamanho={46} />
@@ -224,9 +262,15 @@ export function RaioX({ apps, aoEscolher, removidos = new Set<string>() }: {
               </button>
             </li>
           ))}
+          {resto > 0 && <li className="raio-x-mais" aria-label={`e mais ${resto} apps sem alerta`}><span>+{resto}</span></li>}
         </ul>
       </div>
-      <figcaption>{apps.filter((a) => !a.sistema).length} apps analisados. Toque num ícone para ver os detalhes.</figcaption>
+      <figcaption>
+        <span className="raio-x-legenda-cores"><i className="alto" /> risco alto <i className="medio" /> médio</span>
+        {todos.length} apps analisados. Toque num ícone para ver os detalhes.
+      </figcaption>
     </figure>
   );
 }
+
+export { duracaoCurta } from "./nomes";

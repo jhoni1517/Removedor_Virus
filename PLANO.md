@@ -9,6 +9,79 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.3.0b2 (11/10/2026) — caçada de bugs 2 (sem funções novas)
+
+| Área | Bug | Correção |
+|---|---|---|
+| API Wi-Fi | endereço `-H x` virava opção do adb | valida `host:porta` e código de 6 dígitos (422) |
+| API backup/recuperação | categoria inválida dava 200 e a tarefa falhava depois | recusa na hora (422) |
+| API abrir-pasta | aceitava arquivo (podia executar um .exe) e negava destino personalizado | só pastas; destinos escolhidos liberados |
+| API ações | reiniciar/limpar/corrigir/finalizar rodavam com backup em andamento | 409 enquanto o aparelho está ocupado |
+| API atualização | instalar fechava o programa no meio de uma tarefa | 409 com tarefa rodando |
+| WebSocket | conexão fechada continuava como ouvinte (vazamento) | detecta desconexão e remove o ouvinte |
+| Apps esquecidos / debloat | sem cancelamento, sem histórico, apagava dados | cancela, registra e remove com `-k` |
+| Remoção | `adb uninstall` em app de fábrica | só `pm uninstall --user 0` |
+| Backup | duas pastas do WhatsApp caíam no mesmo lugar; nomes CON/NUL | rótulos únicos; prefixo em nomes reservados |
+| Recuperação | arquivos com mesmo nome/data se sobrescreviam | nome com hash do caminho |
+| MTP | arquivo cortado era pulado para sempre | confere tamanho, recopia e apaga pedaço |
+| Espelho | stderr do scrcpy enchia e congelava a tela | thread drena o log |
+| Agente | erro após instalar deixava o app no celular; downgrade falhava | desinstala no erro; reinstala em downgrade |
+| iPhone | comando travado prendia para sempre; backup decifrado ficava no disco | timeouts; apaga o decifrado (LGPD) |
+| Otimização | debloat que falhava deixava item na quarentena; animação aceitava NaN/-1 | descarta; valida 0–10 |
+| Laudo/evidências | nome do modelo com `/` quebrava o arquivo; pasta repetida | nome seguro; pasta única |
+| Atualização | instalador baixado em pasta fixa | pasta temporária própria |
+| CLI | traceback com pacote/categoria inválidos; restaurar falho saía com 0 | mensagem amigável (código 2); código 1 |
+| Web | tarefas acumulavam sem limite; erros sem aviso em exportar/procurar/calcular/desfazer | limite de 30; avisos; desfazer mantém os que falharam |
+
+Testes: `testes/test_v33_bugs2.py` (14 novos). Suíte: 313 ok, 3 pulados.
+
+## Beta 3.3.0b1 (10/10/2026) — 50 upgrades por nível + caçada de bugs
+
+**Crítico (10):** instalador forjado (diz Play Store, mas foi o adb/outro app) · app que voltou depois
+de removido (só se reinstalado depois da remoção) · dropper ativo (instala + controla a tela) · lê
+códigos do banco · golpe do empréstimo · teclado de fora da loja · padrão espião genérico aciona o modo
+vítima (interface e CLI) · perfis/usuários extras e apps só neles · instaladores .apk guardados com
+checagem de hash · apps sensíveis (2FA, senhas, carteira, banco, mensageiro) exigem confirmação.
+Mais: log mascara pareamento/IMEI/telefone/e-mail/token; coleta lê tempo de tela, bateria por app,
+processos vivos e o relógio do celular.
+
+**Prioridade (10):** hashes incrementais (cache por tamanho+data) · prazo aprendido neste PC · aviso
+de bateria baixa · plano por app na confirmação · "Abrir no celular" · varredura liga sozinha na OS
+aberta · bases offline (`--exportar/--importar`, zip validado) · selos Rodando/Voltou/Dados importantes ·
+Finalizar atendimento · conferência automática depois de remover.
+
+**Alto (10):** golpe do empréstimo e leitura de códigos no plano · tempo de tela por app · bateria por
+app · aba Poderes especiais · plano de ação no laudo PDF · apagar instaladores .apk com desfazer ·
+procurar app em todas as análises (`historico --app`) · ameaças do mês no painel · revisão gratuita
+com lembrete no WhatsApp.
+
+**Médio (10):** lembra o modo · % no título · legenda dos níveis · copiar lista de risco · inicial
+colorida no PDF · filtro do histórico · Ctrl+Enter · CSV com colunas novas · "por que está ok" ·
+prazo da revisão configurável.
+
+**Baixo (10):** `--version` · números pt-BR · ícone da aba na cor da nota · "Celular limpo!" ·
+confirmação ao copiar · atalho VirusTotal pelo hash · +19 redes de anúncio · contato da loja no
+rodapé do laudo · leitor de tela anuncia a etapa · `apps --risco`.
+
+| Bugs achados nesta rodada | |
+|---|---|
+| Remover app espião pela CLI acontecia por padrão (Enter), sem o aviso de que alerta quem instalou | ✅ padrão "não" + aviso |
+| `find /sdcard` não entra no link `/sdcard`: a busca por .apk guardados não acharia nada no aparelho | ✅ `/sdcard/` |
+| App só desativado (não removido) seria marcado como "voltou" na visita seguinte | ✅ compara a data de instalação |
+| App reinstalado pelo dono na Play Store seria marcado como "voltou" (+50) | ✅ só fora da loja |
+| Teclado/leitor de notificações do F-Droid ou copiado pelo Smart Switch virava "suspeito" | ✅ lojas alternativas e transferência fora |
+| Perfil "Apps duplos"/Dual Messenger contava como usuário extra; apps no perfil de trabalho eram ALTO | ✅ ignorados / MÉDIO |
+| Prazo 0 (sem revisão) virava 30 dias | ✅ |
+| Tempo da coleta nunca entrava na média (nº de apps definido tarde) | ✅ |
+| Relógio do celular zerado (1970) estragaria "instalado há X dias" | ✅ ignora relógio inválido |
+| Ranking de ameaças e busca no histórico carregavam o JSON inteiro (com ícones) de cada análise | ✅ JSON1 no SQLite, plano B em Python |
+| `@@USER` sem número derrubava o parser (achado no fuzz) | ✅ |
+| `int()` em dígito sobrescrito ("²") passava pelo `isdigit()` | ✅ `isdecimal()` nos parsers |
+| Zip de bases inválido derrubava a CLI com traceback; caminho `../` no zip | ✅ mensagem / ignorado |
+| APK guardado sem tamanho (stat falhou) nunca podia ser apagado | ✅ |
+| Progresso dos hashes contava apps em dobro no plano B | ✅ |
+| Contato da loja com emoji quebraria o rodapé do PDF | ✅ |
+
 ## Beta 3.1.0b1 (10/10/2026) — versão unificada (GitHub + CelScan 3.0 do chat)
 
 Comparação feita entre esta base (3.0.0b11) e a versão 3.0 gerada no chat. Esta base estava muito à

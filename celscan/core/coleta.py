@@ -9,7 +9,7 @@ from datetime import datetime
 
 from celscan.analise import apksig
 from celscan.config import PASTAS_SISTEMA
-from celscan.core import parsers
+from celscan.core import log, parsers
 from celscan.core.adb import AdbErro, Aparelho
 
 # PROJECT_MEDIA = captura/transmissão da tela (usada por trojans bancários como o PixRevolution)
@@ -35,10 +35,16 @@ sec launcher; cmd package query-activities --brief -a android.intent.action.MAIN
 sec idle; dumpsys deviceidle whitelist 2>&1
 sec su; for f in /system/bin/su /system/xbin/su /sbin/su /su/bin/su /debug_ramdisk/su; do [ -e "$f" ] && echo "$f"; done
 sec pkgdump; dumpsys package packages 2>&1
+sec teclado; settings get secure default_input_method
 sec home; cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN 2>&1
 sec rede; settings get global private_dns_mode; settings get global private_dns_specifier; settings get secure always_on_vpn_app; dumpsys connectivity 2>/dev/null | grep -ciE 'Transports: [A-Z|]*VPN|VPN CONNECTED'
-sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed='
-sec consumo; dumpsys batterystats --checkin 2>/dev/null | grep -E '^9,[0-9]+,(i,uid|l,nt),'
+sec uso; dumpsys usagestats 2>/dev/null | grep -E 'type=(ACTIVITY_RESUMED|MOVE_TO_FOREGROUND|NOTIFICATION_INTERRUPTION)|lastTimeUsed=|In-memory (daily|weekly) stats'
+sec consumo; dumpsys batterystats --checkin 2>/dev/null | grep -E '^9,[0-9]+,(i,uid|l,nt|l,pwi),'
+sec relogio; date +%s
+sec rodando; ps -A -o NAME 2>/dev/null || ps 2>/dev/null
+sec usuarios; pm list users 2>&1
+sec outros; for u in $(pm list users 2>/dev/null | sed -n 's/.*UserInfo{\([0-9]*\):.*/\1/p'); do [ "$u" != "0" ] && { echo "@@USER $u"; pm list packages -3 -i --user $u 2>/dev/null; }; done
+sec apks; find /sdcard/ -maxdepth 5 -type f -iname '*.apk' -size -50M 2>/dev/null | head -20 | while read f; do printf '%s\t%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null)" "$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" "$f"; done
 sec appops
 for p in $(pm list packages {F} | sed 's/^package://'); do
   echo "@@PKG $p"
@@ -119,6 +125,13 @@ class AppBruto:
     sensores: dict[str, float] = field(default_factory=dict)  # câmera/microfone/... -> segundos desde o uso
     ultimo_uso: datetime | None = None
     enviado_mb: float | None = None  # dados enviados pela internet desde a última carga completa
+    nome_truque: bool = False  # nome com caracteres invisíveis/de inversão de texto
+    sem_rotulo: bool = False  # APK lido, mas sem nome para mostrar
+    iniciador: str | None = None  # quem realmente iniciou a instalação (Android 11+)
+    tempo_uso_s: int | None = None  # tempo de tela na última semana
+    bateria_mah: float | None = None  # energia gasta desde a última carga completa
+    rodando: bool = False  # tinha processo vivo no momento da análise
+    removido_antes: str | None = None  # data em que o CelScan já tinha removido este app (voltou?)
 
 
 @dataclass
@@ -141,7 +154,13 @@ class DadosAparelho:
     notificacoes: dict[str, int] = field(default_factory=dict)  # pacote -> notificações que tocaram
     rede: dict[str, object] = field(default_factory=dict)
     home: str | None = None
+    teclado: str | None = None
     periodo_uso: tuple[datetime, datetime] | None = None
+    sistema_pkgs: set[str] = field(default_factory=set)
+    usuarios: list[dict] = field(default_factory=list)  # perfis/usuários do aparelho (0 = dono)
+    outros_usuarios: dict[int, dict[str, str | None]] = field(default_factory=dict)  # usuário -> apps só lá
+    apks_guardados: list[dict] = field(default_factory=list)  # instaladores .apk soltos no armazenamento
+    relogio_aparelho: datetime | None = None
 
     def info(self) -> dict[str, str]:
         g = self.props.get
@@ -175,6 +194,9 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
     # Apps de sistema atualizados pela loja migram para /data/app e perdem o caminho de sistema; por isso
     # perguntamos ao próprio Android quais são de sistema (pm list packages -s), além de olhar o caminho.
     syspkgs = parsers.desativados(s.get("syspkgs", ""))
+    tempo_uso = parsers.tempo_de_uso(s.get("uso", ""))
+    bateria = parsers.bateria_por_app(s.get("consumo", ""))
+    vivos = parsers.rodando(s.get("rodando", ""))
     apps: dict[str, AppBruto] = {}
     for pkg, (caminho, inst) in parsers.pacotes(s.get("pkgs", "")).items():
         d = dump.get(pkg, {})
@@ -184,6 +206,8 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
             perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
             appops=ops.get(pkg, set()), atualizado=d.get("atualizado"), origem=d.get("origem"),
             ultimo_uso=ultimo_uso.get(pkg), enviado_mb=(rede_apps.get(pkg) or {}).get("enviado_mb"),
+            iniciador=d.get("iniciador"), tempo_uso_s=tempo_uso.get(pkg), bateria_mah=bateria.get(pkg),
+            rodando=pkg in vivos,
         )
         for op, seg in tempos.get(pkg, {}).items():  # sensores: guarda o uso mais recente por tipo
             nome = SENSORES[op]
@@ -208,8 +232,19 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
         notificacoes=notificacoes,
         rede=parsers.rede(s.get("rede", "")),
         home=parsers.home(s.get("home", "")),
-        periodo_uso=(telas[0][0], telas[-1][0]) if telas else None,
+        teclado=parsers.teclado(s.get("teclado", "")),
+        periodo_uso=parsers.periodo_eventos(s.get("uso", "")),
+        sistema_pkgs=syspkgs,
+        usuarios=parsers.usuarios(s.get("usuarios", "")),
+        apks_guardados=parsers.apks_guardados(s.get("apks", "")),
     )
+    epoch = parsers.relogio(s.get("relogio", ""))
+    # relógio zerado (bateria removida, 1970) não serve de referência: aí vale a hora do PC
+    dados.relogio_aparelho = datetime.fromtimestamp(epoch) if epoch and epoch > 1_420_070_400 else None
+    # apps que existem SÓ em outro usuário/perfil (o resto da análise vê só o dono, usuário 0)
+    dados.outros_usuarios = {u: {p: i for p, i in pk.items() if p not in apps}
+                             for u, pk in parsers.pacotes_por_usuario(s.get("outros", "")).items()}
+    dados.outros_usuarios = {u: pk for u, pk in dados.outros_usuarios.items() if pk}
     from celscan.analise.rotulos import sdk_de
     dados.anuncios = parsers.anuncios(telas, sdk_de)
     dados.avisos = avisos_da_coleta(s, dados, dump)
@@ -220,19 +255,102 @@ def coletar(ap: Aparelho, sistema: bool = False) -> DadosAparelho:
     return montar(ap.serial, ap.script(SCRIPT.replace("{F}", filtro(sistema)), timeout=900))
 
 
+# 3.3: tamanho + data de modificação de cada APK (rápido). Só os APKs novos ou trocados passam pelo sha256sum;
+# os demais vêm do cache deste PC. Na 2ª varredura do mesmo celular a etapa cai de ~40 s para ~2 s.
+STATS = ("pm list packages -f {F} | sed 's/^package://; s/=[^=]*$//' | while read f; do "
+         "printf '@@S\\t%s\\t%s\\n' \"$(stat -c '%s %Y' \"$f\" 2>/dev/null)\" \"$f\"; done")
+HASH_LISTA = ("for f in {L}; do printf '@@H\\t%s\\t%s\\t%s\\n' \"$(stat -c %s \"$f\" 2>/dev/null)\" "
+              "\"$(sha256sum \"$f\" 2>/dev/null | cut -d' ' -f1)\" \"$f\"; done")
+LIMITE_LISTA = 3000  # aparelhos antigos aceitam comandos de no máximo ~4 KB pelo adb
+
+
+def _arquivo_cache_hash(serial: str):
+    from celscan.config import DIR
+    return DIR / "cache" / f"hashes_{re.sub(r'[^A-Za-z0-9_.-]', '_', serial)}.json"
+
+
+def _ler_cache_hash(serial: str) -> dict[str, list]:
+    import json
+    try:
+        dados = json.loads(_arquivo_cache_hash(serial).read_text(encoding="utf-8"))
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _gravar_cache_hash(serial: str, cache: dict[str, list]) -> None:
+    import json
+    import os
+    alvo = _arquivo_cache_hash(serial)
+    try:
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        tmp = alvo.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache), encoding="utf-8")
+        os.replace(tmp, alvo)
+    except OSError as e:
+        log.LOGGER.info("cache de hashes não gravado: %s", e)
+
+
+def _ler_linha_hash(linha: str, por_caminho: dict[str, AppBruto]) -> AppBruto | None:
+    partes = linha.split("\t")
+    if len(partes) != 4 or partes[0] != "@@H":
+        return None
+    app = por_caminho.get(partes[3])
+    if not app:
+        return None
+    app.tamanho = int(partes[1]) if partes[1].isdecimal() else None
+    app.sha256 = partes[2] if re.fullmatch(r"[0-9a-f]{64}", partes[2]) else None
+    return app
+
+
 def calcular_hashes(ap: Aparelho, dados: DadosAparelho, sistema: bool = False) -> Iterator[str]:
-    """Gerador: devolve cada pacote conforme o hash sai do aparelho."""
+    """Gerador: devolve cada pacote conforme o hash sai do aparelho (ou do cache, se o APK não mudou)."""
+    import shlex
+
     por_caminho = {a.apk: a for a in dados.apps.values()}
-    for linha in ap.linhas(HASHES.replace("{F}", filtro(sistema))):
-        partes = linha.split("\t")
-        if len(partes) != 4 or partes[0] != "@@H":
-            continue
-        app = por_caminho.get(partes[3])
+    cache = _ler_cache_hash(ap.serial)
+    estado: dict[str, tuple[int, int]] = {}  # caminho -> (tamanho, modificado)
+    try:
+        for linha in ap.linhas(STATS.replace("{F}", filtro(sistema))):
+            partes = linha.split("\t")
+            if len(partes) == 3 and partes[0] == "@@S":
+                num = partes[1].split()
+                if len(num) == 2 and num[0].isdecimal() and num[1].isdecimal():
+                    estado[partes[2]] = (int(num[0]), int(num[1]))
+    except AdbErro as e:
+        log.LOGGER.info("stat dos APKs falhou (%s); calculando todos os hashes", e)
+    faltam: list[str] = []
+    novo_cache: dict[str, list] = {}
+    entregues: set[str] = set()
+    for caminho, (tam, mod) in estado.items():
+        app = por_caminho.get(caminho)
         if not app:
             continue
-        app.tamanho = int(partes[1]) if partes[1].isdigit() else None
-        app.sha256 = partes[2] if re.fullmatch(r"[0-9a-f]{64}", partes[2]) else None
-        yield app.pacote
+        c = cache.get(caminho)
+        if isinstance(c, list) and len(c) == 3 and c[0] == tam and c[1] == mod and c[2]:
+            app.tamanho, app.sha256 = tam, c[2]
+            novo_cache[caminho] = c
+            entregues.add(app.pacote)
+            yield app.pacote
+        else:
+            faltam.append(caminho)
+    sem_estado = [a.apk for a in dados.apps.values() if a.apk and a.apk not in estado]
+    lista = " ".join(shlex.quote(c) for c in faltam)
+    if not estado or sem_estado or len(lista) > LIMITE_LISTA:
+        comando = HASHES.replace("{F}", filtro(sistema))  # sem stat (ou lista grande demais): tudo, como antes
+    else:
+        comando = HASH_LISTA.replace("{L}", lista) if faltam else ""
+    if comando:
+        for linha in ap.linhas(comando):
+            app = _ler_linha_hash(linha, por_caminho)
+            if not app:
+                continue
+            if app.sha256 and app.apk in estado:
+                novo_cache[app.apk] = [*estado[app.apk], app.sha256]
+            if app.pacote not in entregues:
+                entregues.add(app.pacote)
+                yield app.pacote
+    _gravar_cache_hash(ap.serial, novo_cache)
 
 
 def ler_certificado(ap: Aparelho, app: AppBruto) -> None:
@@ -251,9 +369,13 @@ def ler_rotulo(ap: Aparelho, app: AppBruto) -> None:
         return
     try:
         r = rotulos.obter(ap, app.pacote, app.apk, app.tamanho, app.sha256)
-        app.nome = r.nome
-        app.icone = rotulos.icone_data_uri(r)
+        # nome/ícone vindos do CelScan Agente têm prioridade; o manifesto sempre é lido (anúncios, disfarces...)
+        if not app.nome or app.nome == app.pacote:
+            app.nome = r.nome
+        app.icone = app.icone or rotulos.icone_data_uri(r)
         app.sdks_anuncio, app.gatilhos, app.disfarces = r.sdks_anuncio, r.gatilhos, r.disfarces
-        app.anuncio_escondido = r.anuncio_escondido
-    except Exception:
-        pass
+        app.anuncio_escondido, app.nome_truque, app.sem_rotulo = r.anuncio_escondido, r.nome_truque, r.sem_rotulo
+        if app.cert is None and r.cert:
+            app.cert = r.cert
+    except Exception as e:  # noqa: BLE001
+        log.LOGGER.info("leitura do APK de %s falhou: %s", app.pacote, e)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,10 @@ MIGRACOES = [
     );
     CREATE INDEX ordens_status ON ordens(status, criado_em);
     """,
+    """
+    ALTER TABLE ordens ADD COLUMN retorno_em TEXT;
+    CREATE INDEX ordens_retorno ON ordens(retorno_em);
+    """,
 ]
 
 
@@ -61,16 +66,133 @@ def _agora() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
-def conectar(caminho: Path | str | None = None) -> sqlite3.Connection:
-    con = sqlite3.connect(str(caminho or ARQUIVO), check_same_thread=False)
+COPIAS = DIR / "copias_banco"
+
+
+def copia_de_seguranca(origem: Path | str | None = None, manter: int = 7, motivo: str = "diaria") -> Path | None:
+    """Cópia consistente do banco (API de backup do SQLite) em ~/.celscan/copias_banco; guarda as últimas `manter`.
+
+    A diária só é feita uma vez por dia. Histórico, clientes e ordens de serviço não se perdem se o arquivo
+    corromper ou uma atualização der errado."""
+    origem = Path(origem or ARQUIVO)
+    if not origem.exists() or origem.stat().st_size == 0:
+        return None
+    COPIAS.mkdir(parents=True, exist_ok=True)
+    destino = COPIAS / f"celscan-{datetime.now():%Y%m%d}-{motivo}.db"
+    if motivo == "diaria" and destino.exists():
+        return destino
+    fonte = sqlite3.connect(str(origem))
+    alvo = sqlite3.connect(str(destino))
+    try:
+        fonte.backup(alvo)
+    finally:
+        alvo.close()
+        fonte.close()
+    for velha in sorted(COPIAS.glob("celscan-*.db"))[:-manter]:
+        velha.unlink(missing_ok=True)
+    return destino
+
+
+_LOCAL = threading.local()
+
+
+_CONFERIDOS: set[str] = set()
+
+
+def _integro(arquivo: Path) -> bool:
+    try:
+        con = sqlite3.connect(str(arquivo), timeout=15)
+        try:
+            return con.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        finally:
+            con.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
+def _recuperar_se_corrompido(arquivo: Path) -> None:
+    """Na 1ª abertura do dia: se o banco estiver corrompido (queda de energia, disco cheio), guarda o arquivo
+    estragado ao lado e volta a cópia de segurança mais recente. O histórico de clientes não some."""
+    chave = str(arquivo.resolve()) if arquivo.exists() else str(arquivo)
+    if chave in _CONFERIDOS or not arquivo.exists() or arquivo.stat().st_size == 0:
+        _CONFERIDOS.add(chave)
+        return
+    _CONFERIDOS.add(chave)
+    if _integro(arquivo):
+        return
+    estragado = arquivo.with_name(f"{arquivo.stem}.corrompido-{datetime.now():%Y%m%d-%H%M%S}{arquivo.suffix}")
+    arquivo.replace(estragado)
+    for sufixo in ("-wal", "-shm"):
+        Path(str(arquivo) + sufixo).unlink(missing_ok=True)
+    copias = sorted(COPIAS.glob("celscan-*.db"), reverse=True) if COPIAS.exists() else []
+    boa = next((c for c in copias if _integro(c)), None)
+    if boa:
+        import shutil
+
+        shutil.copy2(boa, arquivo)
+    from celscan.core.log import LOGGER
+
+    LOGGER.error("banco corrompido guardado em %s; %s", estragado,
+                 f"restaurada a cópia {boa.name}" if boa else "nenhuma cópia boa: começando um banco novo")
+
+
+def _abrir(caminho: Path | str | None) -> sqlite3.Connection:
+    arquivo = Path(caminho or ARQUIVO)
+    _recuperar_se_corrompido(arquivo)
+    # timeout: várias tarefas gravam ao mesmo tempo (varredura + remoção); espera em vez de "database is locked"
+    con = sqlite3.connect(str(arquivo), check_same_thread=False, timeout=15)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    try:  # WAL: o histórico pode ser lido enquanto uma varredura grava, sem travar a interface
+        con.execute("PRAGMA journal_mode = WAL")
+        con.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.DatabaseError:
+        pass
     versao = con.execute("PRAGMA user_version").fetchone()[0]
+    if 0 < versao < len(MIGRACOES):  # antes de mudar o esquema, guarda uma cópia
+        try:
+            copia_de_seguranca(caminho, motivo=f"antes-v{len(MIGRACOES)}")
+        except (sqlite3.Error, OSError):
+            pass
     for i, sql in enumerate(MIGRACOES[versao:], start=versao + 1):
-        con.executescript(sql)
-        con.execute(f"PRAGMA user_version = {i}")
+        # migração e número da versão na MESMA transação: se o programa fechar no meio, nada fica pela
+        # metade (antes a tabela era criada, a versão não subia e o CelScan não abria mais: "table exists")
+        con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {i};\nCOMMIT;")
     con.commit()
     return con
+
+
+def conectar(caminho: Path | str | None = None, nova: bool = False) -> sqlite3.Connection:
+    """Conexão com o banco, reaproveitada por fio de execução (thread).
+
+    Antes cada requisição da API abria uma conexão nova (e conferia as migrações) e nunca fechava: com o
+    programa aberto o dia todo, centenas de conexões ficavam penduradas. Agora cada thread reaproveita a
+    sua; uma conexão fechada por quem a usou é reaberta. Não desfazemos transação pendente aqui: a mesma
+    thread pode estar no meio de uma gravação (chamada aninhada). `nova=True` devolve uma conexão exclusiva.
+    """
+    if nova:
+        return _abrir(caminho)
+    chave = str(Path(caminho or ARQUIVO).resolve())
+    cache: dict[str, sqlite3.Connection] = _LOCAL.__dict__.setdefault("cons", {})
+    con = cache.get(chave)
+    if con is not None:
+        try:
+            con.execute("SELECT 1")
+            return con
+        except sqlite3.ProgrammingError:  # fechada por quem usou
+            pass
+    con = cache[chave] = _abrir(caminho)
+    return con
+
+
+def fechar_conexoes() -> None:
+    """Fecha as conexões desta thread (testes e encerramento)."""
+    for con in getattr(_LOCAL, "cons", {}).values():
+        try:
+            con.close()
+        except sqlite3.Error:
+            pass
+    _LOCAL.__dict__["cons"] = {}
 
 
 def registrar_aparelho(con: sqlite3.Connection, info: dict[str, str]) -> None:
@@ -118,6 +240,11 @@ def retrato(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None
     return json.loads(row[0]) if row else None
 
 
+def serial_da_varredura(con: sqlite3.Connection, varredura_id: int) -> str | None:
+    row = con.execute("SELECT serial FROM varreduras WHERE id = ?", (varredura_id,)).fetchone()
+    return str(row[0]) if row else None
+
+
 def varredura_anterior(con: sqlite3.Connection, serial: str, antes_de: int) -> int | None:
     row = con.execute("SELECT id FROM varreduras WHERE serial = ? AND id < ? ORDER BY id DESC LIMIT 1",
                       (serial, antes_de)).fetchone()
@@ -145,6 +272,88 @@ def acoes(con: sqlite3.Connection, serial: str | None = None, limite: int = 50) 
         return con.execute("SELECT * FROM acoes WHERE serial = ? ORDER BY id DESC LIMIT ?",
                            (serial, limite)).fetchall()
     return con.execute("SELECT * FROM acoes ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
+
+
+def removidos_antes(con: sqlite3.Connection, serial: str) -> dict[str, str]:
+    """Apps que o CelScan já removeu deste aparelho (e não foram desfeitos): {pacote: data}."""
+    rows = con.execute("SELECT pacote, MAX(data) FROM acoes WHERE serial = ? AND tipo = 'remocao' "
+                       "AND pacote IS NOT NULL AND desfeita_em IS NULL GROUP BY pacote", (serial,)).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def _json_sql(con: sqlite3.Connection) -> bool:
+    """SQLite com JSON1 (padrão desde 3.38): extrai só os campos usados, sem carregar ícones no Python."""
+    try:
+        con.execute("SELECT json_extract('{\"a\":1}', '$.a')").fetchone()
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _apps_python(con: sqlite3.Connection, sql: str, args: tuple) -> list[tuple[Any, ...]]:
+    """Plano B sem JSON1: lê o JSON no Python (mais lento com muitos ícones)."""
+    res = []
+    for vid, data, serial, fab, modelo, bruto in con.execute(sql, args):
+        try:
+            apps = json.loads(bruto).get("apps") or []
+        except (ValueError, AttributeError):
+            continue
+        res += [(vid, data, serial, fab, modelo, r.get("pacote"), r.get("nome"), r.get("nivel"), r.get("score"),
+                 r.get("ameaca"), (r.get("motivos") or [None])[0]) for r in apps if isinstance(r, dict)]
+    return res
+
+
+_CAMPOS_APP = ("json_extract(j.value, '$.pacote'), json_extract(j.value, '$.nome'), json_extract(j.value, '$.nivel'), "
+               "json_extract(j.value, '$.score'), json_extract(j.value, '$.ameaca'), "
+               "json_extract(j.value, '$.motivos[0]')")
+
+
+def buscar_app(con: sqlite3.Connection, termo: str, limite: int = 50) -> list[dict[str, Any]]:
+    """Procura um app (nome ou pacote) em TODAS as varreduras: 'esse app já apareceu em outro cliente?'."""
+    t = (termo or "").strip().lower()
+    if len(t) < 3:
+        return []
+    padrao = "%" + t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    base = ("SELECT v.id, v.data, v.serial, a.fabricante, a.modelo{campos} FROM varreduras v "
+            "LEFT JOIN aparelhos a ON a.serial = v.serial{junta} WHERE v.resultado_json LIKE ? ESCAPE '\\'{filtro} "
+            "ORDER BY v.id DESC LIMIT ?")
+    if _json_sql(con):
+        linhas = con.execute(base.format(campos=", " + _CAMPOS_APP, junta=", json_each(v.resultado_json, '$.apps') j",
+                                         filtro=" AND (lower(json_extract(j.value, '$.pacote')) LIKE ? ESCAPE '\\' "
+                                                "OR lower(json_extract(j.value, '$.nome')) LIKE ? ESCAPE '\\')"),
+                             (padrao, padrao, padrao, limite * 4)).fetchall()
+    else:
+        linhas = _apps_python(con, base.format(campos=", v.resultado_json", junta="", filtro=""), (padrao, 500))
+    res: list[dict[str, Any]] = []
+    for vid, data, serial, fab, modelo, pkg, nome, nivel_app, score, ameaca, _ in linhas:
+        if t in (pkg or "").lower() or t in (nome or "").lower():  # confere de novo: o lower() do SQLite é só ASCII
+            res.append({"varredura_id": vid, "data": data, "serial": serial,
+                        "aparelho": " ".join(x for x in (fab, modelo) if x) or serial,
+                        "pacote": pkg, "nome": nome or pkg, "nivel": nivel_app, "score": score, "ameaca": ameaca})
+            if len(res) >= limite:
+                break
+    return res
+
+
+def ameacas_frequentes(con: sqlite3.Connection, desde: str, limite: int = 8) -> list[dict[str, Any]]:
+    """Apps de risco ALTO mais vistos desde a data (ISO): o que está circulando entre os clientes da loja."""
+    if _json_sql(con):
+        linhas = con.execute(
+            "SELECT v.id, v.data, v.serial, NULL, NULL, " + _CAMPOS_APP + " FROM varreduras v, "
+            "json_each(v.resultado_json, '$.apps') j WHERE v.data >= ? AND json_extract(j.value, '$.nivel') = 'ALTO'",
+            (desde,)).fetchall()
+    else:
+        linhas = _apps_python(con, "SELECT v.id, v.data, v.serial, NULL, NULL, v.resultado_json FROM varreduras v "
+                                   "WHERE v.data >= ? ORDER BY v.id DESC LIMIT 2000", (desde,))
+    cont: dict[str, dict[str, Any]] = {}
+    vistos: set[tuple[int, str]] = set()
+    for vid, _d, _s, _f, _m, pkg, nome, nivel_app, _sc, ameaca, motivo in linhas:
+        if nivel_app != "ALTO" or not pkg or (vid, pkg) in vistos:
+            continue
+        vistos.add((vid, pkg))  # conta 1 por varredura
+        x = cont.setdefault(pkg, {"pacote": pkg, "nome": nome or pkg, "vezes": 0, "ameaca": ameaca, "motivo": motivo})
+        x["vezes"] += 1
+    return sorted(cont.values(), key=lambda x: (-x["vezes"], x["nome"].lower()))[:limite]
 
 
 def meta_varredura(con: sqlite3.Connection, varredura_id: int) -> dict[str, Any] | None:

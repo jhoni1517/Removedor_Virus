@@ -122,3 +122,73 @@ def situacao() -> list[dict[str, object]]:
                     "embutida": bool(b.embutido and b.embutido.exists()),
                     "idade_h": None if idade is None else idade / 3600, "vencida": vencida(b)})
     return res
+
+
+# ---------------------------------------------------------------- 3.3: levar as bases para um PC sem internet
+MANIFESTO = "celscan_bases.json"
+TAMANHO_MAX = 200 * 1024 * 1024
+
+
+def exportar(destino: Path | str) -> list[str]:
+    """Grava num .zip as cópias locais das bases (com a data de cada uma). Devolve os nomes exportados."""
+    import json
+    import zipfile
+
+    destino = Path(destino)
+    feitas, manifesto = [], {}
+    with zipfile.ZipFile(destino, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for b in todas():
+            if b.caminho.exists():
+                z.write(b.caminho, b.arquivo)
+                manifesto[b.arquivo] = {"base": b.nome, "modificado": b.caminho.stat().st_mtime}
+                feitas.append(b.nome)
+        z.writestr(MANIFESTO, json.dumps(manifesto))
+    return feitas
+
+
+def importar(origem: Path | str) -> list[tuple[str, str]]:
+    """Lê um .zip feito por `exportar`. Só aceita os arquivos das bases conhecidas e só troca a cópia local
+    se a do pacote for mais nova. Devolve [(base, situação)]."""
+    import json
+    import os
+    import zipfile
+
+    conhecidas = {b.arquivo: b for b in todas()}
+    res: list[tuple[str, str]] = []
+    try:
+        arquivo = zipfile.ZipFile(origem)
+    except zipfile.BadZipFile as e:
+        raise ValueError("o arquivo não é um .zip válido") from e
+    with arquivo as z:
+        try:
+            manifesto = json.loads(z.read(MANIFESTO))
+        except (KeyError, ValueError) as e:
+            raise ValueError("este arquivo não foi gerado pelo CelScan (falta o manifesto)") from e
+        for info in z.infolist():
+            if info.filename == MANIFESTO:
+                continue
+            base = conhecidas.get(info.filename)  # nome exato: nada de pastas ou ../ (zip slip)
+            if base is None:
+                res.append((info.filename, "ignorado (não é uma base do CelScan)"))
+                continue
+            if info.file_size > TAMANHO_MAX:
+                res.append((base.nome, "ignorado (grande demais)"))
+                continue
+            quando = float((manifesto.get(info.filename) or {}).get("modificado") or time.time())
+            if base.caminho.exists() and base.caminho.stat().st_mtime >= quando:
+                res.append((base.nome, "a cópia deste PC já é igual ou mais nova"))
+                continue
+            conteudo = z.read(info)
+            try:
+                conteudo.decode("utf-8")
+            except UnicodeDecodeError:
+                res.append((base.nome, "ignorado (arquivo corrompido)"))
+                continue
+            PASTA.mkdir(parents=True, exist_ok=True)
+            tmp = base.caminho.with_suffix(".tmp")
+            tmp.write_bytes(conteudo)
+            os.utime(tmp, (quando, quando))  # a idade da base continua a do PC de origem
+            tmp.replace(base.caminho)
+            res.append((base.nome, "importada"))
+    LOGGER.info("bases importadas de %s: %s", origem, res)
+    return res

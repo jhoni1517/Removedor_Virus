@@ -70,6 +70,16 @@ apps:
     titulo: "Instalado fora da loja oficial ({detalhe})"
     significa: "O app veio de um arquivo baixado da internet ou de outro app, sem a verificação da loja."
     fazer: "Prefira sempre a Play Store. Se não lembra de ter instalado, remova."
+  loja_alternativa:
+    peso: 5
+    titulo: "Instalado pela {detalhe} (loja alternativa)"
+    significa: "Veio de uma loja alternativa conhecida, que verifica ou compila os apps. Não é a Play Store, mas não é um arquivo solto da internet."
+    fazer: "Normal se você usa essa loja de propósito."
+  transferido:
+    peso: 5
+    titulo: "Copiado de outro celular ({detalhe})"
+    significa: "O app veio na transferência do celular antigo. Se no antigo ele tinha vindo da loja, está tudo certo."
+    fazer: "Se não reconhece o app, remova. Se reconhece, reinstale pela loja para receber atualizações."
   sms_padrao:
     peso: 20
     titulo: "Definido como app de SMS padrão"
@@ -155,6 +165,31 @@ apps:
     titulo: "Usou {detalhe}"
     significa: "Um app escondido ou de fora da loja acessou câmera, microfone, localização ou SMS nos últimos dias."
     fazer: "Se você não abriu esse app nesse período, remova."
+  mesmo_autor:
+    peso: 30
+    titulo: "Mesmo autor do app perigoso '{detalhe}'"
+    significa: "Este app foi assinado com o mesmo certificado de um app de risco alto encontrado no celular. Quem fez um, fez o outro."
+    fazer: "Remova junto com o app perigoso, a não ser que você conheça e confie neste."
+  nome_com_truque:
+    peso: 40
+    titulo: "Nome com caracteres escondidos"
+    significa: "O nome do app tem caracteres invisíveis ou que invertem o texto. É um truque para o nome parecer outro na tela."
+    fazer: "Apps sérios não fazem isso. Remova, a não ser que você saiba exatamente o que é."
+  instalou_outros:
+    peso: 35
+    titulo: "Instalou outros apps: {detalhe}"
+    significa: "Este app, que não é uma loja oficial, colocou outros apps no celular. É o comportamento de um 'dropper', que baixa vírus em etapas."
+    fazer: "Remova este app e também os apps que ele instalou, a não ser que você conheça e confie em todos."
+  lote_suspeito:
+    peso: 15
+    titulo: "Instalado junto com {detalhe}"
+    significa: "Vários apps de fora da loja apareceram no celular praticamente ao mesmo tempo. Isso acontece quando um vírus instala um pacote de apps de uma vez."
+    fazer: "Confira se você instalou esses apps de propósito. Se não, remova todos."
+  sem_nome:
+    peso: 20
+    titulo: "App sem nome"
+    significa: "O app não tem um nome para mostrar. Apps normais sempre têm; apps maliciosos às vezes deixam em branco para passar despercebidos."
+    fazer: "Se você não sabe o que é, remova."
   envio_dados:
     peso: 25
     titulo: "Enviou {detalhe} pela internet"
@@ -165,6 +200,41 @@ apps:
     titulo: "{detalhe}"
     significa: "O app manda notificações demais. Muitas vezes são propagandas ou avisos falsos de vírus."
     fazer: "Desligue as notificações dele em Configurações > Apps > Notificações, ou remova."
+  padrao_espiao:
+    peso: 40
+    titulo: "Comportamento de app espião"
+    significa: "O app se esconde (sem ícone ou com disfarce) e ao mesmo tempo lê a tela, as notificações ou usa câmera/microfone/localização. É o jeito de trabalhar dos apps de monitoramento (stalkerware), mesmo os que ainda não estão em nenhuma lista."
+    fazer: "Se alguém pode ter mexido no seu celular, guarde as provas antes de remover e procure ajuda. Depois remova."
+  instalador_forjado:
+    peso: 50
+    titulo: "Diz que veio da {detalhe}, mas foi instalado de outro jeito"
+    significa: "O app foi marcado como se tivesse vindo da loja, mas quem fez a instalação foi outro programa ou um computador. Golpistas fazem isso para o app parecer confiável."
+    fazer: "Remova e, se precisar do app, instale de novo direto pela loja."
+  voltou:
+    peso: 50
+    titulo: "Voltou depois de removido (removido em {detalhe})"
+    significa: "Este app já tinha sido removido numa visita anterior e apareceu de novo. Isso acontece quando outro app ou um site reinstala o vírus sozinho."
+    fazer: "Remova de novo e procure o app que instala outros (veja os alertas 'Instalou outros apps'). Troque as senhas."
+  dropper_ativo:
+    peso: 30
+    titulo: "Consegue instalar apps sozinho"
+    significa: "Tem permissão para instalar apps e também controla a tela (acessibilidade), então pode tocar em 'Instalar' sem você. É assim que golpes bancários baixam a segunda parte do vírus."
+    fazer: "Remova. Se o app for de automação que você instalou de propósito, tire pelo menos a permissão de instalar apps."
+  intercepta_codigos:
+    peso: 30
+    titulo: "Pode ler códigos do banco"
+    significa: "Lê SMS ou todas as notificações num celular com app de banco instalado. Com isso dá para pegar o código de confirmação de um Pix ou de troca de senha."
+    fazer: "Se não for um app de mensagens ou relógio inteligente que você usa, remova antes de abrir o banco."
+  golpe_emprestimo:
+    peso: 30
+    titulo: "Coleta sua agenda de contatos"
+    significa: "App de fora da loja que lê contatos e também SMS ou registro de chamadas. É o perfil dos falsos apps de empréstimo que depois ameaçam expor a pessoa para os contatos."
+    fazer: "Remova. Se já houve ameaça ou cobrança, guarde prints e registre ocorrência."
+  teclado_suspeito:
+    peso: 40
+    titulo: "Teclado de fora da loja em uso"
+    significa: "O teclado vê tudo o que você digita, inclusive senhas. Este teclado não veio de uma loja oficial."
+    fazer: "Volte para o teclado original em Configurações > Sistema > Idiomas e entrada, e remova este app."
   instalado_recente:
     peso: 5
     titulo: "Instalado há {detalhe} dia(s)"
@@ -236,6 +306,26 @@ appops:
     fazer: "Desative em Configurações > Apps > Acesso especial > Instalar apps desconhecidos."
 
 aparelho:
+  outros_usuarios:
+    nivel: MÉDIO
+    titulo: "Há {detalhe} além do dono"
+    significa: "O celular tem outro usuário ou perfil (por exemplo 'perfil de trabalho'). Apps instalados só lá não aparecem na tela do dono e escapam de uma análise comum."
+    fazer: "Se é celular da empresa, é normal. Se ninguém criou esse perfil, remova em Configurações > Sistema > Vários usuários."
+  apps_em_outro_perfil:
+    nivel: MÉDIO
+    titulo: "Apps escondidos em outro perfil: {detalhe}"
+    significa: "Estes apps existem só no outro usuário/perfil (perfil de trabalho, Pasta Segura ou usuário extra), fora da vista da tela principal."
+    fazer: "Em celular da empresa ou na Pasta Segura do próprio dono é normal. Se ninguém reconhece, apague o perfil ou o usuário extra."
+  apk_ameaca_guardado:
+    nivel: ALTO
+    titulo: "Instalador de ameaça guardado no celular: {detalhe}"
+    significa: "Há um arquivo .apk de um vírus conhecido salvo no armazenamento, esperando para ser instalado (ou para reinstalar depois de removido)."
+    fazer: "Apague o arquivo (o CelScan guarda uma cópia segura) e não abra arquivos .apk recebidos por mensagem."
+  apks_guardados:
+    nivel: BAIXO
+    titulo: "{detalhe} guardado(s) no celular"
+    significa: "São arquivos para instalar apps, normalmente baixados ou recebidos por mensagem. Se forem antigos, só ocupam espaço."
+    fazer: "Apague os que você não reconhece ou não usa mais."
   popups:
     nivel: MÉDIO
     titulo: "{detalhe} abrindo anúncios fora do app"

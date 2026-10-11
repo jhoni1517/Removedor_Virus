@@ -1,3 +1,5 @@
+import { num } from "../nomes";
+import { BateriaBaixa } from "../bateria";
 import { Activity, Apple, BatteryCharging, Camera, Check, Cpu, FolderOpen, Gauge, HardDrive, Power, Rocket, Sparkles, Stethoscope, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
@@ -287,14 +289,14 @@ function PainelDiagnostico({ d }: { d: Dispositivo | undefined }) {
               </Linha>
             )}
             {b.temperatura && <Linha rotulo="Temperatura">{b.temperatura}</Linha>}
-            {arm && <Linha rotulo="Armazenamento">{arm.livre_gb.toFixed(1)} GB livres de {arm.total_gb.toFixed(0)} GB</Linha>}
-            {diag.ram && <Linha rotulo="RAM">{diag.ram.disponivel_gb.toFixed(1)} de {diag.ram.total_gb.toFixed(1)} GB livres</Linha>}
-            {diag.ligado_dias !== null && <Linha rotulo="Ligado há">{diag.ligado_dias.toFixed(1)} dias</Linha>}
+            {arm && <Linha rotulo="Armazenamento">{num(arm.livre_gb, 1)} GB livres de {num(arm.total_gb, 0)} GB</Linha>}
+            {diag.ram && <Linha rotulo="RAM">{num(diag.ram.disponivel_gb, 1)} de {num(diag.ram.total_gb, 1)} GB livres</Linha>}
+            {diag.ligado_dias !== null && <Linha rotulo="Ligado há">{num(diag.ligado_dias, 1)} dias</Linha>}
           </div>
           {diag.pastas.length > 0 && (
             <div className="md:col-span-2">
               <h4 className="mb-1 text-sm font-semibold text-fraco">O que mais ocupa espaço</h4>
-              {diag.pastas.slice(0, 6).map((p) => <Linha key={p.pasta} rotulo={p.pasta}>{p.gb.toFixed(1)} GB</Linha>)}
+              {diag.pastas.slice(0, 6).map((p) => <Linha key={p.pasta} rotulo={p.pasta}>{num(p.gb, 1)} GB</Linha>)}
             </div>
           )}
           {diag.pecas && diag.pecas.length > 0 && (
@@ -338,7 +340,7 @@ function PainelLimpeza({ d }: { d: Dispositivo | undefined }) {
     try {
       const t = await esperar(await api<Tarefa<{ liberado_mb: number | null }>>("/limpeza/cache", { corpo: { serial: d!.serial } }));
       const mb = t.resultado?.liberado_mb;
-      avisar({ tipo: "ok", texto: mb != null ? `Cache limpo: ~${mb.toFixed(0)} MB liberados.` : "Cache limpo." });
+      avisar({ tipo: "ok", texto: mb != null ? `Cache limpo: ~${num(mb, 0)} MB liberados.` : "Cache limpo." });
     } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
     finally { setOcupado(""); }
   }
@@ -346,7 +348,7 @@ function PainelLimpeza({ d }: { d: Dispositivo | undefined }) {
     setOcupado("lixo");
     try {
       const r = await api<{ liberado_mb: number | null }>("/limpeza/lixo/apagar", { corpo: { serial: d!.serial, categorias: lixo!.itens.map((i) => i.chave) } });
-      avisar({ tipo: "ok", texto: r.liberado_mb != null ? `Lixo apagado: ~${r.liberado_mb.toFixed(0)} MB liberados.` : "Lixo apagado." });
+      avisar({ tipo: "ok", texto: r.liberado_mb != null ? `Lixo apagado: ~${num(r.liberado_mb, 0)} MB liberados.` : "Lixo apagado." });
       setLixo(null);
     } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
     finally { setOcupado(""); }
@@ -526,8 +528,8 @@ function PainelDesempenho({ d }: { d: Dispositivo | undefined }) {
       {r && (
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <div>
-            <h4 className="mb-1 text-sm font-semibold text-fraco">Abertura de apps{r.media_abertura_ms != null && ` · média ${(r.media_abertura_ms / 1000).toFixed(2)} s`}</h4>
-            {r.apps.map((a) => <Linha key={a.pacote} rotulo={a.pacote}>{a.ms != null ? `${(a.ms / 1000).toFixed(2)} s` : a.erro}</Linha>)}
+            <h4 className="mb-1 text-sm font-semibold text-fraco">Abertura de apps{r.media_abertura_ms != null && ` · média ${num(r.media_abertura_ms / 1000, 2)} s`}</h4>
+            {r.apps.map((a) => <Linha key={a.pacote} rotulo={a.pacote}>{a.ms != null ? `${num(a.ms / 1000, 2)} s` : a.erro}</Linha>)}
           </div>
           <div>
             <h4 className="mb-1 text-sm font-semibold text-fraco">Armazenamento</h4>
@@ -659,6 +661,7 @@ export default function Diagnostico() {
           </div>
         </div>
       )}
+      <BateriaBaixa serial={d?.serial} />
       <PainelDiagnostico d={d} />
       <PainelCorrecoes d={d} />
       <PainelPrint d={d} />

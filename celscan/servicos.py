@@ -15,9 +15,10 @@ from typing import Any
 
 from celscan.acoes import quarentena
 from celscan.analise import iocs as iocs_mod
+from celscan.analise import pontuacao
 from celscan.analise.pontuacao import nota
 from celscan.analise.virustotal import VirusTotal
-from celscan.core import adb, bases, db, log, preferencias
+from celscan.core import adb, balcao, bases, db, log, preferencias, tempos
 from celscan.core import agente as agente_mod
 from celscan.core.adb import AdbErro, Aparelho
 from celscan.varredura import Varredura
@@ -36,8 +37,7 @@ ETAPAS = {
     "coleta": ("Lendo apps e configurações do aparelho", 25),
     "iocs": ("Carregando a lista de ameaças conhecidas", 5),
     "hashes": ("Calculando a impressão digital de cada app", 40),
-    "assinaturas": ("Conferindo a assinatura dos apps suspeitos", 15),
-    "rotulos": ("Lendo o nome e o ícone dos apps", 12),
+    "rotulos": ("Lendo nome, ícone e assinatura de cada app", 25),
     "virustotal": ("Consultando o VirusTotal", 0),
     "analise": ("Analisando e montando o resultado", 2),
 }
@@ -77,7 +77,9 @@ class ResultadoVarredura:
     duracao_s: float = 0.0
 
     def como_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["decomposicao"] = pontuacao.decompor(self.achados, self.resultados)
+        return d
 
 
 def _nada(_: Evento) -> None:
@@ -100,8 +102,21 @@ def verificar_conexao(serial: str, erro: Exception) -> Exception:
 class _Passos:
     """Emite eventos de progresso e confere o cancelamento."""
 
+    MEDIR = ("coleta", "hashes", "rotulos", "analise")  # etapas que dependem do PC/celular (não da internet)
+
     def __init__(self, progresso: Progresso, cancelar: threading.Event | None):
         self.progresso, self.cancelar = progresso, cancelar
+        self.n_apps: int | None = None
+        self._atual: str | None = None
+        self._desde = time.perf_counter()
+
+    def _fechar(self) -> None:
+        if self._atual in self.MEDIR and self.n_apps:
+            tempos.registrar(self._atual, time.perf_counter() - self._desde, self.n_apps)
+
+    def concluir(self) -> None:
+        self._fechar()
+        self._atual = None
 
     def checar(self) -> None:
         if self.cancelar is not None and self.cancelar.is_set():
@@ -109,7 +124,11 @@ class _Passos:
 
     def etapa(self, nome: str, atual: int | None = None, total: int | None = None, detalhe: str = "") -> None:
         self.checar()
-        texto, estimativa = ETAPAS.get(nome, (nome, 0))
+        if nome != self._atual:
+            self._fechar()
+            self._atual, self._desde = nome, time.perf_counter()
+        texto, padrao = ETAPAS.get(nome, (nome, 0))
+        estimativa = tempos.estimar(nome, self.n_apps, padrao) if padrao else 0
         self.progresso({"etapa": nome, "descricao": texto, "detalhe": detalhe, "atual": atual, "total": total,
                         "estimativa_s": estimativa})
 
@@ -139,6 +158,23 @@ def _em_paralelo(pacotes: list[str], tarefa: Callable[[str], Any], avancar: Call
             raise
 
 
+def marcar_reinstalados(apps: dict, removidos: dict[str, str]) -> None:
+    """Marca 'removido_antes' só se o app foi instalado DE NOVO depois da remoção. Um app que o CelScan só
+    conseguiu desativar continua na lista com a data de instalação antiga, e não é reinfecção."""
+    from datetime import datetime, timedelta
+
+    for pkg, quando in removidos.items():
+        app = apps.get(pkg)
+        if not app or not app.instalado:
+            continue
+        try:
+            removido_em = datetime.fromisoformat(quando)
+        except ValueError:
+            continue
+        if app.instalado >= removido_em - timedelta(minutes=10):  # folga: relógio do PC x do celular
+            app.removido_antes = removido_em.strftime("%d/%m/%Y")
+
+
 def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, progresso: Progresso = _nada,
                        cancelar: threading.Event | None = None, conexao=None) -> ResultadoVarredura:
     opcoes = opcoes or OpcoesVarredura()
@@ -156,6 +192,7 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         passos.etapa("coleta")
         with log.etapa("coleta"):
             sc.coletar()
+        passos.n_apps = len(sc.apps)  # antes da próxima etapa: o tempo da coleta entra na média deste PC
         avisos = list(sc.avisos)
         if opcoes.modo == "completo" and not vt:
             avisos.append("VirusTotal não consultado: cadastre sua chave gratuita em Configurações.")
@@ -168,14 +205,14 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
                 avisos.append("Lista de ameaças conhecidas indisponível (sem internet e sem cópia local).")
 
         total = len(sc.apps)
+        passos.n_apps = total
         with log.etapa("hashes"):
             for i, pkg in enumerate(sc.calcular_hashes(), 1):
                 passos.etapa("hashes", i, total, pkg)
 
-        cands = sc.candidatos()
-        with log.etapa("assinaturas"):
-            _em_paralelo(cands, sc.ler_certificado, lambda i, pkg: passos.etapa("assinaturas", i, len(cands), pkg))
-        # nome e ícone de TODOS os apps (não só dos suspeitos): a lista inteira fica legível
+        # nome, ícone, manifesto e assinatura de TODOS os apps (cache por hash: só o 1º atendimento demora).
+        # Antes, com o Agente ligado, os apps com nome vindo dele ficavam sem a leitura do manifesto
+        # (redes de anúncio, disfarces...) e a assinatura só era conferida nos suspeitos.
         todos = list(sc.apps)
         sem_nome = todos
         if preferencias.ler().get("usar_agente") and agente_mod.disponivel():
@@ -185,7 +222,6 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
                     for pkg, dados in ag.apps(icones=True).items():
                         if pkg in sc.apps:
                             sc.apps[pkg].nome, sc.apps[pkg].icone = dados["nome"], dados["icone"]
-                sem_nome = [p for p in todos if not sc.apps[p].nome]
             except AdbErro as e:  # inclui AgenteIndisponivel: cai para a leitura do APK
                 avisos.append(f"CelScan Agente indisponível ({e}); nomes lidos direto dos APKs.")
         with log.etapa("rotulos"):
@@ -201,14 +237,23 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         raise verificar_conexao(ap.serial, e) from e
 
     passos.etapa("analise")
+    con = conexao or db.conectar()
+    # app que o CelScan já tinha removido deste celular e voltou: reinfecção (alguém ou algo reinstalou)
+    marcar_reinstalados(sc.apps, db.removidos_antes(con, ap.serial))
     achados, resultados = sc.pontuar()
     n, veredito = nota(achados, resultados)
     duracao = time.perf_counter() - inicio
     info = sc.info()
-    con = conexao or db.conectar()
     vid = db.salvar_varredura(con, info, n, veredito, achados, resultados, avisos, duracao, modo=opcoes.modo,
                               cliente_id=opcoes.cliente_id)
     log.LOGGER.info("varredura %d (%s): %d apps em %.1fs, nota %d", vid, opcoes.modo, len(resultados), duracao, n)
+    passos.concluir()
+    try:
+        ordem = balcao.vincular_varredura(con, ap.serial, vid)
+        if ordem:
+            log.LOGGER.info("varredura %d ligada à ordem de serviço %d", vid, ordem)
+    except Exception as e:  # noqa: BLE001 - a OS é um extra: nunca derruba a varredura
+        log.LOGGER.info("não liguei a varredura à OS: %s", e)
     return ResultadoVarredura(vid, opcoes.modo, info, n, veredito, achados, resultados, avisos, duracao)
 
 
@@ -231,7 +276,10 @@ def remover_apps(ap: Aparelho, alvos: list[dict], progresso: Progresso = _nada,
         qid = r.get("quarentena_id")
         if ok:
             db.registrar_acao(con, ap.serial, "remocao", r["pacote"], msg, qid)
-        feitos.append({"pacote": r["pacote"], "ok": ok, "mensagem": msg, "quarentena_id": qid})
+        elif qid and r.get("parcial"):  # não removeu, mas já tirou poderes do app: fica no histórico para desfazer
+            db.registrar_acao(con, ap.serial, "permissoes", r["pacote"], f"remoção incompleta: {msg}", qid)
+        feitos.append({"pacote": r["pacote"], "ok": ok, "mensagem": msg, "quarentena_id": qid,
+                       "parcial": bool(r.get("parcial"))})
     return feitos
 
 

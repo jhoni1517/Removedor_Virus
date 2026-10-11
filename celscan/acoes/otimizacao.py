@@ -97,14 +97,17 @@ def limpar_cache(ap):
     ap.sh("pm trim-caches 999G", timeout=600)
     time.sleep(2)
     depois = livre_kb(ap)
-    return (depois - antes) / 1024 if antes is not None and depois is not None else None
+    # o próprio sistema pode gravar algo nesses segundos: nunca mostra "liberou -3 MB"
+    return max(0.0, (depois - antes) / 1024) if antes is not None and depois is not None else None
 
 
 # Lixo seguro: o celular refaz sozinho. NUNCA inclui fotos, vídeos ou documentos do dono (isso é irreversível).
 LIXO: dict[str, tuple[str, tuple[str, ...]]] = {
     "miniaturas": ("Miniaturas (o celular refaz sozinho)",
                    ("/sdcard/DCIM/.thumbnails", "/sdcard/Pictures/.thumbnails", "/sdcard/Movies/.thumbnails")),
-    "temporarios": ("Arquivos temporários e de log", ("/sdcard/LOST.DIR", "/sdcard/.temp", "/sdcard/temp")),
+    # "/sdcard/temp" saiu: é um nome comum de pasta criada pelo próprio dono (com arquivos dele). LOST.DIR também
+    # saiu: guarda pedaços recuperados do cartão, que podem ser fotos que a pessoa ainda quer.
+    "temporarios": ("Arquivos temporários de apps", ("/sdcard/.temp",)),
     "cache_telegram": ("Cache do Telegram (as mídias salvas continuam)",
                        ("/sdcard/Android/data/org.telegram.messenger/cache",)),
 }
@@ -133,9 +136,12 @@ def limpar_lixo(ap, categorias):
             raise ValueError(f"tipo de lixo desconhecido: {chave}")
         for p in LIXO[chave][1]:
             q = shlex.quote(p)
-            ap.sh(f"[ -d {q} ] && rm -rf {q}/* 2>/dev/null || true", timeout=300)
+            # find em vez de "rm -rf pasta/*": o * não pega arquivos ocultos, e as miniaturas grandes são
+            # justamente ocultas (.thumbdata...); antes a limpeza "terminava" sem liberar nada
+            ap.sh(f"[ -d {q} ] && find {q} -mindepth 1 -maxdepth 1 -exec rm -rf {{}} + 2>/dev/null || true",
+                  timeout=300)
     depois = livre_kb(ap)
-    return (depois - antes) / 1024 if antes is not None and depois is not None else None
+    return max(0.0, (depois - antes) / 1024) if antes is not None and depois is not None else None
 
 
 def compilar(ap):
@@ -144,6 +150,12 @@ def compilar(ap):
 
 def animacoes(ap, valor):
     """Muda a velocidade das animações guardando os valores atuais (desfaz com quarentena restaurar)."""
+    import math
+
+    valor = float(valor)
+    if not math.isfinite(valor) or not 0 <= valor <= 10:  # o Android aceita de 0 a 10; "nan" ia direto
+        raise ValueError("a escala das animações vai de 0 a 10 (1 = padrão, 0.5 = mais rápido)")
+    valor = f"{valor:g}"
     ajustes = [{"tipo": "settings", "ns": "global", "chave": k, "anterior": quarentena.ler_setting(ap, "global", k)}
                for k in ANIM]
     pasta = quarentena.criar_ajuste(ap, "ajuste_animacoes", f"Animações em {valor}x", ajustes)
@@ -204,6 +216,11 @@ def sugestoes_debloat(ap, nivel="recomendado"):
 
 
 def desativar(ap, pkg):
+    from celscan.core.seguranca import essencial, exigir_pacote
+
+    exigir_pacote(pkg)
+    if essencial(pkg):
+        return False  # nunca desativa app essencial, mesmo que alguma lista sugira
     pasta = quarentena.criar(ap, pkg, {"motivos": ["debloat"]}, copiar_apk=False)
     out = ap.sh(f"pm disable-user --user 0 {pkg}", erro=True)
     if "disabled" in out:
@@ -213,4 +230,5 @@ def desativar(ap, pkg):
     if "Success" in out:
         quarentena.registrar(pasta, "removido_usuario0")
         return True
+    quarentena.descartar(pasta)  # não mexeu em nada: não deixa um item "Incompleto" no Histórico
     return False

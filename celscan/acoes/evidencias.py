@@ -43,8 +43,16 @@ def documentar(ap: Aparelho, achados: list[dict[str, Any]], destino: Path, info:
     Devolve {pasta, arquivos, manifesto_sha256}.
     """
     agora = datetime.now()
+    destino.mkdir(parents=True, exist_ok=True)
     pasta = destino / f"Evidencias_{agora:%Y%m%d_%H%M%S}"
-    pasta.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while True:  # dois cliques no mesmo segundo: a 2ª pasta não sobrescreve as provas da 1ª
+        try:
+            pasta.mkdir()
+            break
+        except FileExistsError:
+            n += 1
+            pasta = destino / f"Evidencias_{agora:%Y%m%d_%H%M%S}_{n}"
     arquivos: list[Path] = []
 
     resumo = {
@@ -103,6 +111,12 @@ def documentar(ap: Aparelho, achados: list[dict[str, Any]], destino: Path, info:
 
 
 def eh_vigilancia(resultado: dict[str, Any]) -> bool:
-    """True para apps que acionam o modo vítima: indicador de stalkerware/spyware conhecido."""
+    """True para apps que acionam o modo vítima: stalkerware/spyware conhecido OU comportamento de app espião
+    (escondido + lê tela/notificações/sensores). Antes só a lista conhecida acionava, e um espião novo era
+    removido sem o aviso de que isso pode alertar quem instalou."""
+    if resultado.get("vigilancia"):
+        return True
     ameaca = (resultado.get("ameaca") or "").lower()
-    return bool(ameaca) and any(p in ameaca for p in ("stalkerware", "spyware", "pegasus", "predator", "espião"))
+    if ameaca and any(p in ameaca for p in ("stalkerware", "spyware", "pegasus", "predator", "espião")):
+        return True
+    return any(a.get("chave") == "padrao_espiao" for a in resultado.get("achados") or [])

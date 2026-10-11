@@ -28,7 +28,8 @@ logging.getLogger("pyaxmlparser").setLevel(logging.ERROR)  # avisos internos de 
 CACHE = DIR / "icones"
 NS = "{http://schemas.android.com/apk/res/android}"
 MAX_ICONE = 512 * 1024
-VERSAO_CACHE = 3
+MAX_ENTRADA = 48 * 1024 * 1024  # teto por arquivo lido do APK (o resources.arsc dos maiores apps fica em ~20 MB)
+VERSAO_CACHE = 5
 
 # Classes de SDKs de anúncio que abrem tela cheia (intersticial / pop-up)
 SDK_ANUNCIO = {
@@ -39,6 +40,13 @@ SDK_ANUNCIO = {
     "com.adcolony": "AdColony", "com.startapp": "Start.io", "com.my.target": "myTarget",
     "com.yandex.mobile.ads": "Yandex Ads", "com.fyber": "Fyber/DT", "com.smaato": "Smaato",
     "com.tapjoy": "Tapjoy", "com.appodeal": "Appodeal", "com.bigossp": "BIGO Ads",
+    # 3.3: redes comuns em apps de "limpeza", lanternas e jogos que viram adware
+    "com.kwai.network": "Kwai Ads", "com.kwad.sdk": "Kwai Ads", "com.huawei.hms.ads": "Huawei Ads",
+    "com.verve": "Verve", "net.pubnative": "Verve/PubNative", "com.amazon.device.ads": "Amazon Ads",
+    "com.criteo": "Criteo", "com.ogury": "Ogury", "io.presage": "Ogury", "com.bidmachine": "BidMachine",
+    "io.bidmachine": "BidMachine", "com.anythink": "TopOn", "com.mobfox": "MobFox", "com.adsterra": "Adsterra",
+    "com.yandex.mobile.ads.interstitial": "Yandex Ads", "com.mintegral.msdk": "Mintegral",
+    "com.tradplus.ads": "TradPlus", "com.maticoo.sdk": "Maticoo", "com.hyprmx": "HyprMX",
 }
 # Avisos do sistema que adware usa para abrir anúncio fora do app
 GATILHOS = {
@@ -73,6 +81,10 @@ class Rotulo:
     gatilhos: list[str] = field(default_factory=list)
     disfarces: list[str] = field(default_factory=list)  # nomes de atalhos de ícone desativados
     anuncio_escondido: bool = False  # tela de anúncio fora da lista de recentes
+    nome_truque: bool = False  # o nome tinha caracteres invisíveis ou de inversão de texto
+    sem_rotulo: bool = False  # o APK foi lido, mas não tem nome para mostrar
+    rotulo_declarado: bool = True  # o manifesto tem android:label (False = app realmente sem nome)
+    cert: dict | None = None  # certificado de assinatura, lido no mesmo passo (cacheado com o rótulo)
 
 
 class _ZipRemoto:
@@ -112,8 +124,10 @@ class _ZipRemoto:
     def tamanho_de(self, nome: str) -> int:
         return self._diretorio[nome][1]
 
-    def ler_arquivo(self, nome: str) -> bytes:
+    def ler_arquivo(self, nome: str, limite: int = MAX_ENTRADA) -> bytes:
         off_local, tam_comp, metodo = self._diretorio[nome]
+        if tam_comp > limite:
+            raise ValueError(f"{nome} grande demais ({tam_comp // 1048576} MB)")
         # uma leitura só: cabeçalho local + margem para o "extra" (o zipalign usa para alinhar) + dados
         bloco = self.ler(off_local, 30 + 1024 + tam_comp)
         n_nome, n_extra = struct.unpack_from("<HH", bloco, 26)
@@ -121,8 +135,14 @@ class _ZipRemoto:
         dados = bloco[ini:ini + tam_comp]
         if len(dados) < tam_comp:
             dados += self.ler(off_local + ini + len(dados), tam_comp - len(dados))
-        # método 8 = deflate cru (sem cabeçalho zlib): wbits negativo
-        return dados if metodo == 0 else zlib.decompress(dados, -15)
+        if metodo == 0:
+            return dados
+        # método 8 = deflate cru (sem cabeçalho zlib). Com teto: um APK malicioso não estoura a memória
+        d = zlib.decompressobj(-15)
+        saida = d.decompress(dados, limite)
+        if d.unconsumed_tail:
+            raise ValueError(f"{nome} descomprimido passaria de {limite // 1048576} MB")
+        return saida
 
 
 def _resolver(arsc, ref: str):
@@ -241,6 +261,27 @@ def vetor_svg(raiz, arsc, adaptativo: bool = False, fundo: str | None = None) ->
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{caixa}">{bg}{corpo}</svg>'
 
 
+def _compor_adaptativo(frente: bytes, fundo: str, lado: int = 192) -> bytes | None:
+    """Fundo + camada da frente cortada na área visível do ícone adaptativo, em PNG (precisa do Pillow)."""
+    try:
+        import io
+
+        from PIL import Image
+        img = Image.open(io.BytesIO(frente)).convert("RGBA")
+        w, h = img.size
+        corte = img.crop((round(w * 18 / 108), round(h * 18 / 108), round(w * 90 / 108), round(h * 90 / 108)))
+        cor = fundo.lstrip("#")
+        rgba = tuple(int(cor[i:i + 2], 16) for i in range(0, min(len(cor), 8), 2)) if len(cor) in (6, 8) else (255,) * 3
+        base = Image.new("RGBA", corte.size, rgba if len(rgba) == 4 else (*rgba, 255))
+        base.alpha_composite(corte)
+        base = base.resize((lado, lado))
+        saida = io.BytesIO()
+        base.save(saida, "PNG", optimize=True)
+        return saida.getvalue()
+    except Exception:  # noqa: BLE001 — sem Pillow ou imagem estranha: fica o SVG
+        return None
+
+
 def _xml(dados: bytes):
     from pyaxmlparser.axmlprinter import AXMLPrinter
     return AXMLPrinter(dados).get_xml_obj()
@@ -274,8 +315,12 @@ def _icone(z, arsc, ref) -> dict | None:
         fr = _resolver(arsc, frente.get(NS + "drawable"))
         if isinstance(fr, int):
             nome = _bitmap(arsc, fr, z)
-            if nome:  # camada da frente em bitmap: compõe com o fundo num SVG (área visível 72/108)
-                b64 = base64.b64encode(z.ler_arquivo(nome)).decode()
+            if nome:  # camada da frente em bitmap: compõe com o fundo (área visível 72/108)
+                bruto = z.ler_arquivo(nome)
+                png = _compor_adaptativo(bruto, fundo_cor or "#ffffff")
+                if png:  # PNG de verdade também aparece no laudo PDF (SVG não aparecia)
+                    return {"png": png}
+                b64 = base64.b64encode(bruto).decode()
                 tipo = "webp" if nome.lower().endswith(".webp") else "png"
                 return {"svg": f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72">'
                                f'<rect x="18" y="18" width="72" height="72" fill="{fundo_cor or "#ffffff"}"/>'
@@ -323,12 +368,17 @@ def analisar(z: _ZipRemoto, pacote: str = "") -> Rotulo:
                 elif principal is None:
                     principal = comp
                 break
-    rotulo, icone = app.get(NS + "label"), app.get(NS + "icon") or app.get(NS + "roundIcon")
+    rotulo_app, icone = app.get(NS + "label"), app.get(NS + "icon") or app.get(NS + "roundIcon")
+    rotulo_tela = principal.get(NS + "label") if principal is not None else None
     if principal is not None:
-        rotulo = principal.get(NS + "label") or rotulo
         icone = principal.get(NS + "icon") or icone
-    r.nome = _texto(arsc, rotulo) or ""
-    r.disfarces = sorted({d for d in (_texto(arsc, a.get(NS + "label")) for a in desativadas) if d and d != r.nome})
+    r.rotulo_declarado = bool(rotulo_tela or rotulo_app)
+    from celscan.core.seguranca import limpar_nome
+    # nome da tela inicial; se não der para ler, o nome do app (antes ficava sem nome)
+    nome, r.nome_truque = limpar_nome(_texto(arsc, rotulo_tela) or _texto(arsc, rotulo_app))
+    r.nome = nome or ""
+    disf = (limpar_nome(_texto(arsc, a.get(NS + "label")))[0] for a in desativadas)
+    r.disfarces = sorted({d for d in disf if d and d != r.nome})
 
     sdks, gatilhos = set(), set()
     for comp in app:
@@ -411,16 +461,36 @@ def obter(ap, pacote: str, apk: str, tamanho: int, sha256: str | None) -> Rotulo
     if cache:
         cache.pacote = pacote
         return cache
+    ler = _memo(apksig.leitor_remoto(ap, apk))
     try:
-        r = analisar(_ZipRemoto(apksig.leitor_remoto(ap, apk), tamanho), pacote)
+        r = analisar(_ZipRemoto(ler, tamanho), pacote)
         ok = True
     except Exception as e:
         LOGGER.info("rótulo de %s indisponível: %s", pacote, e)
         r, ok = Rotulo(pacote, ""), False
-    if sha256 and ok and r.nome:  # sem nome lido do APK não grava: tenta de novo na próxima varredura
+    try:  # assinatura no mesmo passo: o fim do APK já está na memória (_memo), sai quase de graça
+        der = apksig.certificado_der(ler, tamanho)
+        r.cert = apksig.resumo(der) if der else None
+    except Exception:  # noqa: BLE001
+        r.cert = None
+    # "sem nome" só quando o manifesto realmente não declara nome. Se declara mas o recurso não pôde ser lido
+    # (resources.arsc ofuscado ou estranho), não é suspeito: antes isso dava falso alerta.
+    r.sem_rotulo = ok and not r.nome and not r.rotulo_declarado
+    if sha256 and ok and (r.nome or not r.rotulo_declarado):
         _gravar_cache(sha256, r)
     r.nome = r.nome or pacote
     return r
+
+
+def _memo(ler):
+    """Evita ler duas vezes o mesmo trecho do APK (o fim do arquivo serve ao ZIP e à assinatura)."""
+    vistos: dict[tuple[int, int], bytes] = {}
+
+    def f(off: int, n: int) -> bytes:
+        if (off, n) not in vistos:
+            vistos[(off, n)] = ler(off, n)
+        return vistos[(off, n)]
+    return f
 
 
 def icone_data_uri(icone) -> str | None:

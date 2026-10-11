@@ -8,12 +8,12 @@ const ETAPAS: [string, string][] = [
   ["coleta", "Lendo apps e configurações do aparelho"],
   ["iocs", "Carregando a lista de ameaças conhecidas"],
   ["hashes", "Calculando a impressão digital de cada app"],
-  ["assinaturas", "Conferindo a assinatura dos apps suspeitos"],
+  ["rotulos", "Lendo nome, ícone e assinatura de cada app"],
   ["virustotal", "Consultando o VirusTotal"],
   ["analise", "Analisando e montando o resultado"],
 ];
 
-const TEMPOS: Record<string, number> = { iocs: 5, hashes: 40, assinaturas: 15, analise: 2 };
+const TEMPOS: Record<string, number> = { iocs: 5, hashes: 40, rotulos: 25, analise: 2 };
 
 function formatarTempo(s: number): string {
   if (s < 60) return `${Math.max(1, Math.round(s))} s`;
@@ -50,8 +50,19 @@ export default function Varrendo({ tarefa, modo, onFim, onCancelado }: {
   const restante = (ev.estimativa_s ?? 0) * (1 - fracao) +
     etapas.slice(indiceAtual + 1).reduce((soma, [k]) => soma + (TEMPOS[k] ?? 0), 0);
 
+  // M2: progresso no título da janela (dá para acompanhar pela barra de tarefas com outra janela na frente)
+  const pct = Math.min(99, Math.round(((Math.max(0, indiceAtual) + fracao) / Math.max(1, etapas.length)) * 100));
+  useEffect(() => {
+    const antes = document.title;
+    document.title = `${pct}% · Verificando o celular — CelScan`;
+    return () => { document.title = antes; };
+  }, [pct]);
+
+  const textoEtapa = etapas.find(([k]) => k === ev.etapa)?.[1];
   return (
     <div className="max-w-3xl">
+      {/* L9: leitor de tela anuncia a etapa nova (não cada app, para não falar sem parar) */}
+      <p className="sr-only" aria-live="polite">{textoEtapa ? `Etapa: ${textoEtapa}` : ""}</p>
       <Titulo sub={`Não desconecte o cabo. Tempo decorrido: ${formatarTempo((agora - inicio) / 1000)}${restante > 0 ? ` · faltam cerca de ${formatarTempo(restante)}` : ""}`}>
         Verificando o celular
       </Titulo>

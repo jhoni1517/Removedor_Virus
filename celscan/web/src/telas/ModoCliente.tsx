@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, obterVarredura, type Varredura } from "../api";
 import { useApp } from "../estado";
-import { Cartao, IconeApp, Medidor, RaioX, nomeApp } from "../ui";
+import { Cartao, Data, IconeApp, Medidor, RaioX, nomeApp } from "../ui";
 
 export default function ModoCliente() {
   const { tarefas, estado } = useApp();
@@ -71,6 +71,10 @@ export default function ModoCliente() {
             <div>
               <p className="text-lg font-semibold">{nomeApp(r)}</p>
               <p className="text-fraco">{r.achados[0]?.significa}</p>
+              <p className="mt-1 text-sm text-fraco">
+                {r.sistema ? "Veio de fábrica" : r.loja ? `Baixado da ${r.loja}` : "Instalado fora da loja"}
+                {r.instalado && <> · instalado <Data iso={r.instalado} /></>}
+              </p>
             </div>
           </Cartao>
         ))}
