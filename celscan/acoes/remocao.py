@@ -60,12 +60,14 @@ def remover(ap: Aparelho, r: dict) -> tuple[bool, str]:
             quarentena.descartar(pasta)
         return ok, msg
 
-    if not r.get("loja") and quarentena.copia_completa(pasta):
+    # app de fábrica: "adb uninstall" só tira as ATUALIZAÇÕES e responde "Success" com o app ainda lá
+    # (a tela dizia "removido"); para eles vale só a remoção do usuário
+    if not r.get("loja") and not r.get("sistema") and not r.get("manter_dados") and quarentena.copia_completa(pasta):
         out = ap.adb("uninstall", pkg, erro=True, timeout=180)
         tentativas.append(out)
         if "Success" in out:
             return fim(True, "removido", "removido (cópia conferida na quarentena)")
-    manter = "-k " if r.get("loja") else ""
+    manter = "-k " if (r.get("loja") or r.get("manter_dados")) else ""
     out2 = ap.sh(f"pm uninstall {manter}--user 0 {pkg}", erro=True)
     tentativas.append(out2)
     if "Success" in out2:

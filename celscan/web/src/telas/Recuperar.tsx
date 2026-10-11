@@ -30,9 +30,11 @@ function Painel({ d }: { d: Dispositivo | undefined }) {
 
   async function procurar() {
     setAchados(null);
-    const t = await esperar(await api<Tarefa<Achados>>("/recuperacao/procurar", { corpo }));
-    if (t.estado === "concluida" && t.resultado) setAchados(t.resultado);
-    else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui procurar." });
+    try {
+      const t = await esperar(await api<Tarefa<Achados>>("/recuperacao/procurar", { corpo }));
+      if (t.estado === "concluida" && t.resultado) setAchados(t.resultado);
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui procurar." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
   async function recuperar() {
     setResumo(null);

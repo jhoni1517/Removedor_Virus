@@ -43,8 +43,16 @@ def documentar(ap: Aparelho, achados: list[dict[str, Any]], destino: Path, info:
     Devolve {pasta, arquivos, manifesto_sha256}.
     """
     agora = datetime.now()
+    destino.mkdir(parents=True, exist_ok=True)
     pasta = destino / f"Evidencias_{agora:%Y%m%d_%H%M%S}"
-    pasta.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while True:  # dois cliques no mesmo segundo: a 2ª pasta não sobrescreve as provas da 1ª
+        try:
+            pasta.mkdir()
+            break
+        except FileExistsError:
+            n += 1
+            pasta = destino / f"Evidencias_{agora:%Y%m%d_%H%M%S}_{n}"
     arquivos: list[Path] = []
 
     resumo = {

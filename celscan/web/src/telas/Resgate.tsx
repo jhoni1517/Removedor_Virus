@@ -157,9 +157,11 @@ export function PainelBackup({ d }: { d: Dispositivo | undefined }) {
 
   async function calcular() {
     setLista(null);
-    const t = await esperar(await api<Tarefa<Listagem>>("/backup/listar", { corpo }));
-    if (t.estado === "concluida" && t.resultado) setLista(t.resultado);
-    else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui listar os arquivos." });
+    try {
+      const t = await esperar(await api<Tarefa<Listagem>>("/backup/listar", { corpo }));
+      if (t.estado === "concluida" && t.resultado) setLista(t.resultado);
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui listar os arquivos." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
   async function copiar() {
     setResumo(null);

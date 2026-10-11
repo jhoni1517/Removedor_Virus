@@ -42,7 +42,10 @@ def gerar(pasta, info, nota, rotulo, achados, resultados, loja=None, diag=None, 
     pasta = Path(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
     agora = datetime.now()
-    base = pasta / f"laudo_{info['modelo'].replace(' ', '_')}_{agora:%Y%m%d_%H%M%S}"
+    from celscan.acoes.backup import nome_seguro
+
+    # o modelo vem do próprio celular (getprop): um aparelho adulterado com "../" no nome gravava fora da pasta
+    base = pasta / nome_seguro(f"laudo_{str(info.get('modelo') or 'celular').replace(' ', '_')}_{agora:%Y%m%d_%H%M%S}")
     base.with_suffix(".json").write_text(json.dumps(
         {"data": agora.isoformat(timespec="seconds"), "aparelho": info, "nota": nota, "veredito": rotulo,
          "achados_aparelho": achados, "apps": resultados, "diagnostico": diag, "acoes": acoes,

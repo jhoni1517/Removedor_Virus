@@ -20,8 +20,14 @@ def _exigir(*bins):
         raise IOSErro("Ferramentas faltando: " + ", ".join(faltando))
 
 
-def _run(cmd, env=None):
-    r = subprocess.run(cmd, env=env, capture_output=True, encoding="utf-8", errors="replace")
+def _run(cmd, env=None, timeout=60):
+    """timeout em segundos (None = sem limite, para backup e análise). Antes não havia limite: com o iPhone
+    travado no aviso "Confiar neste computador?", o ideviceinfo prendia a tela do CelScan para sempre."""
+    try:
+        r = subprocess.run(cmd, env=env, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise IOSErro(f"O iPhone não respondeu em {timeout} s ({cmd[0]}). Desbloqueie, toque em 'Confiar' "
+                      "e tente de novo.") from e
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
@@ -107,7 +113,7 @@ def fazer_backup(udid, destino, log=print):
     destino = Path(destino)
     destino.mkdir(parents=True, exist_ok=True)
     log("Mantenha o iPhone desbloqueado. O backup pode levar vários minutos.")
-    cod, out = _run(["idevicebackup2", "-u", udid, "backup", "--full", str(destino)])
+    cod, out = _run(["idevicebackup2", "-u", udid, "backup", "--full", str(destino)], timeout=None)
     if cod != 0:
         raise IOSErro("Backup falhou:\n" + out[-800:])
     return destino / udid
@@ -124,15 +130,24 @@ def analisar(backup, saida, senha=None, log=print):
             raise IOSErro("Backup criptografado: informe a senha.")
         env["MVT_IOS_BACKUP_PASSWORD"] = senha  # não aparece na lista de processos
         dec = saida / "backup_decifrado"
-        cod, out = _run(["mvt-ios", "decrypt-backup", "-d", str(dec), str(alvo)], env)
+        cod, out = _run(["mvt-ios", "decrypt-backup", "-d", str(dec), str(alvo)], env, timeout=None)
         if cod != 0 or not (dec / "Manifest.db").exists():
+            shutil.rmtree(dec, ignore_errors=True)
             raise IOSErro("Não consegui decifrar o backup (senha errada?).\n" + out[-500:])
         alvo = dec
-    cod, out = _run(["mvt-ios", "download-iocs"], env)
+    try:
+        cod, out = _run(["mvt-ios", "download-iocs"], env, timeout=300)
+    except IOSErro:
+        cod = 1
     if cod != 0:
         log("Aviso: não baixei indicadores novos; usando os já instalados.")
     res = saida / "mvt"
-    cod, out = _run(["mvt-ios", "check-backup", "--output", str(res), str(alvo)], env)
+    try:
+        cod, out = _run(["mvt-ios", "check-backup", "--output", str(res), str(alvo)], env, timeout=None)
+    finally:
+        if alvo != Path(backup):
+            # a cópia DECIFRADA tem mensagens, fotos e senhas do cliente: não fica largada no PC (LGPD)
+            shutil.rmtree(alvo, ignore_errors=True)
     if cod != 0:
         raise IOSErro("A análise do MVT falhou — o resultado NÃO é confiável.\n" + out[-800:])
     det = {}

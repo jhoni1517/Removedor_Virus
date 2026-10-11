@@ -308,6 +308,8 @@ def cmd_quarentena(a):
         if ok:
             db.marcar_desfeita(db.conectar(), a.id)
         con.print(("[green]✔ Restaurado[/]" if ok else "[red]✘ Falhou[/]") + f"  {out[-300:]}")
+        if not ok:
+            sys.exit(1)  # scripts do técnico precisam saber que não deu certo
 
 
 # ---------------------------------------------------------------- ios
@@ -908,6 +910,10 @@ def main():
     except (servicos.ModoIndisponivel, servicos.Cancelado) as e:
         con.print(Panel(str(e), border_style="yellow"))
         sys.exit(1)
+    except ValueError as e:  # entrada inválida (pacote, categoria...): mensagem curta em vez de traceback
+        log.LOGGER.info("entrada inválida: %s", e)
+        con.print(Panel(str(e), title="Não deu", border_style="red"))
+        sys.exit(2)
     except adb.AdbErro as e:
         log.LOGGER.error("erro de conexão: %s", e)
         con.print(Panel(f"{e}\n\n[dim]Detalhes no log: {arquivo_log}[/]", title="Erro de conexão", border_style="red"))

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -68,10 +69,24 @@ class Sessao:
     modo: str
     processo: subprocess.Popen = field(repr=False)
     comando: list[str] = field(default_factory=list)
+    log: deque[str] = field(default_factory=lambda: deque(maxlen=200), repr=False)
+    log_fechado: threading.Event = field(default_factory=threading.Event, repr=False)
 
     @property
     def ativa(self) -> bool:
         return self.processo.poll() is None
+
+
+def _drenar(sessao: Sessao) -> None:
+    p = sessao.processo
+    try:
+        if p.stderr is not None:
+            for bruto in iter(p.stderr.readline, b""):
+                sessao.log.append(bruto.decode("utf-8", "replace").rstrip())
+    except (OSError, ValueError):
+        pass
+    finally:
+        sessao.log_fechado.set()
 
 
 def montar_comando(scrcpy: str, serial: str | None, o: OpcoesEspelho) -> list[str]:
@@ -145,6 +160,9 @@ class Espelhos:
                 raise EspelhoErro(f"Não foi possível abrir o scrcpy: {e}") from e
             sessao = Sessao(serial, opcoes.modo, p, cmd)
             self._sessoes[chave] = sessao
+        # lê o stderr o tempo todo: antes ninguém lia depois dos 2 s iniciais, o buffer do pipe (64 KB) enchia
+        # com os avisos do scrcpy e a janela congelava no meio do atendimento
+        threading.Thread(target=_drenar, args=(sessao,), daemon=True, name="scrcpy-stderr").start()
         return sessao
 
     def erro_inicial(self, sessao: Sessao, espera: float = 2.0) -> str | None:
@@ -153,8 +171,11 @@ class Espelhos:
             sessao.processo.wait(timeout=espera)
         except subprocess.TimeoutExpired:
             return None
-        saida = (sessao.processo.stderr.read() if sessao.processo.stderr else b"") or b""
-        texto = saida.decode("utf-8", "replace").strip().splitlines()
+        for _ in range(20):  # dá tempo da thread terminar de ler o que sobrou
+            if sessao.log_fechado.is_set():
+                break
+            sessao.log_fechado.wait(0.05)
+        texto = [linha for linha in sessao.log if linha.strip()]
         erros = [linha for linha in texto if "ERROR" in linha or "error" in linha] or texto[-3:]
         return " / ".join(erros)[-500:] or f"o scrcpy fechou (código {sessao.processo.returncode})"
 

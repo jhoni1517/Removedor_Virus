@@ -9,6 +9,32 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.3.0b2 (11/10/2026) — caçada de bugs 2 (sem funções novas)
+
+| Área | Bug | Correção |
+|---|---|---|
+| API Wi-Fi | endereço `-H x` virava opção do adb | valida `host:porta` e código de 6 dígitos (422) |
+| API backup/recuperação | categoria inválida dava 200 e a tarefa falhava depois | recusa na hora (422) |
+| API abrir-pasta | aceitava arquivo (podia executar um .exe) e negava destino personalizado | só pastas; destinos escolhidos liberados |
+| API ações | reiniciar/limpar/corrigir/finalizar rodavam com backup em andamento | 409 enquanto o aparelho está ocupado |
+| API atualização | instalar fechava o programa no meio de uma tarefa | 409 com tarefa rodando |
+| WebSocket | conexão fechada continuava como ouvinte (vazamento) | detecta desconexão e remove o ouvinte |
+| Apps esquecidos / debloat | sem cancelamento, sem histórico, apagava dados | cancela, registra e remove com `-k` |
+| Remoção | `adb uninstall` em app de fábrica | só `pm uninstall --user 0` |
+| Backup | duas pastas do WhatsApp caíam no mesmo lugar; nomes CON/NUL | rótulos únicos; prefixo em nomes reservados |
+| Recuperação | arquivos com mesmo nome/data se sobrescreviam | nome com hash do caminho |
+| MTP | arquivo cortado era pulado para sempre | confere tamanho, recopia e apaga pedaço |
+| Espelho | stderr do scrcpy enchia e congelava a tela | thread drena o log |
+| Agente | erro após instalar deixava o app no celular; downgrade falhava | desinstala no erro; reinstala em downgrade |
+| iPhone | comando travado prendia para sempre; backup decifrado ficava no disco | timeouts; apaga o decifrado (LGPD) |
+| Otimização | debloat que falhava deixava item na quarentena; animação aceitava NaN/-1 | descarta; valida 0–10 |
+| Laudo/evidências | nome do modelo com `/` quebrava o arquivo; pasta repetida | nome seguro; pasta única |
+| Atualização | instalador baixado em pasta fixa | pasta temporária própria |
+| CLI | traceback com pacote/categoria inválidos; restaurar falho saía com 0 | mensagem amigável (código 2); código 1 |
+| Web | tarefas acumulavam sem limite; erros sem aviso em exportar/procurar/calcular/desfazer | limite de 30; avisos; desfazer mantém os que falharam |
+
+Testes: `testes/test_v33_bugs2.py` (14 novos). Suíte: 313 ok, 3 pulados.
+
 ## Beta 3.3.0b1 (10/10/2026) — 50 upgrades por nível + caçada de bugs
 
 **Crítico (10):** instalador forjado (diz Play Store, mas foi o adb/outro app) · app que voltou depois

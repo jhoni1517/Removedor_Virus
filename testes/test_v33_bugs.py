@@ -238,3 +238,10 @@ def test_api_token_nao_ascii_e_ipv6_e_valor_negativo():
     h = {"x-celscan-token": "TOKEN"}
     assert c.post("/api/ordens", json={"servicos": ["checkup"], "valor": -5}, headers=h).status_code == 422
     assert c.get("/api/varreduras?limite=-5", headers=h).status_code == 200
+
+
+def test_app_de_fabrica_nao_usa_adb_uninstall():
+    ap = ApFalso(respostas={"pm uninstall": "Success"})
+    ok, msg = remocao.remover(ap, {"pacote": "com.miui.analytics", "sistema": True, "admins": []})
+    assert ok and not any(c.startswith("adb uninstall") for c in ap.cmds)
+    assert "pm uninstall --user 0 com.miui.analytics" in ap.cmds

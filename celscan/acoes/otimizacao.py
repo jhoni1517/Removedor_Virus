@@ -150,6 +150,12 @@ def compilar(ap):
 
 def animacoes(ap, valor):
     """Muda a velocidade das animações guardando os valores atuais (desfaz com quarentena restaurar)."""
+    import math
+
+    valor = float(valor)
+    if not math.isfinite(valor) or not 0 <= valor <= 10:  # o Android aceita de 0 a 10; "nan" ia direto
+        raise ValueError("a escala das animações vai de 0 a 10 (1 = padrão, 0.5 = mais rápido)")
+    valor = f"{valor:g}"
     ajustes = [{"tipo": "settings", "ns": "global", "chave": k, "anterior": quarentena.ler_setting(ap, "global", k)}
                for k in ANIM]
     pasta = quarentena.criar_ajuste(ap, "ajuste_animacoes", f"Animações em {valor}x", ajustes)
@@ -224,4 +230,5 @@ def desativar(ap, pkg):
     if "Success" in out:
         quarentena.registrar(pasta, "removido_usuario0")
         return True
+    quarentena.descartar(pasta)  # não mexeu em nada: não deixa um item "Incompleto" no Histórico
     return False

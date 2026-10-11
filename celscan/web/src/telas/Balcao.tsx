@@ -138,11 +138,14 @@ export default function Balcao() {
     catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
   async function exportar() {
-    const r = await fetch("/api/painel/ordens.csv", { headers: { "X-CelScan-Token": TOKEN } });
-    const url = URL.createObjectURL(await r.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: "ordens_celscan.csv" });
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const r = await fetch("/api/painel/ordens.csv", { headers: { "X-CelScan-Token": TOKEN } });
+      if (!r.ok) throw new Error(`Não consegui exportar (erro ${r.status}).`);
+      const url = URL.createObjectURL(await r.blob());
+      const a = Object.assign(document.createElement("a"), { href: url, download: "ordens_celscan.csv" });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000); // revogar na hora cancelava o download em alguns navegadores
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
 
   return (

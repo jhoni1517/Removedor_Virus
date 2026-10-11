@@ -4,6 +4,17 @@ import { aplicarModelo, aplicarTema } from "./tema";
 import { ErroApi } from "./api";
 
 // localStorage pode lançar exceção (WebView com armazenamento bloqueado): antes isso deixava a tela em branco
+/** Guarda só as últimas tarefas: cada varredura traz o retrato inteiro (com ícones) e, num dia de balcão,
+ * a memória da aba crescia sem parar. As que ainda estão rodando nunca saem. */
+const MAX_TAREFAS = 30;
+function limitar(t: Record<string, Tarefa>): Record<string, Tarefa> {
+  const ids = Object.keys(t);
+  if (ids.length <= MAX_TAREFAS) return t;
+  const sobra = ids.length - MAX_TAREFAS;
+  const fora = new Set(ids.filter((id) => t[id].estado !== "executando").slice(0, sobra));
+  return Object.fromEntries(Object.entries(t).filter(([id]) => !fora.has(id)));
+}
+
 export function lerLocal(chave: string): string | null {
   try { return localStorage.getItem(chave); } catch { return null; }
 }
@@ -83,6 +94,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
     let parar = false;
     let espera = 500;
     const conectar = () => {
+      if (parar) return; // a reconexão agendada podia abrir um WebSocket novo depois de a tela fechar
       try {
         ws = new WebSocket(urlWebSocket());
       } catch {
@@ -101,7 +113,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
         } else if (msg.tipo === "dispositivos") {
           setDispositivos(msg.dispositivos);
         } else if (msg.tipo === "tarefa") {
-          setTarefas((t) => ({ ...t, [msg.tarefa.id]: msg.tarefa }));
+          setTarefas((t) => limitar({ ...t, [msg.tarefa.id]: msg.tarefa }));
         } else if (msg.tipo === "progresso") {
           setTarefas((t) => (t[msg.tarefa] ? { ...t, [msg.tarefa]: { ...t[msg.tarefa], progresso: msg.evento } } : t));
         }
@@ -138,7 +150,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   }, [modelo]);
 
   const esperar = useCallback(<R,>(t: Tarefa<R>) => {
-    setTarefas((ts) => ({ ...ts, [t.id]: t as Tarefa }));
+    setTarefas((ts) => limitar({ ...ts, [t.id]: t as Tarefa }));
     // Consulta periódica como garantia, caso alguma mensagem do WebSocket se perca.
     return new Promise<Tarefa<R>>((resolver) => {
       const checar = async () => {

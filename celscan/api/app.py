@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import secrets
 import subprocess
 import threading
@@ -61,6 +62,28 @@ def _id_quarentena(v: str) -> str:
 
 
 Pacote = Annotated[str, AfterValidator(_pacote)]
+
+
+def _endereco(v: str) -> str:
+    """host:porta do pareamento Wi-Fi. Sem isso, um texto começando com '-' virava opção do adb."""
+    if not re.fullmatch(r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9][A-Za-z0-9.\-]{0,252}):\d{1,5}", v.strip()):
+        raise ValueError("endereço inválido: use IP:porta, como 192.168.0.10:37123")
+    return v.strip()
+
+
+def _codigo(v: str | None) -> str | None:
+    if v is not None and not re.fullmatch(r"\d{6}", v.strip()):
+        raise ValueError("o código de pareamento tem 6 dígitos")
+    return v.strip() if v else v
+
+
+def _categorias(validas):
+    def checar(v: list[str]) -> list[str]:
+        ruins = [c for c in v if c not in validas]
+        if ruins:
+            raise ValueError(f"categoria desconhecida: {', '.join(ruins)}")
+        return list(dict.fromkeys(v))
+    return AfterValidator(checar)
 
 
 class PedidoVarredura(BaseModel):
@@ -198,14 +221,16 @@ class PedidoAjuste(BaseModel):
 
 class PedidoRecuperacao(BaseModel):
     serial: str
-    categorias: list[str] = Field(default_factory=lambda: list(recuperacao.PADRAO))
+    categorias: Annotated[list[str], _categorias({*recuperacao.FONTES, *recuperacao.PASTAS_APP})] = Field(
+        default_factory=lambda: list(recuperacao.PADRAO))
     destino: str | None = None
     verificar: bool = False
 
 
 class PedidoBackup(BaseModel):
     serial: str
-    categorias: list[str] = Field(default_factory=lambda: list(backup.PADRAO))
+    categorias: Annotated[list[str], _categorias(backup.CATEGORIAS)] = Field(
+        default_factory=lambda: list(backup.PADRAO))
     destino: str | None = None
     verificar: bool = False
 
@@ -222,8 +247,8 @@ class PedidoPasta(BaseModel):
 
 
 class PedidoWifi(BaseModel):
-    endereco: str
-    codigo: str | None = None
+    endereco: Annotated[str, AfterValidator(_endereco)]
+    codigo: Annotated[str | None, AfterValidator(_codigo)] = None
 
 
 # ---------------------------------------------------------------- aparelhos conectados
@@ -243,7 +268,7 @@ class Aparelhos:
         for serial, estado in pares:
             item: dict[str, Any] = {"serial": serial, "estado": estado, "wifi": ":" in serial}
             if estado == "device":
-                if serial not in self._info:
+                if not self._info.get(serial):  # leitura que falhou ({}) tenta de novo, em vez de ficar sem nome
                     self._info[serial] = self._ler_info(serial)
                 item.update(self._info[serial])
             novos[serial] = item
@@ -337,6 +362,14 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             if not recebido or not secrets.compare_digest(recebido.encode(), token.encode()):
                 return JSONResponse({"detail": "token inválido"}, status_code=401)
         return await chamar(request)
+
+    def livre(serial: str) -> adb.Aparelho:
+        """Aparelho pronto E sem operação em andamento: reiniciar ou limpar no meio de um backup/remoção
+        cortava o que estava sendo feito."""
+        ap = aparelhos.pronto(serial)
+        if tarefas.ocupado(serial):
+            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        return ap
 
     def retrato_do_aparelho(varredura_id: int, serial: str) -> dict[str, Any]:
         """Retrato da varredura, conferindo que ela é DESTE aparelho. Sem isso, com dois celulares no PC, abrir
@@ -705,9 +738,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.post("/api/finalizar")
     def finalizar(p: PedidoFinalizar) -> dict[str, Any]:
-        ap = aparelhos.pronto(p.serial)
-        if tarefas.ocupado(p.serial):
-            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        ap = livre(p.serial)
         return {"feito": atendimento.finalizar(ap, p.desligar_depuracao)}
 
     # ---- balcão: ordens de serviço, pacotes e painel da loja
@@ -773,9 +804,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/apks-guardados/apagar")
     def apagar_apks(p: PedidoApagarApks) -> dict[str, Any]:
         from celscan.acoes import apks
-        ap = aparelhos.pronto(p.serial)
-        if tarefas.ocupado(p.serial):
-            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        ap = livre(p.serial)
         try:
             res = apks.apagar(ap, p.caminhos)
         except ValueError as e:
@@ -818,6 +847,10 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         from celscan.core import atualizacao
 
         canal = preferencias.ler().get("canal_atualizacao", "beta")
+        em_andamento = [t for t in tarefas.listar() if t.estado == "executando"]
+        if em_andamento:  # o CelScan fecha para instalar: não pode derrubar um backup ou remoção no meio
+            raise HTTPException(409, "Espere terminar o que está em andamento (varredura, backup, remoção) "
+                                     "antes de atualizar.")
         info = atualizacao.verificar(canal)
         if not info.get("disponivel"):
             raise HTTPException(409, "Você já está na versão mais nova.")
@@ -916,7 +949,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def correcoes_aplicar(p: PedidoCorrecoes) -> dict[str, Any]:
         from celscan.acoes import correcoes
 
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         if not p.ids:
             raise HTTPException(422, "Escolha ao menos uma correção.")
         try:
@@ -946,7 +979,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def energia_reiniciar(p: PedidoReinicio) -> dict[str, Any]:
         from celscan.acoes import energia
 
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         try:
             return energia.reiniciar(ap, p.modo)
         except ValueError as e:
@@ -999,7 +1032,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.post("/api/limpeza/cache")
     def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
 
         def rodar(progresso, cancelar):
             progresso({"etapa": "limpeza", "descricao": "Limpando o cache dos apps", "detalhe": "",
@@ -1030,13 +1063,26 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         ap = aparelhos.pronto(p.serial)
 
         def rodar(progresso, cancelar):
+            from celscan.config import LOJAS
+            from celscan.core import parsers
+
+            # quem instalou cada app: antes ia tudo como "de fora da loja" e o WhatsApp esquecido era
+            # desinstalado DE VEZ, apagando as conversas. Agora app esquecido sai sempre mantendo os dados.
+            instaladores = parsers.pacotes(ap.sh("pm list packages -i -3", timeout=60))
+            con = db.conectar()
             feitos = []
             for i, pkg in enumerate(p.pacotes, 1):
+                if cancelar.is_set():
+                    break
                 progresso({"etapa": "remocao", "descricao": "Removendo apps esquecidos (cópia na quarentena)",
                            "detalhe": pkg, "atual": i, "total": len(p.pacotes),
                            "estimativa_s": 5 * (len(p.pacotes) - i)})
-                r = {"pacote": pkg, "motivos": ["app esquecido (não usado há muito tempo)"]}
+                inst = (instaladores.get(pkg) or ("", None))[1]
+                r = {"pacote": pkg, "motivos": ["app esquecido (não usado há muito tempo)"],
+                     "loja": LOJAS.get(inst or ""), "manter_dados": True, "admins": []}
                 ok, msg = remocao.remover(ap, r)
+                if ok:
+                    db.registrar_acao(con, p.serial, "remocao", pkg, f"app esquecido: {msg}", r.get("quarentena_id"))
                 feitos.append({"pacote": pkg, "ok": ok, "mensagem": msg, "quarentena_id": r.get("quarentena_id")})
             return feitos
         return nova_tarefa("remocao", p.serial, rodar)
@@ -1057,6 +1103,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             feitos = []
             for i, pkg in enumerate(p.pacotes, 1):
+                if cancelar.is_set():
+                    break
                 progresso({"etapa": "debloat", "descricao": "Desativando apps pré-instalados", "detalhe": pkg,
                            "atual": i, "total": len(p.pacotes), "estimativa_s": 2 * (len(p.pacotes) - i)})
                 feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
@@ -1075,7 +1123,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.post("/api/limpeza/lixo/apagar")
     def apagar_lixo(p: PedidoLimpeza) -> dict[str, Any]:
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         try:
             return {"liberado_mb": otimizacao.limpar_lixo(ap, p.categorias)}
         except ValueError as e:
@@ -1119,9 +1167,13 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                                         destino_de=recuperacao.destino_recuperado))
         return nova_tarefa("recuperacao", p.serial, rodar)
 
+    pastas_liberadas: set[Path] = set()  # destinos escolhidos pelo técnico nesta sessão (para "Abrir pasta")
+
     def destino_backup(serial: str, destino: str | None) -> Path:
         if destino:
-            return Path(destino).expanduser()
+            escolhido = Path(destino).expanduser()
+            pastas_liberadas.add(escolhido.resolve())
+            return escolhido
         d = aparelhos.lista.get(serial, {})
         nome = backup.nome_seguro(f"{d.get('fabricante', '')} {d.get('modelo', '')} ({serial})".strip())
         return backup.pasta_padrao() / nome  # mesmo nome sempre: rodar de novo continua de onde parou
@@ -1164,9 +1216,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/abrir-pasta")
     def abrir_pasta(p: PedidoPasta) -> dict[str, bool]:
         alvo = Path(p.caminho).expanduser().resolve()
-        permitidas = [backup.pasta_padrao().resolve(), config.DIR.resolve()]
+        permitidas = [backup.pasta_padrao().resolve(), config.DIR.resolve(), *pastas_liberadas]
         if not any(alvo == r or r in alvo.parents for r in permitidas):
             raise HTTPException(403, "Só abro pastas do CelScan")
+        if alvo.exists() and not alvo.is_dir():
+            # nunca "abrir" um arquivo: no Windows isso EXECUTA (ex.: um .exe vindo do backup da pasta Download)
+            raise HTTPException(422, "Isso é um arquivo, não uma pasta")
         alvo.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             os.startfile(alvo)  # type: ignore[attr-defined]
@@ -1188,14 +1243,30 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def ouvinte(msg: dict[str, Any]) -> None:
             loop.call_soon_threadsafe(fila.put_nowait, msg)
 
+        async def receber() -> None:  # percebe na hora quando a aba fecha
+            try:
+                while True:
+                    await ws.receive_text()
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+
         tarefas.ouvir(ouvinte)
+        rx = asyncio.create_task(receber())
         try:
             await ws.send_json({"tipo": "estado", **estado()})
-            while True:
-                await ws.send_json(await fila.get())
+            # antes o laço só notava a desconexão na PRÓXIMA mensagem: abas fechadas ficavam penduradas
+            # (ouvinte + fila crescendo) até alguma tarefa publicar algo
+            while not rx.done():
+                pegar = asyncio.ensure_future(fila.get())
+                feito, _ = await asyncio.wait({pegar, rx}, return_when=asyncio.FIRST_COMPLETED)
+                if pegar in feito:
+                    await ws.send_json(pegar.result())
+                else:
+                    pegar.cancel()
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
+            rx.cancel()
             tarefas.parar_de_ouvir(ouvinte)
 
     # ---- interface (arquivos do React já compilados)

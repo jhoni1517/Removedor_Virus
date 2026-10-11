@@ -434,28 +434,34 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
   }
   async function desfazerTudo() {
     const lista = [...desfeitos];
+    const falharam: typeof lista = [];
     let ok = 0;
-    for (const d of lista.reverse()) {
-      const t = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", {
-        corpo: { serial: v.info.serial, quarentena_id: d.quarentena_id } }));
-      if (t.estado === "concluida" && t.resultado?.ok) {
-        ok++;
-        setRemovidos((s) => { const n = new Set(s); n.delete(d.pacote); return n; });
-      }
+    for (const d of [...lista].reverse()) {
+      try {
+        const t = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", {
+          corpo: { serial: v.info.serial, quarentena_id: d.quarentena_id } }));
+        if (t.estado === "concluida" && t.resultado?.ok) {
+          ok++;
+          setRemovidos((s) => { const n = new Set(s); n.delete(d.pacote); return n; });
+        } else falharam.push(d);
+      } catch { falharam.push(d); }
     }
-    setDesfeitos([]);
+    // antes a lista era zerada mesmo com falhas: o botão sumia e não dava para tentar de novo
+    setDesfeitos(falharam);
     avisar({ tipo: ok === lista.length ? "ok" : "erro", texto: `${ok} de ${lista.length} ação(ões) desfeita(s).` });
   }
 
   async function desfazer(feitos: Remocao[]) {
     for (const f of feitos.filter((x) => x.ok && x.quarentena_id)) {
-      const t = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", {
-        corpo: { serial: v.info.serial, quarentena_id: f.quarentena_id } }));
-      if (t.estado === "concluida" && t.resultado?.ok) {
-        setRemovidos((s) => { const n = new Set(s); n.delete(f.pacote); return n; });
-        setDesfeitos((l) => l.filter((x) => x.quarentena_id !== f.quarentena_id));
-        avisar({ tipo: "ok", texto: `${nomeDe(f.pacote)} restaurado.` });
-      } else avisar({ tipo: "erro", texto: `Não consegui restaurar ${nomeDe(f.pacote)}: ${t.erro ?? t.resultado?.mensagem ?? ""}` });
+      try {
+        const t = await esperar(await api<Tarefa<{ ok: boolean; mensagem: string }>>("/desfazer", {
+          corpo: { serial: v.info.serial, quarentena_id: f.quarentena_id } }));
+        if (t.estado === "concluida" && t.resultado?.ok) {
+          setRemovidos((s) => { const n = new Set(s); n.delete(f.pacote); return n; });
+          setDesfeitos((l) => l.filter((x) => x.quarentena_id !== f.quarentena_id));
+          avisar({ tipo: "ok", texto: `${nomeDe(f.pacote)} restaurado.` });
+        } else avisar({ tipo: "erro", texto: `Não consegui restaurar ${nomeDe(f.pacote)}: ${t.erro ?? t.resultado?.mensagem ?? ""}` });
+      } catch (e) { avisar({ tipo: "erro", texto: `Não consegui restaurar ${nomeDe(f.pacote)}: ${(e as Error).message}` }); }
     }
   }
 
