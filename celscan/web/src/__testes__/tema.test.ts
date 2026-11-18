@@ -38,12 +38,13 @@ import { MODELOS, modeloValido } from "../tema";
 
 describe("modelos de interface", () => {
   it("aceita o modelo escolhido e cai no Estúdio se o nome for desconhecido", () => {
-    expect(modeloValido("compacto")).toBe("compacto");
+    expect(modeloValido("assistente")).toBe("assistente");
+    expect(modeloValido("compacto")).toBe("estudio"); // 3.6: modelos extras saíram (interface mais simples)
     expect(modeloValido("nao-existe")).toBe("estudio");
     expect(modeloValido(null)).toBe("estudio");
   });
-  it("tem os seis modelos com descrição", () => {
-    expect(MODELOS.map((m) => m.id)).toEqual(["estudio", "compacto", "toque", "revista", "assistente", "cliente"]);
+  it("tem os três modelos com descrição", () => {
+    expect(MODELOS.map((m) => m.id)).toEqual(["estudio", "assistente", "cliente"]);
     expect(MODELOS.every((m) => m.descricao.length > 20)).toBe(true);
   });
 });

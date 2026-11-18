@@ -25,7 +25,7 @@ from typing import Any
 from celscan.analise import apksig, pix
 from celscan.core.log import LOGGER
 
-VERSAO = 1
+VERSAO = 2  # 2: sem 'root', bloco cifrado só com carregamento de código, sem plataformas
 MAX_DEX = 40 * 1024 * 1024      # por arquivo .dex
 MAX_TOTAL = 96 * 1024 * 1024    # por app (apps gigantes: lê os primeiros dex, onde fica o código principal)
 MAX_ASSET = 12 * 1024 * 1024
@@ -111,7 +111,7 @@ def analisar_zip(z, pacote: str, iocs: Any = None) -> dict[str, Any]:
     sinais["lido_mb"] = round(total / 1048576, 1)
 
     # assets/res: APK, DEX ou bloco cifrado escondido (o "vírus de verdade" que o dropper instala depois)
-    escondidos = []
+    escondidos, cifrados = [], []
     for nome in nomes:
         if not nome.startswith(("assets/", "res/raw/")) or nome.endswith("/"):
             continue
@@ -128,9 +128,12 @@ def analisar_zip(z, pacote: str, iocs: Any = None) -> dict[str, Any]:
             if b.startswith((b"dex\n", b"PK\x03\x04")) and ext not in ("zip",):
                 escondidos.append(nome)
             elif ext in ("", "dat", "bin", "data") and entropia(b) > 7.95:
-                escondidos.append(nome + " (cifrado)")
+                cifrados.append(nome)
     libs = {n.rsplit("/", 1)[-1] for n in nomes if n.startswith("lib/") and n.endswith(".so")}
     packers = sorted({v for k, v in PACKERS.items() for lib in libs if lib.startswith(k)})
+    if cifrados and any(c in set(strings) for c in CARREGA):
+        # bloco cifrado SÓ conta quando o app também carrega código na hora (sozinho é só um recurso comprimido)
+        escondidos += [c + " (cifrado)" for c in cifrados[:2]]
     return montar(pacote, strings, escondidos, packers, iocs, sinais)
 
 
@@ -158,7 +161,7 @@ def montar(pacote: str, strings: list[bytes], escondidos: list[str], packers: li
     if usa_acess and acoes and RX_PIX.search(texto) and pacote not in bancos:
         achar("motor_pix", "acessibilidade + textos de Pix", peso_loja=40)
     if escondidos:
-        achar("motor_payload", ", ".join(escondidos[:3]), peso_loja=30 if carrega else 10)
+        achar("motor_payload", ", ".join(escondidos[:3]), peso_loja=0)
     elif carrega and packers:
         achar("motor_carrega_codigo", "carrega código extra escondido por empacotador", peso_loja=5)
     m = RX_TELEGRAM.search(texto)
@@ -171,8 +174,7 @@ def montar(pacote: str, strings: list[bytes], escondidos: list[str], packers: li
     envia_sms = b"sendTextMessage" in tudo or b"sendMultipartTextMessage" in tudo
     if envia_sms:
         achar("motor_envia_sms", peso_loja=0)
-    if RX_ROOT.search(texto):
-        achar("motor_root", peso_loja=0)
+    # "procura root" saiu da lista de sinais: apps de banco e de pagamento procuram root para se PROTEGER
     if packers:
         achar("motor_empacotado", ", ".join(packers), peso_loja=0)
     return {"versao": VERSAO, "achados": achados, "bancos_alvo": alvos, "acessibilidade": usa_acess,

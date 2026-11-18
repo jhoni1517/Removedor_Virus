@@ -216,6 +216,10 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
             nome = SENSORES[op]
             if seg < apps[pkg].sensores.get(nome, 1e12):
                 apps[pkg].sensores[nome] = seg
+    for app in apps.values():  # data de 1970/2000 (relógio zerado na fábrica) virava "instalado há 26 anos"
+        for campo in ("instalado", "atualizado"):
+            if getattr(app, campo) and getattr(app, campo).year < 2009:
+                setattr(app, campo, None)
     if not apps:
         raise AdbErro("Nenhum app listado — o 'pm list packages' falhou.")
     # 3.5: na varredura rápida, os apps de fábrica que TÊM ícone também entram na lista (navegador da marca,

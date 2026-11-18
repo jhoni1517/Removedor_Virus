@@ -9,6 +9,26 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.6.0b1 (18/11/2026) — visual novo, verificação estável e fim do "github.com espionagem"
+
+Teste real num Xiaomi 24090RA29G (HyperOS, Android 16) mostrou 9 apps "ALTO" que eram falsos alarmes.
+
+| Problema visto | Causa | Correção |
+|---|---|---|
+| "Fala com servidor de espionagem: github.com" em quase todo app | a lista MVT/Echap traz URLs de arquivos no GitHub; a URL virava o domínio inteiro | sites de hospedagem pública (GitHub, Google, nuvens, Telegram...) nunca viram domínio de ameaça, nem em cache antigo |
+| Apps da Play sem ícone como "escondidos" (Verifier, Watch Manager, Editor da Galeria) | regra "sem ícone" valia para app da loja | só pesa em app de fora da loja |
+| Facebook "fora da loja" e "instalado há 26 anos" | instalador `com.facebook.system` (pré-instalado) e data de fábrica 1970/2000 | instalador de parceiro conta como origem confiável; datas antes de 2009 são descartadas |
+| "Código tenta usar root", "manda SMS", "bloco cifrado" em app sério | bancos procuram root para se proteger; recursos comprimidos parecem cifrados | "root" saiu; SMS só fora da loja; bloco cifrado só se o app também carrega código; sinal sem peso nem aparece |
+| Processador "-3343 ms" | `date +%s%N` não existe em alguns Android | tempo medido pelo `/proc/uptime`; valor inválido vira "sem dados" |
+| Tela de verificação parada nas bolinhas cinzas | no WebView2 o WebSocket não entregava o progresso | a consulta periódica também atualiza o andamento |
+| Sair da tela perdia o andamento | tempo e etapas eram da tela, não da tarefa | tempo vem da tarefa; aviso "Verificação em andamento NN%" no menu |
+| Porcentagem estranha | cada etapa valia o mesmo | porcentagem pelo peso de tempo de cada etapa, nunca volta para trás |
+
+Visual: tema "Bancada" (cinza mineral, trilho grafite, amarelo de instrumento de medição), fonte Archivo,
+sem brilhos/gradientes/papel quadriculado. Menu com 5 seções (Verificar vírus, Otimizar, Recuperar arquivos,
+Atendimentos, Configurações). Tela de verificação centralizada com o personagem Lupi e medidor de régua.
+Resultado abre com uma frase ("2 apps perigosos neste celular") e 3 ações; o resto fica em "Mais opções".
+
 ## Beta 3.5.0b1 (18/11/2026) — varredura de vírus refeita (Motor CelScan local, menos falso alarme)
 
 Problemas relatados num aparelho real: ícones errados, nomes estranhos, apps faltando na lista, alarme grave em

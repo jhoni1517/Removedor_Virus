@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urlWebSocket, type Dispositivo, type Estado, type Tarefa } from "./api";
-import { aplicarModelo, aplicarTema } from "./tema";
+import { aplicarModelo, modeloValido, aplicarTema } from "./tema";
 import { ErroApi } from "./api";
 
 // localStorage pode lançar exceção (WebView com armazenamento bloqueado): antes isso deixava a tela em branco
@@ -65,7 +65,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [avisos, setAvisos] = useState<Toast[]>([]);
   const [tema, setTema] = useState(() => lerLocal("celscan-tema") ?? "sistema");
   const [escala, setEscala] = useState(() => Number(lerLocal("celscan-escala")) || 1);
-  const [modelo, setModelo] = useState(() => lerLocal("celscan-modelo") ?? "estudio");
+  const [modelo, setModelo] = useState(() => modeloValido(lerLocal("celscan-modelo")));
   const proximo = useRef(1);
 
   const [erroBackend, setErroBackend] = useState<string | null>(null);
@@ -156,6 +156,9 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
       const checar = async () => {
         try {
           const atual = await api<Tarefa<R>>(`/tarefas/${t.id}`);
+          // guarda o andamento também por aqui: em alguns WebView2 o WebSocket não entrega o progresso e a
+          // tela de verificação ficava parada nas bolinhas cinzas
+          setTarefas((ts) => ({ ...ts, [t.id]: { ...(ts[t.id] ?? {}), ...(atual as Tarefa) } }));
           if (atual.estado !== "executando") {
             setTarefas((ts) => ({ ...ts, [t.id]: atual as Tarefa }));
             resolver(atual);
@@ -169,7 +172,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
             return;
           }
         }
-        setTimeout(checar, 800);
+        setTimeout(checar, 700);
       };
       setTimeout(checar, 400);
     });

@@ -106,6 +106,7 @@ export interface Tarefa<R = unknown> {
   progresso: Partial<Evento>;
   resultado: R | null;
   erro: string | null;
+  criada?: number;
 }
 
 export interface Estado {

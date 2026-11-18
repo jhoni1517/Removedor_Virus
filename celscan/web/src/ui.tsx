@@ -9,8 +9,8 @@ export { nomeApp };
 type Variante = "primario" | "secundario" | "perigo" | "fantasma";
 
 const VARIANTES: Record<Variante, string> = {
-  primario: "bg-[image:var(--grad-destaque)] text-superficie border-transparent shadow-[var(--brilho)] hover:brightness-110",
-  secundario: "bg-superficie text-tinta border-linha shadow-[var(--sombra)] hover:bg-superficie-2",
+  primario: "bg-[var(--acao)] text-[var(--acao-tinta)] border-transparent font-semibold hover:brightness-95",
+  secundario: "bg-superficie text-tinta border-linha hover:bg-superficie-2",
   perigo: "bg-perigo text-superficie hover:brightness-110 border-transparent",
   fantasma: "bg-transparent text-fraco border-transparent hover:text-tinta hover:bg-superficie-2",
 };

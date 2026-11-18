@@ -8,7 +8,7 @@ import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
 import { api, urlLaudo, type Achado, type AppResultado, type Remocao, type Tarefa, type Varredura } from "../api";
 import { useApp } from "../estado";
-import { Botao, Cartao, Data, IconeApp, Medidor, RaioX, Selo, Vazio, duracaoCurta, nomeApp, recente, tamanhoLegivel } from "../ui";
+import { Botao, Cartao, Data, IconeApp, RaioX, Selo, Vazio, duracaoCurta, nomeApp, recente, tamanhoLegivel } from "../ui";
 import { AbaAnuncios, AbaInternet, AbaPoderes, AbaSensores, AbaTodos, ApksGuardados } from "./AbasResultado";
 
 type Filtro = "alerta" | "ALTO" | "MÉDIO" | "BAIXO" | "todos";
@@ -587,65 +587,56 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           <p><strong>Celular limpo!</strong> Nenhum app de risco e nada perigoso nas configurações. Bom momento para mostrar o laudo ao cliente.</p>
         </div>
       )}
-      <Cartao className="mb-6 flex flex-wrap items-center gap-6 p-6">
-        <Medidor nota={v.nota} veredito={v.veredito} />
-        <div className="min-w-[220px] flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{v.info.fabricante} {v.info.modelo}</h1>
-          <p className="font-mono text-sm text-fraco">
-            Android {v.info.android} · patch {v.info.patch_seguranca}
-            {mesesPatch !== null && mesesPatch >= 1 && <span className={mesesPatch >= 12 ? "text-perigo" : mesesPatch >= 6 ? "text-atencao" : ""}> ({mesesPatch} {mesesPatch === 1 ? "mês" : "meses"} atrás)</span>}
-            {" · "}{v.info.serial}
-          </p>
-          <dl className="numeros mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-            <div><dt className="inline text-fraco">Apps: </dt><dd className="inline font-semibold">{v.resultados.length}</dd></div>
-            <div><dt className="inline text-perigo">Alto: </dt><dd className="inline font-semibold">{contagem.ALTO}</dd></div>
-            <div><dt className="inline text-atencao">Médio: </dt><dd className="inline font-semibold">{contagem["MÉDIO"]}</dd></div>
-            <div><dt className="inline text-fraco">Duração: </dt><dd className="inline font-semibold">{Math.round(v.duracao_s)} s</dd></div>
-            <div><dt className="inline text-fraco">Varredura nº </dt><dd className="inline font-semibold">{v.varredura_id}</dd></div>
-          </dl>
-          <p className="numeros mt-1 text-xs text-fraco" title="De onde vieram os apps">
-            Play Store {origens.loja} · outras lojas {origens.outras} · fora da loja <span className={origens.fora ? "text-atencao" : ""}>{origens.fora}</span> · de fábrica {origens.sistema}
+      <section className={`veredito veredito-${contagem.ALTO ? "perigo" : contagem["MÉDIO"] ? "atencao" : "ok"} mb-6`}>
+        <div className="min-w-0 flex-1">
+          <p className="veredito-aparelho">{v.info.fabricante} {v.info.modelo} · Android {v.info.android}</p>
+          <h1 className="veredito-frase">
+            {contagem.ALTO ? `${contagem.ALTO} ${contagem.ALTO === 1 ? "app perigoso" : "apps perigosos"} neste celular`
+              : contagem["MÉDIO"] ? `Nenhum vírus confirmado, ${contagem["MÉDIO"]} ${contagem["MÉDIO"] === 1 ? "app merece" : "apps merecem"} atenção`
+              : "Nenhum app perigoso encontrado"}
+          </h1>
+          <p className="veredito-resumo numeros">
+            Nota {v.nota} de 100 ({v.veredito.toLowerCase()}). {v.resultados.length} apps analisados em {Math.round(v.duracao_s)} s
+            {origens.fora ? `, ${origens.fora} instalado${origens.fora === 1 ? "" : "s"} fora da loja` : ""}.
+            {mesesPatch !== null && mesesPatch >= 12 && <span className="text-perigo"> Sistema sem atualização de segurança há {mesesPatch} meses.</span>}
           </p>
           {(v.decomposicao?.length ?? 0) > 0 && (
             <details className="decomposicao mt-2 text-sm">
-              <summary className="cursor-pointer text-fraco">Por que {v.nota}? ({v.decomposicao!.length} item(ns) tiraram pontos)</summary>
-              <ul className="mt-1 space-y-0.5">
+              <summary className="cursor-pointer text-fraco">O que tirou pontos da nota</summary>
+              <ul className="mt-1 max-w-md space-y-0.5">
                 {v.decomposicao!.slice(0, 12).map((d, i) => (
                   <li key={i} className="flex justify-between gap-4"><span className="truncate">{d.texto}</span><span className="numeros font-semibold text-perigo">{d.pontos}</span></li>
                 ))}
-                {v.decomposicao!.length > 12 && <li className="text-fraco">+{v.decomposicao!.length - 12}…</li>}
+                {v.decomposicao!.length > 12 && <li className="text-fraco">e mais {v.decomposicao!.length - 12}</li>}
               </ul>
             </details>
           )}
         </div>
-        <div className="flex flex-col gap-2">
-          <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
-            href={urlLaudo(v.varredura_id, "cliente")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo (cliente)</a>
-          <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
-            href={urlLaudo(v.varredura_id, "tecnico")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo técnico</a>
-          <a className="inline-flex items-center gap-2 rounded-md border border-linha px-3.5 py-2 text-sm font-medium hover:bg-superficie-2"
-            href={urlLaudo(v.varredura_id, "seminovo")} target="_blank" rel="noreferrer"
-            title="Bateria, IMEI, espaço, segurança e checklist de hardware (deixe o celular conectado)"><FileText size={15} aria-hidden /> Laudo de seminovo</a>
-          <Botao onClick={verTela} disabled={!conectado} title={conectado ? "Abre a tela do celular numa janela" : "Conecte o celular"}>
-            <Monitor size={15} aria-hidden /> Ver a tela
-          </Botao>
-          <Botao onClick={copiarResumo} title="Texto curto para mandar ao cliente"><MessageCircle size={15} aria-hidden /> Copiar resumo</Botao>
-          <Botao onClick={copiarListaRisco} disabled={contagem.ALTO + contagem["MÉDIO"] === 0}
-            title="Apps de risco alto e médio, em colunas (cola direto numa planilha)"><Copy size={15} aria-hidden /> Copiar lista de risco</Botao>
-          <Botao onClick={exportarJson} title="Todos os dados desta varredura em JSON"><Download size={15} aria-hidden /> Exportar JSON</Botao>
-          <Botao onClick={() => setBusca("")} title="Procurar um app (Ctrl+K)"><Search size={15} aria-hidden /> Procurar app</Botao>
-          {desfeitos.length > 0 && conectado && (
-            <Botao onClick={desfazerTudo} title="Restaura tudo que foi removido ou alterado nesta sessão">
-              <RotateCcw size={15} aria-hidden /> Desfazer tudo ({desfeitos.length})
-            </Botao>
-          )}
+        <div className="veredito-acoes">
+          <a className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--acao)] px-4 py-2 text-sm font-semibold text-[var(--acao-tinta)] hover:brightness-95"
+            href={urlLaudo(v.varredura_id, "cliente")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo do cliente</a>
           <Botao onClick={finalizarAtendimento} disabled={!conectado || ocupado}
             title="Apaga o que o CelScan deixou no celular e desliga a Depuração USB (o cliente não sai com o celular aberto)">
             <PowerOff size={15} aria-hidden /> Finalizar atendimento
           </Botao>
-          <Botao variante="fantasma" onClick={onNova}>Nova varredura</Botao>
+          <details className="mais-opcoes">
+            <summary>Mais opções</summary>
+            <div className="mais-opcoes-menu">
+              <a href={urlLaudo(v.varredura_id, "tecnico")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo técnico</a>
+              <a href={urlLaudo(v.varredura_id, "seminovo")} target="_blank" rel="noreferrer"><FileText size={15} aria-hidden /> Laudo de seminovo</a>
+              <button onClick={verTela} disabled={!conectado}><Monitor size={15} aria-hidden /> Ver a tela do celular</button>
+              <button onClick={copiarResumo}><MessageCircle size={15} aria-hidden /> Copiar resumo para o cliente</button>
+              <button onClick={copiarListaRisco} disabled={contagem.ALTO + contagem["MÉDIO"] === 0}><Copy size={15} aria-hidden /> Copiar lista de risco</button>
+              <button onClick={() => setBusca("")}><Search size={15} aria-hidden /> Procurar um app</button>
+              <button onClick={exportarJson}><Download size={15} aria-hidden /> Exportar dados (JSON)</button>
+              {desfeitos.length > 0 && conectado && (
+                <button onClick={desfazerTudo}><RotateCcw size={15} aria-hidden /> Desfazer tudo ({desfeitos.length})</button>
+              )}
+            </div>
+          </details>
+          <Botao variante="fantasma" onClick={onNova}>Nova verificação</Botao>
         </div>
-      </Cartao>
+      </section>
 
       <div className="resultado-grade">
       <RaioX apps={v.resultados} aoEscolher={abrirApp} removidos={removidos} />

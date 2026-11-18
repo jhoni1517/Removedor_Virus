@@ -281,8 +281,8 @@ def calor(ap) -> dict[str, Any]:
 
 NOTA = r"""
 sec(){ echo "@@SEC $1"; }
-ms(){ echo $(( $(date +%s%N) / 1000000 )); }
-laco(){ i=0; while [ $i -lt 150000 ]; do i=$((i+1)); done; }
+ms(){ read u r < /proc/uptime; u=${u%.*}${u#*.}; echo $((u * 10)); }
+laco(){ i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; }
 sec cpu1; a=$(ms); laco; b=$(ms); echo $((b-a))
 sec cpun; n=$(grep -c ^processor /proc/cpuinfo); a=$(ms); j=0
 while [ $j -lt $n ]; do laco & j=$((j+1)); done; wait; b=$(ms); echo $((b-a))
@@ -304,6 +304,8 @@ def _escala(valor: float | None, bom: float, ruim: float) -> int | None:
 def montar_nota(s: dict[str, str], gravacao_mb_s: float | None, latencia_ms: float | None) -> dict[str, Any]:
     cpu1 = _num(s.get("cpu1", "").strip().splitlines()[-1] if s.get("cpu1", "").strip() else None)
     cpun = _num(s.get("cpun", "").strip().splitlines()[-1] if s.get("cpun", "").strip() else None)
+    cpu1 = cpu1 if cpu1 and cpu1 > 0 else None  # relógio do aparelho não mediu: sem número inventado
+    cpun = cpun if cpun and cpun > 0 else None
     m = re.search(r"(\d+)\s+bytes.*?([\d.]+)\s*s(?:ec)?\b", s.get("memoria", ""))
     mem_gb_s = round(int(m.group(1)) / 1073741824 / float(m.group(2)), 1) if m and float(m.group(2)) > 0 else None
     jank = re.search(r"Janky frames:\s*\d+\s*\(([\d.]+)%\)", s.get("gfx", ""))
@@ -316,7 +318,7 @@ def montar_nota(s: dict[str, str], gravacao_mb_s: float | None, latencia_ms: flo
     cat = {
         "fluidez": {"nota": _escala(jank_pct, 1, 25),
                     "detalhe": f"{jank_pct:.1f}% de quadros travados" if jank_pct is not None else "sem dados"},
-        "processador": {"nota": _media([_escala(cpu1, 250, 2500), _escala(cpun, 300, 3000), _escala(mem_gb_s, 6, 0.5)]),
+        "processador": {"nota": _media([_escala(cpu1, 500, 5000), _escala(cpun, 600, 6000), _escala(mem_gb_s, 6, 0.5)]),
                         "detalhe": f"1 núcleo {cpu1:.0f} ms · todos {cpun:.0f} ms · memória {mem_gb_s} GB/s"
                         if cpu1 and cpun else "sem dados"},
         "memoria": {"nota": _escala(livre_pct, 45, 5),

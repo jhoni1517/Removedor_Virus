@@ -35,6 +35,9 @@ LOJAS = {
     "com.vivo.appstore": "V-Appstore",
     "com.hihonor.appmarket": "Honor AppMarket",
     "com.amazon.venezia": "Amazon Appstore",
+    # instaladores de parceiros que vêm de fábrica e atualizam o próprio app (Facebook pré-instalado)
+    "com.facebook.system": "instalador do Facebook (veio no celular)",
+    "com.miui.packageinstaller.ota": "atualização da Xiaomi",
 }
 
 # Lojas alternativas confiáveis (verificam ou compilam os apps): contam como origem conhecida, com peso menor

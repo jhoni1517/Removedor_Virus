@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from celscan.analise import certificados as certificados_mod
+from celscan.analise import iocs as iocs_mod
 from celscan.analise import pix, rotulos
 from celscan.analise import regras as regras_mod
 from celscan.analise.regras import Regras
@@ -322,7 +323,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         leve("leitor_notificacoes", 5)
     sem_icone = not app.sistema and dados.icones is not None and pkg not in dados.icones
     if not app.sistema:
-        if sem_icone:
+        if sem_icone and not loja:  # da loja, sem ícone = plugin, serviço ou app de relógio (Google, Samsung...)
             a.append(ra["sem_icone"].achado())
         if not loja:
             inst = app.instalador or ""
@@ -425,9 +426,16 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     if util and "utilitario_poderoso" in ra:
         a.append(ra["utilitario_poderoso"].achado(util))
     for m in (app.motor or {}).get("achados", []):  # Motor CelScan: o que foi achado DENTRO do código do app
-        if m["chave"] in ra:
-            x = ra[m["chave"]].achado(m.get("detalhe", ""))
-            a.append({**x, "peso": m["peso_loja"]} if (confiavel and "peso_loja" in m) else x)
+        if m["chave"] not in ra or m["chave"] == "motor_root":
+            continue
+        if m["chave"] == "motor_dominio_ameaca" and iocs_mod.plataforma(m.get("detalhe", "").split(" ")[0]):
+            continue  # resultado antigo guardado em cache (antes das plataformas): ignora
+        x = ra[m["chave"]].achado(m.get("detalhe", ""))
+        if confiavel and "peso_loja" in m:
+            if not m["peso_loja"]:
+                continue  # em app da loja esse sinal não significa nada: nem aparece (era só ruído)
+            x = {**x, "peso": m["peso_loja"]}
+        a.append(x)
     if app.cert and app.cert.get("debug"):
         a.append(ra["certificado_debug"].achado())
     vt = app.vt or {}

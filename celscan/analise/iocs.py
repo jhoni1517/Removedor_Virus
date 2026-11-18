@@ -23,6 +23,26 @@ RX = re.compile(r"(app:id|app:cert\.sha1|app:cert\.sha256|file:hashes\.sha256|do
 RX_HOST = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,24})(?=[:/\s\"'<>)]|$)", re.I)
 
 
+# Sites onde QUALQUER pessoa hospeda coisas (GitHub, Google, nuvens...). As listas de spyware trazem URLs de
+# arquivos nesses sites; virar "domínio de espionagem" fazia todo app com "github.com" no código parecer espião.
+PLATAFORMAS = {
+    "github.com", "githubusercontent.com", "github.io", "gitlab.com", "bitbucket.org", "google.com", "googleapis.com",
+    "gstatic.com", "googleusercontent.com", "firebaseio.com", "firebaseapp.com", "firebasestorage.app", "appspot.com",
+    "web.app", "amazonaws.com", "cloudfront.net", "cloudflare.com", "workers.dev", "pages.dev", "azurewebsites.net",
+    "windows.net", "herokuapp.com", "blogspot.com", "wordpress.com", "dropbox.com", "dropboxusercontent.com",
+    "t.me", "telegram.org", "telegram.me", "facebook.com", "fbcdn.net", "whatsapp.net", "whatsapp.com", "apple.com",
+    "icloud.com", "microsoft.com", "live.com", "outlook.com", "youtube.com", "bit.ly", "pastebin.com",
+    "000webhostapp.com", "netlify.app", "vercel.app", "ngrok.io", "discord.com", "discordapp.com", "mediafire.com",
+    "mega.nz", "medium.com", "twitter.com", "x.com", "instagram.com", "android.com", "play.google.com",
+    "sourceforge.net", "apkpure.com", "uptodown.com", "archive.org", "wikipedia.org", "yandex.ru", "baidu.com",
+}
+
+
+def plataforma(host: str) -> bool:
+    h = (host or "").lower().strip(".")
+    return any(h == p or h.endswith("." + p) for p in PLATAFORMAS)
+
+
 def normalizar_dominio(valor: str) -> str | None:
     """'https://X.Evil.com:443/p' ou 'x.evil.com.' -> 'x.evil.com'."""
     v = valor.strip().lower()
@@ -41,7 +61,7 @@ class IOCs:
     def checar_dominio(self, host):
         """Confere o host e cada domínio-pai (a.b.evil.com -> b.evil.com -> evil.com)."""
         h = normalizar_dominio(host or "")
-        if not h:
+        if not h or plataforma(h):
             return None
         partes = h.split(".")
         for i in range(len(partes) - 1):
@@ -113,7 +133,7 @@ def _baixar():
                         cer.setdefault(val.upper(), nome)
                     elif tipo in ("domain-name:value", "url:value"):
                         d = normalizar_dominio(val)
-                        if d:
+                        if d and not plataforma(d):
                             dom.setdefault(d, nome)
                     else:
                         has.setdefault(val.lower(), nome)

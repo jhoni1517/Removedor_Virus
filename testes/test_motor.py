@@ -159,3 +159,35 @@ def test_zip_de_varios_pedacos_acha_o_arquivo_no_pedaco():
     base, pedaco = Zip({"AndroidManifest.xml": b"x"}), Zip({"res/mipmap-xxhdpi/ic.png": b"PNG"})
     z = rotulos._ZipVarios([base, pedaco])
     assert "res/mipmap-xxhdpi/ic.png" in z and z.ler_arquivo("res/mipmap-xxhdpi/ic.png") == b"PNG"
+
+
+# ---------------------------------------------------------------------------------------------- 3.5.0b2
+def test_github_e_nuvens_nunca_viram_dominio_de_espionagem():
+    from celscan.analise.iocs import IOCs, plataforma
+    i = IOCs({"pacotes": {}, "certs": {}, "hashes": {}, "dominios": {"github.com": "Stalkerware",
+                                                                     "evil-spy.net": "Pegasus"}, "atualizado": 0})
+    assert plataforma("api.github.com") and i.checar_dominio("github.com") is None
+    assert i.checar_dominio("c2.evil-spy.net") == "Pegasus"
+
+
+def test_resultado_antigo_com_github_no_cache_e_ignorado():
+    m = {"achados": [{"chave": "motor_dominio_ameaca", "detalhe": "github.com (Stalkerware)"},
+                     {"chave": "motor_root"}, {"chave": "motor_envia_sms", "peso_loja": 0}]}
+    app = AppBruto("com.facebook.katana", "/x", "com.facebook.system", False, nome="Facebook", motor=m,
+                   instalado=datetime(2025, 1, 1))
+    r = pontuacao.pontuar_app(app, _dados(**{"com.facebook.katana": app}), agora=AGORA)
+    assert r["nivel"] in ("OK", "BAIXO") and r["achados"] == []
+
+
+def test_app_da_play_sem_icone_nao_e_escondido():
+    a = AppBruto("com.google.android.verifier", "/x", "com.android.vending", False, nome="Developer Verifier",
+                 instalado=datetime(2025, 1, 1))
+    d = _dados(**{"com.google.android.verifier": a})
+    d.icones = set()
+    assert pontuacao.pontuar_app(a, d, agora=AGORA)["score"] == 0
+
+
+def test_nota_ignora_relogio_que_nao_mediu():
+    from celscan.acoes import turbo
+    n = turbo.montar_nota({"cpu1": "-3343", "cpun": "2194", "mem": "", "bateria": ""}, None, None)
+    assert n["categorias"]["processador"]["detalhe"] == "sem dados"
