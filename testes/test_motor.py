@@ -191,3 +191,10 @@ def test_nota_ignora_relogio_que_nao_mediu():
     from celscan.acoes import turbo
     n = turbo.montar_nota({"cpu1": "-3343", "cpun": "2194", "mem": "", "bateria": ""}, None, None)
     assert n["categorias"]["processador"]["detalhe"] == "sem dados"
+
+
+def test_certeza_separa_prova_de_suspeita():
+    assert pontuacao.certeza("ALTO", [{"chave": "ameaca_conhecida"}]) == "confirmado"
+    assert pontuacao.certeza("ALTO", [{"chave": "fora_da_loja"}, {"chave": "utilitario_poderoso"}]) == "provavel"
+    assert pontuacao.certeza("MÉDIO", [{"chave": "sem_icone"}]) == "conferir"
+    assert pontuacao.certeza("OK", []) == "nenhuma"

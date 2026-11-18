@@ -186,6 +186,23 @@ def utilitario_poderoso(app: AppBruto, dados: DadosAparelho, sem_icone: bool) ->
     return ", ".join(poderes_ruins) if poderes_ruins else None
 
 
+# Achados que PROVAM ameaça (lista pública, assinatura falsificada, antivírus, código de trojan bancário).
+# O resto é suspeita: o CelScan diz "vale conferir" em vez de chamar de vírus.
+PROVAS = {"ameaca_conhecida", "certificado_falso", "virustotal_detectado", "motor_bancos_alvo",
+          "motor_dominio_ameaca", "motor_pix", "motor_canal_envio", "trojan_bancario"}
+
+
+def certeza(nivel_app: str, achados: list[dict]) -> str:
+    """'confirmado' (há prova), 'provavel' (vários sinais fortes), 'conferir' (suspeita) ou 'nenhuma'."""
+    if any(x.get("chave") in PROVAS for x in achados) and nivel_app in ("ALTO", "MÉDIO"):
+        return "confirmado"
+    if nivel_app == "ALTO":
+        return "provavel"
+    if nivel_app == "MÉDIO":
+        return "conferir"
+    return "nenhuma"
+
+
 def sensivel(pkg: str) -> bool:
     """App cujo dado não volta só reinstalando: autenticador, senhas, carteira, banco, mensageiro."""
     return pkg in SENSIVEIS or pkg in pix.carregar().oficiais
@@ -455,8 +472,9 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     if permitido:
         score = min(score, lim.get("permitido_teto", 10))
     pod = poderes(app, dados)
+    nv = "PERMITIDO" if permitido else nivel(score, r)
     return {
-        "pacote": pkg, "score": score, "nivel": "PERMITIDO" if permitido else nivel(score, r),
+        "pacote": pkg, "score": score, "nivel": nv, "certeza": certeza(nv, a),
         "motivos": [x["titulo"] for x in a], "achados": a, "ameaca": ioc,
         "instalador": app.instalador, "loja": loja, "sistema": app.sistema,
         "desativado": pkg in dados.desativados, "versao": app.versao,

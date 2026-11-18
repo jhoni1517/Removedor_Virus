@@ -9,6 +9,13 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.6.0b2 (18/11/2026) — certeza: "ameaça confirmada" × "suspeito"
+
+Cada app ganha `certeza`: **confirmado** (lista pública, assinatura falsa, antivírus, código de trojan bancário,
+robô do Telegram/Discord, servidor de spyware), **provável** (risco alto só por sinais), **vale conferir** (médio).
+A frase do resultado só fala em "ameaça confirmada" quando há prova; senão diz "nenhum vírus confirmado, N apps
+suspeitos para conferir".
+
 ## Beta 3.6.0b1 (18/11/2026) — visual novo, verificação estável e fim do "github.com espionagem"
 
 Teste real num Xiaomi 24090RA29G (HyperOS, Android 16) mostrou 9 apps "ALTO" que eram falsos alarmes.

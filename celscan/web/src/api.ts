@@ -12,6 +12,7 @@ export interface Achado {
 }
 
 export interface AppResultado {
+  certeza?: "confirmado" | "provavel" | "conferir" | "nenhuma";
   pacote: string;
   score: number;
   nivel: Nivel;

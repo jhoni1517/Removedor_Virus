@@ -522,3 +522,9 @@ h3 { font-stretch: 108%; }
 .mais-opcoes-menu a:hover, .mais-opcoes-menu button:hover:not(:disabled) { background: var(--superficie-2); }
 .mais-opcoes-menu button:disabled { opacity: .45; }
 .raio-x-legenda-cores { margin-right: .6rem; }
+
+/* certeza do achado: prova vs. suspeita */
+.certeza { border-radius: 3px; padding: 1px 6px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; border: 1px solid; }
+.certeza-confirmado { color: var(--perigo); border-color: currentColor; background: var(--perigo-suave); }
+.certeza-provavel { color: var(--atencao); border-color: currentColor; }
+.certeza-conferir { color: var(--fraco); border-color: var(--linha); }

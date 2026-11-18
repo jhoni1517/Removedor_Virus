@@ -11,6 +11,8 @@ import { useApp } from "../estado";
 import { Botao, Cartao, Data, IconeApp, RaioX, Selo, Vazio, duracaoCurta, nomeApp, recente, tamanhoLegivel } from "../ui";
 import { AbaAnuncios, AbaInternet, AbaPoderes, AbaSensores, AbaTodos, ApksGuardados } from "./AbasResultado";
 
+const CERTEZA = { confirmado: "Ameaça confirmada", provavel: "Provável ameaça", conferir: "Vale conferir" } as const;
+
 type Filtro = "alerta" | "ALTO" | "MÉDIO" | "BAIXO" | "todos";
 const FILTROS: [Filtro, string][] = [["alerta", "Com alerta"], ["ALTO", "Alto"], ["MÉDIO", "Médio"], ["BAIXO", "Baixo"], ["todos", "Todos"]];
 type Aba = "problemas" | "todos" | "poderes" | "anuncios" | "sensores" | "internet";
@@ -74,6 +76,7 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold">{nomeApp(r)}</span>
             <Selo nivel={r.nivel} />
+            {r.certeza && r.certeza !== "nenhuma" && <span className={`certeza certeza-${r.certeza}`}>{CERTEZA[r.certeza]}</span>}
             {recente(r.instalado) && <span className="rounded bg-destaque-suave px-1.5 py-0.5 text-xs font-semibold text-destaque">Novo</span>}
             <span className="numeros font-mono text-xs text-fraco">{r.score} pts</span>
             {removido && <span className="rounded bg-ok-suave px-1.5 py-0.5 text-xs font-semibold text-ok">Removido</span>}
@@ -374,6 +377,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
     return () => { main?.removeEventListener("scroll", rolar); window.removeEventListener("scroll", rolar); };
   }, []);
 
+  const confirmados = v.resultados.filter((x) => x.certeza === "confirmado").length;
+
   const contagem = useMemo(() => {
     const c: Record<string, number> = { ALTO: 0, "MÉDIO": 0, BAIXO: 0 };
     v.resultados.forEach((r) => { if (r.nivel in c) c[r.nivel]++; });
@@ -591,7 +596,8 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         <div className="min-w-0 flex-1">
           <p className="veredito-aparelho">{v.info.fabricante} {v.info.modelo} · Android {v.info.android}</p>
           <h1 className="veredito-frase">
-            {contagem.ALTO ? `${contagem.ALTO} ${contagem.ALTO === 1 ? "app perigoso" : "apps perigosos"} neste celular`
+            {confirmados ? `${confirmados} ${confirmados === 1 ? "ameaça confirmada" : "ameaças confirmadas"} neste celular`
+              : contagem.ALTO ? `Nenhum vírus confirmado, ${contagem.ALTO} ${contagem.ALTO === 1 ? "app suspeito" : "apps suspeitos"} para conferir`
               : contagem["MÉDIO"] ? `Nenhum vírus confirmado, ${contagem["MÉDIO"]} ${contagem["MÉDIO"] === 1 ? "app merece" : "apps merecem"} atenção`
               : "Nenhum app perigoso encontrado"}
           </h1>
