@@ -1,4 +1,4 @@
-import { Cpu, Flame, Gamepad2, Gauge, MemoryStick, Moon, Rocket, Settings2, SlidersHorizontal, Sparkles, Wifi, Wrench } from "lucide-react";
+import { Camera, Cpu, Flame, Gamepad2, Gauge, MemoryStick, Moon, Rocket, Settings2, SlidersHorizontal, Sparkles, Trash2, Wifi, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
@@ -154,6 +154,107 @@ function PainelFicha({ d }: { d: Dispositivo }) {
           <p className="mt-3 text-xs text-fraco">{nota.obs}</p>
         </div>
       )}
+    </Cartao>
+  );
+}
+
+/* ---------------------------------------------------------------- faxina geral */
+interface AppMarca { pacote: string; nome: string; grupo: string; explicacao: string; perde: string; ativo: boolean; marcado: boolean }
+interface Dns { modo: string; servidor: string | null; provedor: string | null; opcoes: { id: string; nome: string; servidor: string; descricao: string }[] }
+
+function PainelFaxina({ d }: { d: Dispositivo }) {
+  const { esperar, avisar } = useApp();
+  const { ocupado, rodar } = useAcao();
+  const [dados, setDados] = useState<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] } | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [dns, setDns] = useState<Dns | null>(null);
+  const [proprio, setProprio] = useState("");
+
+  async function carregar() {
+    await rodar("carregar", async () => {
+      const [a, n] = await Promise.all([
+        api<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] }>(`/faxina/apps?serial=${q(d.serial)}`),
+        api<Dns>(`/faxina/dns?serial=${q(d.serial)}`),
+      ]);
+      setDados(a); setDns(n); setEscolhidos(new Set(a.apps.filter((x) => x.marcado && x.ativo).map((x) => x.pacote)));
+    });
+  }
+  useEffect(() => { setDados(null); setDns(null); carregar(); }, [d.serial]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function remover() {
+    await rodar("remover", async () => {
+      const t = await esperar(await api<Tarefa<{ apps: { ok: boolean }[] }>>("/faxina/apps", { corpo: { serial: d.serial, pacotes: [...escolhidos] } }));
+      const ok = (t.resultado?.apps ?? []).filter((x) => x.ok).length;
+      avisar({ tipo: "ok", texto: `${ok} app(s) desativados. Reinicie o celular para os anúncios sumirem de vez. Volta pelo Histórico.` });
+    });
+    await carregar();
+  }
+  async function mudarDns(provedor: string | null, servidor?: string) {
+    await rodar("dns", async () => {
+      const r = await api<{ ok: boolean; servidor: string | null; obs: string }>("/faxina/dns", { corpo: { serial: d.serial, provedor, servidor: servidor ?? null } });
+      avisar({ tipo: r.ok ? "ok" : "erro", texto: r.ok ? (r.servidor ? `Bloqueio de anúncios ligado (${r.servidor}). ${r.obs}` : "DNS de volta ao automático.") : "O Android não aceitou o DNS." });
+      setDns(await api<Dns>(`/faxina/dns?serial=${q(d.serial)}`));
+    });
+  }
+  async function camera() {
+    await rodar("camera", async () => {
+      const t = await esperar(await api<Tarefa<{ apps: { pacote: string }[]; dica: string | null; obs: string }>>("/faxina/camera", { corpo: { serial: d.serial } }));
+      const r = t.resultado;
+      if (r) avisar({ tipo: "ok", texto: `${r.apps.length} app(s) de câmera/galeria otimizados. ${r.dica ?? r.obs}` });
+    });
+  }
+
+  const grupos = dados ? Object.keys(dados.grupos).filter((g) => dados.apps.some((a) => a.grupo === g)) : [];
+  return (
+    <Cartao className="p-5">
+      <Cabeca icone={<Trash2 size={18} aria-hidden />} titulo="Faxina geral: anúncios e apps inúteis">
+        Tira os serviços de propaganda e os apps duplicados da marca, liga o bloqueio de anúncios e acelera a câmera. Nada é apagado do aparelho: tudo volta pelo Histórico.
+      </Cabeca>
+      {!dados && <p className="mt-3 text-sm text-fraco">{ocupado ? "Procurando os apps da marca..." : "Não foi possível ler os apps."}</p>}
+      {dados && (<>
+        {dados.apps.length === 0 && <p className="mt-3 text-sm text-fraco">Nenhum app inútil conhecido neste aparelho.</p>}
+        {grupos.map((g) => (
+          <div key={g} className="mt-4">
+            <p className="mb-2 text-sm font-semibold">{dados.grupos[g]}</p>
+            <div className="space-y-2">
+              {dados.apps.filter((a) => a.grupo === g).map((a) => (
+                <Marcador key={a.pacote} marcado={escolhidos.has(a.pacote)} mudar={() => setEscolhidos(alternar(escolhidos, a.pacote))} desativado={!a.ativo}>
+                  <span className="font-medium">{a.nome}</span>{!a.ativo && <span className="ml-2 rounded-full bg-ok-suave px-2 text-xs text-ok">já desativado</span>}
+                  <span className="block text-fraco">{a.explicacao}</span>
+                  {a.perde && <span className="block text-xs text-atencao">Você perde: {a.perde}</span>}
+                  <span className="block font-mono text-xs text-fraco">{a.pacote}</span>
+                </Marcador>
+              ))}
+            </div>
+          </div>
+        ))}
+        {dados.apps.length > 0 && <Botao className="mt-3" variante="perigo" onClick={remover} disabled={!!ocupado || escolhidos.size === 0}>{ocupado === "remover" ? "Desativando..." : `Desativar ${escolhidos.size} app(s)`}</Botao>}
+      </>)}
+      {dns && (
+        <div className="mt-6">
+          <p className="text-sm font-semibold">Bloqueio de anúncios (DNS privado, sem app e sem VPN)</p>
+          <p className="text-sm text-fraco">Agora: {dns.servidor ? <b>{dns.servidor}</b> : "automático (sem bloqueio)"}. Vale no Wi-Fi e nos dados móveis, não gasta bateria. Não bloqueia anúncio do YouTube.</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {dns.opcoes.map((o) => (
+              <button key={o.id} onClick={() => mudarDns(o.id)} disabled={!!ocupado}
+                className={`rounded-lg border p-3 text-left text-sm disabled:opacity-50 ${dns.provedor === o.id ? "border-ok bg-ok-suave" : "border-linha hover:bg-superficie-2"}`}>
+                <span className="block font-semibold">{o.nome}{dns.provedor === o.id ? " · ligado" : ""}</span><span className="text-fraco">{o.descricao}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input value={proprio} onChange={(e) => setProprio(e.target.value)} placeholder="servidor próprio (ex.: abc123.dns.nextdns.io)" aria-label="Servidor DNS próprio"
+              className="min-w-56 flex-1 rounded-md border border-linha bg-superficie px-3 py-1.5 font-mono text-sm" />
+            <Botao onClick={() => mudarDns(null, proprio.trim())} disabled={!!ocupado || !proprio.trim()}>Usar este</Botao>
+            <Botao variante="fantasma" onClick={() => mudarDns(null)} disabled={!!ocupado || !dns.servidor}>Voltar ao automático</Botao>
+          </div>
+        </div>
+      )}
+      <div className="mt-6">
+        <p className="text-sm font-semibold">Câmera travando</p>
+        <p className="text-sm text-fraco">Compila câmera e galeria por completo, limpa o cache delas e reinicia a câmera. Também avisa se o armazenamento cheio é a causa.</p>
+        <Botao className="mt-2" onClick={camera} disabled={!!ocupado}><Camera size={15} aria-hidden /> {ocupado === "camera" ? "Otimizando a câmera..." : "Deixar a câmera mais rápida"}</Botao>
+      </div>
     </Cartao>
   );
 }
@@ -602,6 +703,7 @@ export default function Turbo() {
         </div>
         <PainelFicha d={d} />
         <PainelReceita d={d} />
+        <PainelFaxina d={d} />
         <PainelCalor d={d} />
         <PainelAjustes d={d} />
         <PainelCompilacao d={d} />

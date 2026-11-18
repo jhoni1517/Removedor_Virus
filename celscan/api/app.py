@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import atendimento, backup, evidencias, navegacao, otimizacao, quarentena, recuperacao, turbo
+from celscan.acoes import atendimento, backup, evidencias, faxina, navegacao, otimizacao, quarentena, recuperacao, turbo
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -319,6 +319,17 @@ class PedidoTurboConfig(BaseModel):
     ns: Literal["system", "secure", "global"]
     chave: str = Field(min_length=1, max_length=120)
     valor: str | None = Field(default=None, max_length=500)
+
+
+class PedidoFaxinaApps(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+
+
+class PedidoDns(BaseModel):
+    serial: str
+    provedor: Literal["adguard", "adguard_familia", "mullvad", "cloudflare_seguro"] | None = None
+    servidor: str | None = Field(default=None, max_length=253)
 
 
 # ---------------------------------------------------------------- aparelhos conectados
@@ -1179,6 +1190,51 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         r = _turbo(turbo.editar_config, livre(p.serial), p.ns, p.chave, p.valor)
         _registrar_turbo(p.serial, f"Configuração {p.ns}/{p.chave}: {r['anterior']} → {r['atual']}", r["desfazer_id"])
         return r
+
+    # ---- Faxina geral: apps inúteis da marca, anúncios, DNS e câmera
+    @app.get("/api/faxina/apps")
+    def faxina_apps(serial: str) -> dict[str, Any]:
+        return _turbo(faxina.apps_da_marca, aparelhos.pronto(serial))
+
+    @app.post("/api/faxina/apps")
+    def faxina_remover(p: PedidoFaxinaApps) -> dict[str, Any]:
+        ap = livre(p.serial)
+        conhecidos = {a.pacote for lista in faxina.LISTAS.values() for a in lista}
+        fora = [x for x in p.pacotes if x not in conhecidos]
+        if fora:
+            raise HTTPException(422, f"Fora da lista de apps seguros: {', '.join(fora[:5])}")
+
+        def rodar(progresso, cancelar):
+            r = faxina.remover_apps(ap, p.pacotes, progresso, cancelar)
+            ok = sum(x["ok"] for x in r["apps"])
+            if ok:
+                _registrar_turbo(p.serial, f"Faxina: {ok} app(s) inúteis desativados")
+            return r
+        return nova_tarefa("faxina_apps", p.serial, rodar)
+
+    @app.get("/api/faxina/dns")
+    def faxina_dns(serial: str) -> dict[str, Any]:
+        return _turbo(faxina.dns_atual, aparelhos.pronto(serial))
+
+    @app.post("/api/faxina/dns")
+    def faxina_definir_dns(p: PedidoDns) -> dict[str, Any]:
+        if p.provedor and p.servidor:
+            raise HTTPException(422, "Escolha um provedor da lista OU digite um servidor, não os dois.")
+        r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
+        _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
+        return r
+
+    @app.post("/api/faxina/camera")
+    def faxina_camera(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _cancelar):
+            progresso({"etapa": "camera", "descricao": "Deixando a câmera mais rápida",
+                       "detalhe": "compilando câmera e galeria", "atual": None, "total": None, "estimativa_s": 90})
+            r = faxina.camera_rapida(ap)
+            _registrar_turbo(p.serial, f"Câmera mais rápida ({len(r['apps'])} app(s))")
+            return r
+        return nova_tarefa("faxina_camera", p.serial, rodar)
 
     @app.post("/api/otimizar-apps")
     def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:

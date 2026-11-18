@@ -642,6 +642,12 @@ AJUSTES: tuple[Ajuste, ...] = (
            "Limita os apps guardados em segundo plano (economiza RAM em aparelhos de 3–4 GB).",
            (("device_config", "activity_manager", "max_cached_processes", "24"),), sdk_min=29,
            aviso="Os apps reabrem do zero mais vezes. Só use em celular com pouca RAM."),
+    Ajuste("mais_processos", "Desempenho", "Mais apps abertos ao mesmo tempo",
+           "Guarda mais apps em segundo plano: eles voltam de onde pararam em vez de recomeçar do zero "
+           "(bom para aparelho com 8 GB de RAM ou mais).",
+           (("device_config", "activity_manager", "max_cached_processes", "64"),), sdk_min=29,
+           aviso="Em Xiaomi/HyperOS o gerenciador de memória da marca também fecha apps; combine com "
+                 "'Fim dos processos fantasmas' e com o app fora da economia de bateria."),
     Ajuste("animacoes_rapidas", "Desempenho", "Animações mais rápidas",
            "Telas abrem e fecham na metade do tempo (sensação de celular mais rápido).",
            tuple(("settings", "global", k, "0.5") for k in
@@ -670,6 +676,12 @@ AJUSTES: tuple[Ajuste, ...] = (
            (("settings", "system", "peak_refresh_rate", "{hz_max}"),
             ("settings", "system", "min_refresh_rate", "{hz_max}")),
            aviso="Gasta mais bateria. Samsung e Xiaomi podem ter um controle próprio que manda mais."),
+    Ajuste("xiaomi_interface_leve", "Interface", "Interface leve (Xiaomi/HyperOS)",
+           "Faz a interface da Xiaomi usar os efeitos de aparelho básico: sem desfoque pesado na barra e nas "
+           "pastas, animações mais simples. É o ajuste usado para destravar Xiaomi e TV box lentas.",
+           (("settings", "system", "deviceLevelList", "v:1,c:3,g:3"),), marcas=("xiaomi", "redmi", "poco"),
+           reiniciar=True,
+           aviso="Experimental: vale depois de reiniciar. Desfaça no Histórico se não gostar do visual."),
     Ajuste("hz_economia", "Tela", "Tela em 60 Hz (economia)",
            "Limita a tela a 60 Hz: a bateria dura mais, a rolagem fica menos lisa.",
            (("settings", "system", "peak_refresh_rate", "60"), ("settings", "system", "min_refresh_rate", "60"))),
@@ -716,6 +728,10 @@ def _contexto(ap) -> dict[str, Any]:
     return {"sdk": _sdk(ap), "hz_max": tela["hz_max"] if (tela["hz_max"] or 0) > 60 else None, "marca": fab}
 
 
+def _da_marca(a: Ajuste, ctx: dict[str, Any]) -> bool:
+    return not a.marcas or any(m in (ctx.get("marca") or "") for m in a.marcas)
+
+
 def listar_ajustes(ap) -> dict[str, Any]:
     ctx = _contexto(ap)
     itens = []
@@ -726,6 +742,8 @@ def listar_ajustes(ap) -> dict[str, Any]:
         valores = [_valor(a, v, ctx) for *_, v in a.mudancas]
         if any(v is None for v in valores):
             suportado, motivo = False, "A tela deste celular só tem 60 Hz."
+        if not _da_marca(a, ctx):
+            suportado, motivo = False, "Só para " + ", ".join(m.capitalize() for m in a.marcas) + "."
         pares = zip(a.mudancas, valores, strict=True)
         ligado = suportado and all(_igual(_ler(ap, t, ns, ch), v) for (t, ns, ch, _), v in pares)
         itens.append({"id": a.id, "grupo": a.grupo, "titulo": a.titulo, "descricao": a.descricao, "aviso": a.aviso,
@@ -746,6 +764,8 @@ def aplicar_ajustes(ap, ids: list[str], descricao: str | None = None) -> dict[st
     ids = list(dict.fromkeys(ids))
     if "hz_maximo" in ids and "hz_economia" in ids:
         raise ValueError("escolha só uma opção de taxa da tela (máxima ou economia)")
+    if "mais_processos" in ids and "menos_processos" in ids:
+        raise ValueError("escolha 'mais apps abertos' ou 'menos apps escondidos', não os dois")
     ctx = _contexto(ap)
     planos, resultado = [], []
     for ident in ids:
@@ -755,7 +775,7 @@ def aplicar_ajustes(ap, ids: list[str], descricao: str | None = None) -> dict[st
                               "motivo": f"precisa do Android {_versao(a.sdk_min)}+"})
             continue
         valores = [_valor(a, v, ctx) for *_, v in a.mudancas]
-        if any(v is None for v in valores):
+        if any(v is None for v in valores) or not _da_marca(a, ctx):
             resultado.append({"id": ident, "titulo": a.titulo, "ok": False, "motivo": "não suportado neste celular"})
             continue
         planos.append((a, valores))
@@ -1041,12 +1061,26 @@ def receita(ap) -> dict[str, Any]:
     if (f.get("ram_gb") or 99) <= 4:
         etapa("menos_processos", "Menos apps escondidos", f"Só {f.get('ram_gb')} GB de RAM: guardar menos apps "
               "em segundo plano deixa o que está aberto mais liso.")
+    elif (f.get("ram_gb") or 0) >= 7:
+        etapa("mais_processos", "Mais apps abertos ao mesmo tempo", f"{f.get('ram_gb')} GB de RAM: os apps "
+              "voltam de onde pararam em vez de recomeçar.")
+    xiaomi = any(m in (f.get("fabricante") or "").lower() for m in ("xiaomi", "redmi", "poco"))
+    etapa("faxina_marca", "Tirar anúncios e apps inúteis da marca",
+          "Desativa os serviços de propaganda e os apps duplicados da fabricante (volta pelo Histórico)."
+          if xiaomi else "Desativa apps de parceiros pré-instalados (Facebook, operadora...).")
+    etapa("camera", "Câmera mais rápida", "Câmera e galeria compiladas por completo e com o cache limpo.")
+    etapa("dns_anuncios", "Bloqueio de anúncios (DNS AdGuard)", "Bloqueia propaganda em apps e sites sem instalar "
+          "nada. Não pega anúncio do YouTube.", marcada=False)
+    if xiaomi:
+        etapa("xiaomi_interface_leve", "Interface leve (Xiaomi)", "Tira o desfoque pesado e simplifica as animações "
+              "(vale após reiniciar).", marcada=False)
     etapa("animacoes_rapidas", "Animações mais rápidas", "Telas abrem na metade do tempo.", marcada=False)
     return {"ficha": f, "etapas": etapas}
 
 
 ETAPAS = {"compilar_mais_usados", "dexopt", "art_cleanup", "fantasmas", "congelador", "esquecidos",
-          "sistema_leve", "armazenamento", "menos_processos", "animacoes_rapidas", "aviso_calor"}
+          "sistema_leve", "armazenamento", "menos_processos", "mais_processos", "animacoes_rapidas", "aviso_calor",
+          "faxina_marca", "camera", "dns_anuncios", "xiaomi_interface_leve"}
 
 
 def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=None) -> dict[str, Any]:
@@ -1075,6 +1109,22 @@ def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=No
             elif ident == "sistema_leve":
                 r = compilar_apps(ap, "completa", alvos_compilacao(ap, "sistema"), cancelar=cancelar)
                 ok = not r["falhas"]
+            elif ident == "faxina_marca":
+                from celscan.acoes import faxina
+
+                alvos = [a["pacote"] for a in faxina.apps_da_marca(ap)["apps"] if a["marcado"] and a["ativo"]]
+                r = faxina.remover_apps(ap, alvos, cancelar=cancelar)
+                ok = all(x["ok"] for x in r["apps"])
+            elif ident == "camera":
+                from celscan.acoes import faxina
+
+                ok = bool(faxina.camera_rapida(ap)["apps"])
+            elif ident == "dns_anuncios":
+                from celscan.acoes import faxina
+
+                r = faxina.definir_dns(ap, "adguard")
+                ok = r["ok"]
+                desfazer_ids.append(r["desfazer_id"])
             else:  # esquecidos
                 r = dormir(ap, [x["pacote"] for x in esquecidos(ap, 30)], "rare")
                 ok = True

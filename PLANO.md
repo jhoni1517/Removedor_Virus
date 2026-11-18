@@ -9,6 +9,20 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.4.0b2 (18/11/2026) — Faxina geral (anúncios, apps da marca, DNS, câmera, Xiaomi)
+
+- **Faxina da marca** (`celscan/acoes/faxina.py`): lista curada por fabricante com o que cada app faz e o que se
+  perde. Xiaomi/Redmi/POCO: MSA e Analytics (anúncios em Configurações/Segurança/Arquivos/Temas), App Vault,
+  carrossel de papéis de parede, Quick Apps, Navegador Mi, Mi Vídeo, Mi Música, GetApps; Joyose em "avançado".
+  Samsung, Motorola e parceiros (Facebook, Amazon, operadora). Só aceita pacotes da lista; desativa via quarentena.
+- **Bloqueio de anúncios por DNS privado** (no lugar de VPN): AdGuard, AdGuard Família, Mullvad, Cloudflare ou
+  servidor próprio (NextDNS). `private_dns_mode=hostname`; desfaz pelo Histórico.
+- **Câmera mais rápida**: compila câmera/galeria em `speed`, `pm clear --cache-only` (Android 14+), reinicia a
+  câmera e avisa quando o armazenamento cheio é a causa.
+- **Ajustes novos**: "Mais apps abertos" (`max_cached_processes=64`, contra apps que recomeçam) e
+  "Interface leve Xiaomi" (`deviceLevelList v:1,c:3,g:3`, experimental). Ajustes agora podem ser por marca.
+- **Receita** inclui faxina da marca, câmera, mais apps abertos (≥7 GB), DNS e interface leve (opcionais).
+
 ## Beta 3.4.0b1 (18/11/2026) — aba Turbo (funções dos otimizadores via Shizuku, pelo PC)
 
 Base: análise de 64 fotos de dois apps (otimizador de compilação Rápida/Completa/Extrema e VOID ADB).

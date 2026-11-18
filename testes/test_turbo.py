@@ -305,3 +305,75 @@ def test_api_escolhidos_sem_apps(api):
     c, h, _ = api
     corpo = {"serial": "ABC123", "modo": "rapida", "escopo": "escolhidos"}
     assert c.post("/api/turbo/compilar", json=corpo, headers=h).status_code == 422
+
+
+# ---------------------------------------------------------------------------------------------- faxina
+class Xiaomi(Celular):
+    def sh(self, cmd, timeout=120, erro=False):
+        if cmd.startswith("getprop ro.product.manufacturer"):
+            return "Xiaomi"
+        if cmd.startswith("pm list packages"):
+            pkgs = ["com.miui.msa.global", "com.mi.globalbrowser", "com.miui.home", "com.android.camera"]
+            return "\n".join(f"package:{p}" for p in pkgs)
+        if cmd.startswith("pm disable-user"):
+            self.cmds.append(cmd)
+            return f"Package {cmd.split()[-1]} new state: disabled-user"
+        if cmd.startswith("pm clear --cache-only"):
+            self.cmds.append(cmd)
+            return "Success"
+        if cmd.startswith("df -k"):
+            return "Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/x 115343360 110000000 5343360 95% /data"
+        return super().sh(cmd, timeout, erro)
+
+
+def test_faxina_lista_so_o_que_existe_e_nunca_a_tela_inicial():
+    from celscan.acoes import faxina
+    r = faxina.apps_da_marca(Xiaomi())
+    pkgs = {a["pacote"]: a for a in r["apps"]}
+    assert r["marca"] == "xiaomi" and set(pkgs) == {"com.miui.msa.global", "com.mi.globalbrowser"}
+    assert pkgs["com.miui.msa.global"]["marcado"]
+
+
+def test_faxina_recusa_app_fora_da_lista():
+    from celscan.acoes import faxina
+    with pytest.raises(ValueError):
+        faxina.remover_apps(Xiaomi(), ["com.miui.home"])
+    r = faxina.remover_apps(Xiaomi(), ["com.mi.globalbrowser"])
+    assert r["apps"][0]["ok"]
+
+
+def test_dns_privado_liga_e_desfaz():
+    from celscan.acoes import faxina
+    ap = Celular()
+    r = faxina.definir_dns(ap, "adguard")
+    assert r["ok"] and ap.settings[("global", "private_dns_mode")] == "hostname"
+    assert ap.settings[("global", "private_dns_specifier")] == "dns.adguard-dns.com"
+    quarentena.restaurar(ap, r["desfazer_id"])
+    assert ("global", "private_dns_mode") not in ap.settings
+    with pytest.raises(ValueError):
+        faxina.definir_dns(ap, servidor="x; reboot")
+    assert faxina.definir_dns(ap, servidor="abc123.dns.nextdns.io")["ok"]
+
+
+def test_camera_compila_limpa_e_avisa_armazenamento_cheio():
+    from celscan.acoes import faxina
+    ap = Xiaomi()
+    r = faxina.camera_rapida(ap)
+    assert r["apps"][0]["pacote"] == "com.android.camera" and r["apps"][0]["compilado"]
+    assert r["apps"][0]["cache_limpo"] and "GB livres" in r["dica"]
+
+
+def test_api_faxina_recusa_fora_da_lista(api):
+    c, h, _ = api
+    corpo = {"serial": "ABC123", "pacotes": ["com.android.systemui"]}
+    assert c.post("/api/faxina/apps", json=corpo, headers=h).status_code == 422
+    corpo = {"serial": "ABC123", "provedor": "adguard", "servidor": "a.b.com"}
+    assert c.post("/api/faxina/dns", json=corpo, headers=h).status_code == 422
+
+
+def test_ajuste_da_xiaomi_so_na_xiaomi():
+    itens = {a["id"]: a for a in turbo.listar_ajustes(Celular())["ajustes"]}
+    assert not itens["xiaomi_interface_leve"]["suportado"]
+    ap = Xiaomi()
+    r = turbo.aplicar_ajustes(ap, ["xiaomi_interface_leve"])
+    assert r["resultado"][0]["ok"] and ap.settings[("system", "deviceLevelList")] == "v:1,c:3,g:3"
