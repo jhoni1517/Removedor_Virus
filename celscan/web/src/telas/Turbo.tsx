@@ -2,6 +2,7 @@ import { Camera, Cpu, Flame, Gamepad2, Gauge, MemoryStick, Moon, Rocket, Setting
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
+import Diagnostico, { PainelDebloat, PainelIPhone } from "./Diagnostico";
 import { num } from "../nomes";
 import { Barra, Botao, Cartao, corNota, Miniatura, nomeApp, Titulo } from "../ui";
 
@@ -135,7 +136,7 @@ function PainelFicha({ d }: { d: Dispositivo }) {
           </div>
         </div>
       )}
-      <div className="mt-4"><Botao variante="primario" onClick={examinar} disabled={!!ocupado}><Gauge size={15} aria-hidden /> {ocupado === "nota" ? "Examinando (≈30 s)..." : "Examinar meu celular"}</Botao></div>
+      <div className="mt-4"><Botao onClick={examinar} disabled={!!ocupado}><Gauge size={15} aria-hidden /> {ocupado === "nota" ? "Examinando (≈30 s)..." : "Examinar meu celular"}</Botao></div>
       {nota && (
         <div className="mt-4">
           <p className="text-4xl font-bold numeros" style={{ color: nota.total != null ? corNota(nota.total) : undefined }}>
@@ -308,14 +309,14 @@ function PainelReceita({ d }: { d: Dispositivo }) {
     await rodar("aplicar", async () => {
       const t = await esperar(await api<Tarefa<{ etapas: { id: string; ok: boolean }[] }>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
       const ok = (t.resultado?.etapas ?? []).filter((e) => e.ok).length;
-      avisar({ tipo: "ok", texto: `Receita aplicada: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
+      avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
     });
   }
 
   return (
     <Cartao className="p-5">
-      <Cabeca icone={<Sparkles size={18} aria-hidden />} titulo="Receita sob medida">Um plano feito para este celular (versão do Android, RAM, calor e apps mais usados). Revise e aplique tudo de uma vez.</Cabeca>
-      <Botao className="mt-3" onClick={montar} disabled={!!ocupado}>{ocupado === "montar" ? "Montando..." : etapas ? "Montar de novo" : "Montar receita"}</Botao>
+      <Cabeca icone={<Sparkles size={18} aria-hidden />} titulo="Otimização completa">Um plano feito para este celular (versão do Android, RAM, calor e apps mais usados). Confira as etapas e aplique tudo de uma vez.</Cabeca>
+      <Botao className="mt-3" variante={etapas ? "secundario" : "primario"} onClick={montar} disabled={!!ocupado}>{ocupado === "montar" ? "Analisando o celular..." : etapas ? "Analisar de novo" : "Ver o que dá para otimizar"}</Botao>
       {etapas && (
         <div className="mt-4 space-y-2">
           {etapas.map((e) => (
@@ -324,7 +325,7 @@ function PainelReceita({ d }: { d: Dispositivo }) {
             </Marcador>
           ))}
           <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || marcadas.size === 0}>
-            <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Aplicando (pode levar alguns minutos)..." : `Aplicar receita (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
+            <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Otimizando (pode levar alguns minutos)..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
           </Botao>
         </div>
       )}
@@ -672,15 +673,32 @@ function PainelEditor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- tela */
+type Secao = "otimizar" | "limpeza" | "saude" | "desempenho" | "tecnico";
+const SECOES: [Secao, string, string][] = [
+  ["otimizar", "Otimizar", "Nota do celular e a otimização completa feita para ele."],
+  ["limpeza", "Limpeza", "Anúncios, apps inúteis da marca, câmera, apps parados e memória."],
+  ["saude", "Bateria e espaço", "Saúde da bateria, o que ocupa espaço, limpeza de cache e lixo."],
+  ["desempenho", "Desempenho", "Perfis prontos, ajustes, jogos, calor e rede."],
+  ["tecnico", "Técnico", "Compilação manual, lista completa de apps de fábrica, manutenção e editor de configurações."],
+];
+
+function lerSecao(): Secao {
+  try { const v = localStorage.getItem("celscan-otimizar"); return SECOES.some(([id]) => id === v) ? (v as Secao) : "otimizar"; }
+  catch { return "otimizar"; }
+}
+
 export default function Turbo() {
   const { dispositivos } = useApp();
   const prontos = dispositivos.filter((x) => x.estado === "device");
   const [serial, setSerial] = useState<string | null>(null);
+  const [secao, setSecaoEstado] = useState<Secao>(lerSecao);
+  const setSecao = (v: Secao) => { setSecaoEstado(v); try { localStorage.setItem("celscan-otimizar", v); } catch { /* sem storage */ } };
   const d = prontos.find((x) => x.serial === serial) ?? prontos[0];
+  const atual = SECOES.find(([id]) => id === secao)!;
   return (
     <div className="max-w-4xl space-y-6">
-      <Titulo sub="Otimização avançada pelo cabo ou Wi-Fi, sem instalar nada no celular. Só entra o que tem efeito real, e tudo pode ser desfeito.">
-        Turbo
+      <Titulo sub="Pelo cabo ou Wi-Fi, sem instalar nada no celular. Só entra o que tem efeito real, e tudo pode ser desfeito no Histórico.">
+        Otimizar
       </Titulo>
       {prontos.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -692,27 +710,46 @@ export default function Turbo() {
           ))}
         </div>
       )}
-      {!d && <Cartao className="p-5"><p className="text-sm text-fraco">Conecte um celular (cabo ou Wi-Fi) e autorize a depuração para usar o Turbo.</p></Cartao>}
+      {!d && <Cartao className="p-5"><p className="text-sm text-fraco">Conecte um celular (cabo ou Wi-Fi) e autorize a depuração para otimizar.</p></Cartao>}
       {d && (<>
         <div className="flex items-center gap-4">
           <Miniatura fabricante={d.fabricante} modelo={d.modelo} wifi={d.wifi} tamanho="lg" />
           <div>
             <p className="text-lg font-semibold">{d.fabricante ? `${d.fabricante} ${d.modelo}` : "Android"}</p>
-            <p className="font-mono text-xs text-fraco">{d.android ? `Android ${d.android} · ` : ""}{d.serial}{d.wifi ? " · Wi-Fi" : " · USB"}</p>
+            <p className="font-mono text-xs text-fraco">{d.android ? `Android ${d.android} · ` : ""}{d.wifi ? "Wi-Fi" : "USB"}</p>
           </div>
         </div>
-        <PainelFicha d={d} />
-        <PainelReceita d={d} />
-        <PainelFaxina d={d} />
-        <PainelCalor d={d} />
-        <PainelAjustes d={d} />
-        <PainelCompilacao d={d} />
-        <PainelRam d={d} />
-        <PainelEsquecidosTurbo d={d} />
-        <PainelJogo d={d} />
-        <PainelRede d={d} />
-        <PainelManutencao d={d} />
-        <PainelEditor d={d} />
+        <div>
+          <div className="abas" role="tablist" aria-label="Partes da otimização">
+            {SECOES.map(([id, nome]) => (
+              <button key={id} role="tab" aria-selected={secao === id} onClick={() => setSecao(id)}>{nome}</button>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-fraco">{atual[2]}</p>
+        </div>
+        {secao === "otimizar" && (<>
+          <PainelReceita d={d} />
+          <PainelFicha d={d} />
+        </>)}
+        {secao === "limpeza" && (<>
+          <PainelFaxina d={d} />
+          <PainelEsquecidosTurbo d={d} />
+          <PainelRam d={d} />
+        </>)}
+        {secao === "saude" && <Diagnostico serialFixo={d.serial} />}
+        {secao === "desempenho" && (<>
+          <PainelAjustes d={d} />
+          <PainelJogo d={d} />
+          <PainelCalor d={d} />
+          <PainelRede d={d} />
+        </>)}
+        {secao === "tecnico" && (<>
+          <PainelCompilacao d={d} />
+          <PainelDebloat d={d} />
+          <PainelManutencao d={d} />
+          <PainelEditor d={d} />
+          <PainelIPhone />
+        </>)}
       </>)}
     </div>
   );

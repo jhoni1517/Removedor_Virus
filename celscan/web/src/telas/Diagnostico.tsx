@@ -379,7 +379,7 @@ function PainelLimpeza({ d }: { d: Dispositivo | undefined }) {
 interface ItemDebloat { pacote: string; grupo: string; descricao: string; nivel: string }
 const NOMES_NIVEL: Record<string, string> = { recomendado: "Recomendado", avancado: "Avançado", especialista: "Especialista" };
 
-function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
+export function PainelDebloat({ d }: { d: Dispositivo | undefined }) {
   const { esperar, avisar } = useApp();
   const [nivel, setNivel] = useState("recomendado");
   const [dados, setDados] = useState<{ niveis: Record<string, string>; itens: ItemDebloat[] } | null>(null);
@@ -606,7 +606,7 @@ function PainelEsquecidos({ d }: { d: Dispositivo | undefined }) {
   );
 }
 
-function PainelIPhone() {
+export function PainelIPhone() {
   const [dados, setDados] = useState<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string } | null>(null);
   useEffect(() => { api<{ disponivel: boolean; aparelhos: IPhone[]; aviso?: string }>("/ios/estado").then(setDados).catch(() => undefined); }, []);
   if (!dados) return null;
@@ -631,11 +631,23 @@ function PainelIPhone() {
   );
 }
 
-export default function Diagnostico() {
+export default function Diagnostico({ serialFixo }: { serialFixo?: string } = {}) {
   const { dispositivos } = useApp();
   const prontos = dispositivos.filter((x) => x.estado === "device");
   const [serial, setSerial] = useState<string | null>(null);
-  const d = prontos.find((x) => x.serial === serial) ?? prontos[0];
+  const d = prontos.find((x) => x.serial === (serialFixo ?? serial)) ?? prontos[0];
+  if (serialFixo) {  // dentro do Otimizar: só bateria, peças, espaço e limpeza (o resto já está nas outras abas)
+    return (
+      <div className="space-y-6">
+        <BateriaBaixa serial={d?.serial} />
+        <PainelDiagnostico d={d} />
+        <PainelLimpeza d={d} />
+        <PainelCorrecoes d={d} />
+        <PainelEnergia d={d} />
+        <PainelPrint d={d} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl space-y-6">

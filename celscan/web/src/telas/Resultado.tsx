@@ -656,10 +656,18 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </details>
       )}
 
-      <div className="abas mb-5" role="tablist" aria-label="Partes do resultado">
-        {abas.map(([id, nome, n]) => (
+      <div className="abas mb-2" role="tablist" aria-label="Partes do resultado">
+        {abas.slice(0, 2).map(([id, nome, n]) => (
           <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>
             {nome}{n > 0 && <span className="abas-n numeros">{n}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="abas-detalhes mb-5" role="tablist" aria-label="Detalhes do resultado">
+        <span className="text-xs font-semibold uppercase tracking-wide text-fraco">Detalhes</span>
+        {abas.slice(2).map(([id, nome, n]) => (
+          <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>
+            {nome}{n > 0 && <span className="numeros"> · {n}</span>}
           </button>
         ))}
       </div>

@@ -9,6 +9,15 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.6.0b3 (18/11/2026) — telas mais limpas
+
+- **Otimizar**: os 12 painéis empilhados viraram 5 abas — Otimizar (otimização completa + nota), Limpeza (anúncios,
+  apps da marca, câmera, apps parados, RAM), Bateria e espaço (o antigo Diagnóstico, sem os painéis repetidos),
+  Desempenho (perfis, ajustes, jogo, calor, rede) e Técnico (compilação manual, lista completa de apps de fábrica,
+  manutenção, editor, iPhone). Some a sub-aba duplicada do menu. Ação principal: "Ver o que dá para otimizar".
+- **Resultado da verificação**: só 2 abas grandes (Problemas, Todos os apps); poderes, anúncios, câmera/microfone e
+  internet viram "Detalhes" discretos.
+
 ## Beta 3.6.0b2 (18/11/2026) — certeza: "ameaça confirmada" × "suspeito"
 
 Cada app ganha `certeza`: **confirmado** (lista pública, assinatura falsa, antivírus, código de trojan bancário,

@@ -6,7 +6,6 @@ import { useApp } from "./estado";
 import Configuracoes from "./telas/Configuracoes";
 import Balcao from "./telas/Balcao";
 import Conectar from "./telas/Conectar";
-import Diagnostico from "./telas/Diagnostico";
 import Historico from "./telas/Historico";
 import Modo from "./telas/Modo";
 import Recuperar from "./telas/Recuperar";
@@ -82,7 +81,6 @@ const SECOES: { id: Secao; nome: string; icone: typeof ScanLine }[] = [
   { id: "config", nome: "Configurações", icone: Settings },
 ];
 const ABAS: Partial<Record<Secao, [string, string][]>> = {
-  otimizar: [["turbo", "Desempenho"], ["saude", "Bateria, espaço e limpeza"]],
   recuperar: [["apagados", "Fotos e arquivos apagados"], ["quebrada", "Celular com tela quebrada"]],
   atendimentos: [["balcao", "Balcão"], ["historico", "Histórico"]],
 };
@@ -252,8 +250,7 @@ export default function App() {
       <Abas secao={secao} aba={aba} mudar={mudarAba} />
       {secao === "atendimentos" && aba === "balcao" && <Balcao />}
       {secao === "atendimentos" && aba === "historico" && <Historico onAbrir={abrirHistorico} />}
-      {secao === "otimizar" && aba === "turbo" && <Turbo />}
-      {secao === "otimizar" && aba === "saude" && <Diagnostico />}
+      {secao === "otimizar" && <Turbo />}
       {secao === "recuperar" && aba === "apagados" && <Recuperar />}
       {secao === "recuperar" && aba === "quebrada" && <Resgate />}
       {secao === "config" && <Configuracoes />}
