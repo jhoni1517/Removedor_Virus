@@ -1,0 +1,10 @@
+Total RSS by OOM adjustment:
+    900,000K: Native
+        50,000K: surfaceflinger (pid 500)
+    260,000K: Foreground
+       240,000K: com.whatsapp (pid 2000 / activities)
+    300,000K: Cached
+       190,000K: com.exemplo.jogo (pid 3000)
+       110,000K: com.systemservice (pid 3100)
+
+Total RSS by category:

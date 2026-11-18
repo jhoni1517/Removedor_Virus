@@ -9,6 +9,50 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.4.0b1 (18/11/2026) — aba Turbo (funções dos otimizadores via Shizuku, pelo PC)
+
+Base: análise de 64 fotos de dois apps (otimizador de compilação Rápida/Completa/Extrema e VOID ADB).
+Decisão: **tudo pelo computador (USB ou Wi-Fi ADB)**. O shell do ADB tem o mesmo poder do Shizuku, sem
+instalar nada no celular do cliente (importante em aparelho infectado) e sem o Shizuku cair com a tela apagada.
+
+| Função vista nas fotos | No CelScan | Como (real) |
+|---|---|---|
+| Otimização Rápida/Completa/Extrema | Compilação por modo e grupo | `cmd package compile -m speed-profile/speed/everything -f` |
+| Seus apps mais usados compilados | Escopo "5 mais usados" | estatística de uso do Android (`dumpsys usagestats`) |
+| Apps do sistema / Play Services / WebView compilados | Escopos Sistema, Google, WebView | idem |
+| Manter tela ligada durante a otimização | automático | `svc power stayon` e volta ao valor anterior |
+| Ficha do aparelho | Ficha | getprop, `dumpsys display/thermalservice`, `/proc`, Vulkan das features |
+| Nota VOID | Nota medida (0–100) | laço de CPU 1 e N núcleos, banda de memória, quadros travados, disco, latência |
+| Calor e Lentidão | Calor e lentidão | status térmico, limite de cada cluster da CPU, `top`, carregando |
+| Comilões de RAM (Leve/Soneca/Forte) | Comilões de RAM | `dumpsys meminfo` por estado; `am kill` / balde rare / `force-stop` |
+| Fim dos processos fantasmas | Ajuste | `device_config max_phantom_processes` + `settings_enable_monitor_phantom_procs` |
+| Congelador de cache | Ajuste | `device_config activity_manager_native_boot use_freezer` |
+| Limite de processos | Ajuste "Menos apps escondidos" | `max_cached_processes` |
+| Dados em repouso no Wi-Fi, Sem Wi-Fi automático, Sem troca de rede | Ajustes | `mobile_data_always_on`, `wifi_wakeup_enabled`, `network_avoid_bad_wifi` |
+| Sem atualização automática | Ajuste | `ota_disable_automatic_update` |
+| Hz sem queda / 60 Hz | Ajustes de tela | `peak_refresh_rate`/`min_refresh_rate` com o máximo real da tela |
+| Perfis Bateria/Equilíbrio/Máximo | Perfis prontos | conjunto de ajustes com um único desfazer |
+| Apps parados dormindo / esquecidos hibernando | Apps parados | `am set-standby-bucket rare/restricted` (acorda ao abrir) |
+| Proibidos em segundo plano | Botão nos apps parados | appop `RUN_ANY_IN_BACKGROUND ignore` |
+| Modo desempenho, Resolução e FPS do jogo | Modo de jogo | `cmd game mode` / `cmd game set --downscale --fps` (Android 12/13+) |
+| Manutenção antecipada, Faxina do ART, Armazenamento rápido, Limpar cache | Manutenção | `bg-dexopt-job`, `pm art cleanup`, `sm idle-maint run`, `pm trim-caches` |
+| Rede de partida | Rede da partida | banda, RSSI, link, ping e oscilação |
+| Editor de configurações | Editor (técnico) | `settings list/put`, chaves que derrubam o ADB bloqueadas |
+| Receita sob medida | Receita | plano montado pela ficha; executa tudo numa tarefa |
+
+Tudo que muda configuração grava o valor anterior na quarentena (Histórico > Desfazer), inclusive `device_config`.
+
+**Ficou de fora (placebo ou arriscado):** limpar pastas de log (sem root não acessa), "sem relatórios de erro"
+e "limpeza de telemetria" (ganho desprezível), localização de fundo econômica (o padrão do Android já é 30 min),
+"clock sustentado" e "bloquear economia" (precisam de app rodando), 5G/Bluetooth/NFC off no jogo (ganho mínimo),
+"sem teste de conexão" (quebra login de Wi-Fi público), opção Samsung "velocidade de processamento" (chave não
+documentada).
+
+**Fase 2 (precisa de app no celular via Shizuku):** detecção automática do jogo, guarda térmica, mira/DPI por
+jogo, contador de FPS na tela, agendamento de otimização e pós-atualização turbo automática.
+
+Testes: `testes/test_turbo.py` (21). Suíte: 330 ok.
+
 ## Beta 3.3.0b2 (11/10/2026) — caçada de bugs 2 (sem funções novas)
 
 | Área | Bug | Correção |

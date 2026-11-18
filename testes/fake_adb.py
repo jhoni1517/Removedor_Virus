@@ -103,6 +103,15 @@ if a[0] == "shell":
     if c.startswith("sh /data/local/tmp"):
         with open(os.path.join(EST, "script.sh"), encoding="utf-8") as f:
             script = f.read()
+        if "sec cpu1" in script:  # Turbo: nota
+            fim("@@SEC cpu1\n320\n@@SEC cpun\n410\n@@SEC memoria\n1073741824 bytes (1.0 G) copied, 0.2 s\n"
+                "@@SEC gfx\nTotal frames rendered: 900\nJanky frames: 9 (1.00%)\n@@SEC mem\n"
+                "MemTotal: 7864320 kB\nMemAvailable: 3145728 kB\n@@SEC bateria\n  level: 80\n  temperature: 341\n"
+                "@@SEC fim")
+        if "sec features" in script:  # Turbo: ficha
+            fim(fixture("turbo_ficha.txt"))
+        if "policy*" in script:  # Turbo: calor e lentidão
+            fim(fixture("turbo_calor.txt"))
         fim(fixture("coleta.txt" if "pkgdump" in script else "diag.txt"))
     if "-exec stat" in c:
         m = re.search(r"find ('([^']*)'|(\S+)) -type f", c)
@@ -207,6 +216,33 @@ if a[0] == "shell":
         fim("Package x new state: enabled")
     if c.startswith("dpm remove-active-admin"):
         fim("Success: Admin removed ComponentInfo{" + c.split()[-1] + "}")
+    # ---- Turbo
+    if c.startswith("device_config get"):
+        fim("null")
+    if c.startswith("device_config put"):
+        fim("Successfully set")
+    if c.startswith("dumpsys display"):
+        fim("mActiveSfDisplayMode=DisplayMode{id=1, width=1080, height=2400, fps=120.0}\n"
+            "supportedModes [{id=1, width=1080, height=2400, fps=120.0}, {id=2, width=1080, height=2400, fps=60.0}]")
+    if c.startswith("dumpsys meminfo"):
+        fim(fixture("turbo_meminfo.txt"))
+    if c.startswith("dumpsys usagestats"):
+        fim('In-memory weekly stats\n'
+            '  package=com.whatsapp totalTimeUsed="05:10:00" lastTimeUsed="2026-11-17 10:00:00"\n'
+            '  package=com.exemplo.jogo totalTimeUsed="01:00:00" lastTimeUsed="2026-11-16 10:00:00"')
+    if c.startswith("dumpsys wifi"):
+        fim("mWifiInfo SSID: \"Casa\", RSSI: -58, Link speed: 433Mbps, Frequency: 5180MHz, Wi-Fi standard: 11ac")
+    if c.startswith("ping "):
+        fim("10 packets transmitted, 10 received, 0% packet loss, time 2702ms\n"
+            "rtt min/avg/max/mdev = 12.1/18.4/31.0/5.2 ms")
+    if c.startswith("cmd package compile") or c.startswith("cmd package bg-dexopt-job") or c.startswith("pm art"):
+        fim("Success")
+    if c.startswith("am get-standby-bucket"):
+        fim("10")
+    if c.startswith("cmd game"):
+        fim("")
+    if c.startswith("settings list"):
+        fim("window_animation_scale=1.0\ntransition_animation_scale=1.0\nadb_enabled=1\npeak_refresh_rate=120.0")
     # ---- teste de desempenho (pontuação): apps, disco, CPU, RAM e câmeras
     if c == "pm list packages":
         fim("\n".join(f"package:{p}" for p in ["com.android.settings", *PACOTES]))

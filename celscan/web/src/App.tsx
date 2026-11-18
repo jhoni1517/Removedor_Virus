@@ -1,4 +1,4 @@
-import { Activity, ClipboardList, FileSearch, History, MonitorSmartphone, ScanLine, Settings, Smartphone } from "lucide-react";
+import { Activity, ClipboardList, FileSearch, History, MonitorSmartphone, Rocket, ScanLine, Settings, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, obterVarredura, type Tarefa, type Varredura } from "./api";
 import ModoCliente from "./telas/ModoCliente";
@@ -12,11 +12,12 @@ import Modo from "./telas/Modo";
 import Recuperar from "./telas/Recuperar";
 import Resgate from "./telas/Resgate";
 import Resultado from "./telas/Resultado";
+import Turbo from "./telas/Turbo";
 import Varrendo from "./telas/Varrendo";
 import { Avisos } from "./ui";
 
 const ATALHOS: [string, string][] = [
-  ["Alt + 1…7", "Trocar de seção"], ["Ctrl + K", "Procurar um app no resultado"], ["Ctrl + Enter", "Iniciar a varredura"], ["?", "Mostrar esta lista"],
+  ["Alt + 1…8", "Trocar de seção"], ["Ctrl + K", "Procurar um app no resultado"], ["Ctrl + Enter", "Iniciar a varredura"], ["?", "Mostrar esta lista"],
   ["Esc", "Fechar janelas e diálogos"], ["Tab / Shift + Tab", "Andar pelos botões"],
 ];
 
@@ -70,12 +71,13 @@ type Fluxo =
   | { tela: "modo"; serial: string }
   | { tela: "varrendo"; tarefa: Tarefa<Varredura>; modo: string }
   | { tela: "resultado"; v: Varredura };
-type Secao = "varredura" | "balcao" | "diagnostico" | "recuperar" | "resgate" | "historico" | "config";
+type Secao = "varredura" | "balcao" | "diagnostico" | "turbo" | "recuperar" | "resgate" | "historico" | "config";
 
 const SECOES: { id: Secao; nome: string; icone: typeof ScanLine }[] = [
   { id: "varredura", nome: "Varredura", icone: ScanLine },
   { id: "balcao", nome: "Balcão", icone: ClipboardList },
   { id: "diagnostico", nome: "Diagnóstico", icone: Activity },
+  { id: "turbo", nome: "Turbo", icone: Rocket },
   { id: "recuperar", nome: "Recuperar", icone: FileSearch },
   { id: "resgate", nome: "Tela quebrada", icone: MonitorSmartphone },
   { id: "historico", nome: "Histórico", icone: History },
@@ -143,7 +145,7 @@ export default function App() {
   const [fluxo, setFluxo] = useState<Fluxo>({ tela: "conectar" });
   const [atalhos, setAtalhos] = useState(false);
 
-  // Alt+1..7 muda de seção; "?" mostra os atalhos (fora de campos de texto)
+  // Alt+1..8 muda de seção; "?" mostra os atalhos (fora de campos de texto)
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       const alvo = e.target as HTMLElement | null;
@@ -229,6 +231,7 @@ export default function App() {
       {erro}
       {secao === "balcao" && <Balcao />}
       {secao === "diagnostico" && <Diagnostico />}
+      {secao === "turbo" && <Turbo />}
       {secao === "recuperar" && <Recuperar />}
       {secao === "resgate" && <Resgate />}
       {secao === "historico" && <Historico onAbrir={abrirHistorico} />}

@@ -1,0 +1,45 @@
+@@SEC props
+ro.product.manufacturer=motorola
+ro.product.model=moto g54 5G
+ro.product.marketname=moto g54 5G
+ro.build.version.release=14
+ro.build.version.sdk=34
+ro.build.version.security_patch=2026-09-01
+ro.product.cpu.abi=arm64-v8a
+ro.soc.model=MT6855
+@@SEC kernel
+5.10.209
+@@SEC selinux
+Enforcing
+@@SEC cpu
+8
+@@SEC freq
+2000000
+2000000
+2000000
+2000000
+2000000
+2000000
+2200000
+2200000
+@@SEC mem
+MemTotal:        7864320 kB
+MemAvailable:    3145728 kB
+SwapTotal:       4194300 kB
+@@SEC display
+  mActiveSfDisplayMode=DisplayMode{id=1, width=1080, height=2400, fps=120.0}
+  supportedModes [{id=1, width=1080, height=2400, fps=120.0}, {id=2, width=1080, height=2400, fps=60.0}]
+@@SEC gpu
+GLES: ARM, Mali-G57 MC2, OpenGL ES 3.2
+@@SEC features
+feature:android.hardware.vulkan.version=4206592
+@@SEC thermal
+Thermal Status: 0
+Temperature{mValue=41.0, mType=0, mName=cpu-big, mStatus=0}
+@@SEC bateria
+  level: 80
+  health: 2
+  temperature: 341
+@@SEC uptime
+90000.00 1.0
+@@SEC fim

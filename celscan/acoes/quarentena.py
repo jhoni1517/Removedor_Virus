@@ -162,6 +162,15 @@ def _reverter_ajustes(ap, meta):
             certo = atual == a.get("anterior")
             msgs.append(f"{a['chave']}: {'restaurado' if certo else 'não confirmou'}")
             ok &= certo
+        elif a["tipo"] == "device_config":  # flags do sistema (Turbo): volta o valor ou apaga o que não existia
+            if a.get("anterior") is None:
+                ap.sh(f"device_config delete {a['ns']} {a['chave']}")
+            else:
+                ap.sh(f"device_config put {a['ns']} {a['chave']} {shlex.quote(a['anterior'])}")
+            atual = ap.sh(f"device_config get {a['ns']} {a['chave']}").strip()
+            certo = (None if atual in ("", "null") else atual) == a.get("anterior")
+            msgs.append(f"{a['chave']}: {'restaurado' if certo else 'não confirmou'}")
+            ok &= certo
         elif a["tipo"] == "appops":
             ap.sh(f"appops set {a['pacote']} {a['op']} {a.get('anterior') or 'default'}")
             msgs.append(f"{a['op']} de {a['pacote']}: {a.get('anterior') or 'default'}")

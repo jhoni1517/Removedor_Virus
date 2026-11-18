@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import atendimento, backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
+from celscan.acoes import atendimento, backup, evidencias, navegacao, otimizacao, quarentena, recuperacao, turbo
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -249,6 +249,76 @@ class PedidoPasta(BaseModel):
 class PedidoWifi(BaseModel):
     endereco: Annotated[str, AfterValidator(_endereco)]
     codigo: Annotated[str | None, AfterValidator(_codigo)] = None
+
+
+# ---------------------------------------------------------------- Turbo (otimização avançada)
+ListaPacotes = Annotated[list[Pacote], Field(min_length=1, max_length=500)]
+
+
+class PedidoTurboAjustes(BaseModel):
+    serial: str
+    ids: Annotated[list[str], _categorias(turbo.POR_ID), Field(min_length=1)]
+
+
+class PedidoTurboPerfil(BaseModel):
+    serial: str
+    perfil: Literal["bateria", "equilibrio", "maximo"]
+
+
+class PedidoTurboRam(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    modo: Literal["leve", "soneca", "forte"] = "leve"
+
+
+class PedidoTurboCompilar(BaseModel):
+    serial: str
+    modo: Literal["rapida", "completa", "extrema"] = "rapida"
+    escopo: Literal["usuario", "mais_usados", "sistema", "google", "webview", "todos", "escolhidos"] = "usuario"
+    pacotes: list[Pacote] = Field(default_factory=list, max_length=2000)
+    excluir: list[Pacote] = Field(default_factory=list, max_length=2000)
+
+
+class PedidoTurboPacotes(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+
+
+class PedidoTurboDormir(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    nivel: Literal["rare", "restricted"] = "rare"
+
+
+class PedidoTurboSegundoPlano(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    permitir: bool = False
+
+
+class PedidoTurboJogo(BaseModel):
+    serial: str
+    pacote: Pacote
+    modo: Literal["padrao", "desempenho", "bateria"] = "desempenho"
+    escala: float | None = None
+    fps: int | None = None
+
+
+class PedidoTurboManutencao(BaseModel):
+    serial: str
+    id: Literal["dexopt", "art_cleanup", "armazenamento", "cache"]
+
+
+class PedidoTurboReceita(BaseModel):
+    serial: str
+    etapas: Annotated[list[str], _categorias(turbo.ETAPAS), Field(min_length=1)]
+
+
+class PedidoTurboConfig(BaseModel):
+    serial: str
+    ns: Literal["system", "secure", "global"]
+    chave: str = Field(min_length=1, max_length=120)
+    valor: str | None = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------- aparelhos conectados
@@ -956,6 +1026,159 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             return correcoes.corrigir(ap, p.ids)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
+
+    # ---- Turbo: otimização avançada pelo PC (tudo reversível pelo Histórico)
+    def _turbo(funcao, *args, **kw):
+        try:
+            return funcao(*args, **kw)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        except adb.AdbErro as e:
+            raise HTTPException(502, f"O celular não respondeu: {e}") from e
+
+    def _registrar_turbo(serial: str, texto: str, desfazer_id: str | None = None) -> None:
+        db.registrar_acao(db.conectar(), serial, "otimizacao", None, texto, desfazer_id)
+
+    @app.get("/api/turbo/ficha")
+    def turbo_ficha(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.ficha, aparelhos.pronto(serial))
+
+    @app.get("/api/turbo/calor")
+    def turbo_calor(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.calor, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/nota")
+    def turbo_nota(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_nota", p.serial, lambda progresso, _c: turbo.nota(ap, progresso))
+
+    @app.get("/api/turbo/rede")
+    def turbo_rede(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.rede, aparelhos.pronto(serial))
+
+    @app.get("/api/turbo/ajustes")
+    def turbo_ajustes(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.listar_ajustes, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/ajustes")
+    def turbo_aplicar(p: PedidoTurboAjustes) -> dict[str, Any]:
+        r = _turbo(turbo.aplicar_ajustes, livre(p.serial), p.ids)
+        ok = [x["titulo"] for x in r["resultado"] if x["ok"]]
+        if ok:
+            _registrar_turbo(p.serial, f"Turbo: {', '.join(ok)}", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/perfil")
+    def turbo_perfil(p: PedidoTurboPerfil) -> dict[str, Any]:
+        r = _turbo(turbo.aplicar_perfil, livre(p.serial), p.perfil)
+        _registrar_turbo(p.serial, f"Perfil {turbo.PERFIS[p.perfil]['titulo']} aplicado", r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/ram")
+    def turbo_ram(serial: str) -> dict[str, Any]:
+        return {**_turbo(turbo.comiloes, aparelhos.pronto(serial)), "modos": turbo.MODOS_RAM}
+
+    @app.post("/api/turbo/ram/liberar")
+    def turbo_ram_liberar(p: PedidoTurboRam) -> dict[str, Any]:
+        r = _turbo(turbo.liberar_ram, livre(p.serial), p.pacotes, p.modo)
+        _registrar_turbo(p.serial, f"RAM ({p.modo}): {len(p.pacotes)} app(s), liberou {r['liberou_mb'] or 0} MB",
+                         r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/compilacao")
+    def turbo_compilacao_info(serial: str) -> dict[str, Any]:
+        aparelhos.pronto(serial)
+        return {"modos": {k: v[1] for k, v in turbo.MODOS_COMPILACAO.items()}, "escopos": turbo.ESCOPOS}
+
+    @app.post("/api/turbo/compilar")
+    def turbo_compilar(p: PedidoTurboCompilar) -> dict[str, Any]:
+        ap = livre(p.serial)
+        if p.escopo == "escolhidos":
+            if not p.pacotes:
+                raise HTTPException(422, "Escolha ao menos um app.")
+            alvos = list(dict.fromkeys(p.pacotes))
+        else:
+            alvos = _turbo(turbo.alvos_compilacao, ap, p.escopo)
+        alvos = [a for a in alvos if a not in set(p.excluir)]
+        if not alvos:
+            raise HTTPException(422, "Nenhum app para otimizar nesse grupo.")
+
+        def rodar(progresso, cancelar):
+            r = turbo.compilar_apps(ap, p.modo, alvos, progresso, cancelar)
+            _registrar_turbo(p.serial, f"Otimização {p.modo}: {len(r['ok'])} de {r['total']} app(s) compilados")
+            return r
+        return nova_tarefa("turbo_compilar", p.serial, rodar)
+
+    @app.post("/api/turbo/compilar/reset")
+    def turbo_compilar_reset(p: PedidoTurboPacotes) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_reset", p.serial, lambda _p, _c: turbo.resetar_compilacao(ap, p.pacotes))
+
+    @app.get("/api/turbo/esquecidos")
+    def turbo_esquecidos(serial: str, dias: int = Query(30, ge=3, le=365)) -> dict[str, Any]:
+        return {"apps": _turbo(turbo.esquecidos, aparelhos.pronto(serial), dias), "dias": dias}
+
+    @app.post("/api/turbo/dormir")
+    def turbo_dormir(p: PedidoTurboDormir) -> dict[str, Any]:
+        r = _turbo(turbo.dormir, livre(p.serial), p.pacotes, p.nivel)
+        _registrar_turbo(p.serial, f"{sum(x['ok'] for x in r['apps'])} app(s) dormindo", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/segundo-plano")
+    def turbo_segundo_plano(p: PedidoTurboSegundoPlano) -> dict[str, Any]:
+        r = _turbo(turbo.segundo_plano, livre(p.serial), p.pacotes, p.permitir)
+        acao = "liberados" if p.permitir else "proibidos"
+        _registrar_turbo(p.serial, f"{len(p.pacotes)} app(s) {acao} em segundo plano", r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/jogo")
+    def turbo_jogo_info(serial: str, pacote: str) -> dict[str, Any]:
+        return _turbo(turbo.jogo_info, aparelhos.pronto(serial), pacote)
+
+    @app.post("/api/turbo/jogo")
+    def turbo_jogo(p: PedidoTurboJogo) -> dict[str, Any]:
+        r = _turbo(turbo.ajustar_jogo, livre(p.serial), p.pacote, p.modo, p.escala, p.fps)
+        _registrar_turbo(p.serial, f"Modo de jogo ({p.modo}) em {p.pacote}", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/manutencao")
+    def turbo_manutencao(p: PedidoTurboManutencao) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _cancelar):
+            titulo, desc, *_ = turbo.MANUTENCOES[p.id]
+            progresso({"etapa": "manutencao", "descricao": titulo, "detalhe": desc, "atual": None, "total": None,
+                       "estimativa_s": 120})
+            r = turbo.manutencao(ap, p.id)
+            if r["ok"]:
+                _registrar_turbo(p.serial, titulo)
+            return r
+        return nova_tarefa("turbo_manutencao", p.serial, rodar)
+
+    @app.get("/api/turbo/receita")
+    def turbo_receita(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.receita, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/receita")
+    def turbo_aplicar_receita(p: PedidoTurboReceita) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, cancelar):
+            r = turbo.aplicar_receita(ap, p.etapas, progresso, cancelar)
+            _registrar_turbo(p.serial, f"Receita sob medida: {sum(e['ok'] for e in r['etapas'])} etapa(s)")
+            return r
+        return nova_tarefa("turbo_receita", p.serial, rodar)
+
+    @app.get("/api/turbo/config")
+    def turbo_config(serial: str, ns: Literal["system", "secure", "global"] = "global",
+                     filtro: str = Query("", max_length=60)) -> dict[str, Any]:
+        return {"itens": _turbo(turbo.listar_config, aparelhos.pronto(serial), ns, filtro), "ns": ns}
+
+    @app.post("/api/turbo/config")
+    def turbo_config_editar(p: PedidoTurboConfig) -> dict[str, Any]:
+        r = _turbo(turbo.editar_config, livre(p.serial), p.ns, p.chave, p.valor)
+        _registrar_turbo(p.serial, f"Configuração {p.ns}/{p.chave}: {r['anterior']} → {r['atual']}", r["desfazer_id"])
+        return r
 
     @app.post("/api/otimizar-apps")
     def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:
