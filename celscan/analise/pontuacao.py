@@ -6,6 +6,7 @@ Não fala com o aparelho. Cada achado vem com título curto, "o que significa" e
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime
 from typing import Any
 
@@ -138,6 +139,52 @@ def poderes(app: AppBruto, dados: DadosAparelho) -> list[str]:
     return res
 
 
+# Disfarce mais usado por droppers e trojans bancários, inclusive na Play Store (Anatsa, Joker, Harly):
+# "leitor de PDF", "scanner de QR", "limpador", "lanterna"... que depois baixam o vírus numa atualização.
+UTILITARIO = re.compile(
+    r"pdf|docs? ?reader|document|leitor|scanner|\bqr\b|qrcode|barcode|c[oó]digo de barras|cleaner|limpa|"
+    r"booster|acelera|otimiza|optimi[sz]|battery|bateria|lanterna|flashlight|torch|file ?manager|gerenciador|"
+    r"arquivos|files|wallpaper|papel de parede|translat|tradutor|vpn|calculadora|calculator|recuper|recovery|"
+    r"fitness|passos|pedometer|weather|clima|tempo agora|ringtone|toques|teclado|keyboard|launcher|tema",
+    re.I)
+UTILITARIOS_CONHECIDOS = {
+    "com.google.android.apps.nbu.files", "com.adobe.reader", "com.adobe.scan.android", "com.google.android.apps.docs",
+    "com.google.android.apps.translate", "com.microsoft.office.officehubrow", "com.microsoft.office.word",
+    "com.mi.android.globalFileexplorer", "com.sec.android.app.myfiles", "com.lonelycatgames.Xplore",
+    "com.ghisler.android.TotalCommander", "cn.wps.moffice_eng", "com.google.android.inputmethod.latin",
+    "com.samsung.android.honeyboard", "com.touchtype.swiftkey", "com.google.android.apps.nexuslauncher",
+    "com.teslacoilsw.launcher", "com.microsoft.launcher", "com.nianticlabs.pokemongo", "com.google.ar.lens",
+    "com.cloudflare.onedotonedotonedotone", "com.nordvpn.android", "com.expressvpn.vpn", "ch.protonvpn.android",
+    "com.google.android.apps.fitness", "com.google.android.calculator", "com.miui.calculator",
+    "com.sec.android.app.popupcalculator", "com.google.android.apps.photos", "com.dropbox.android",
+}
+
+
+def utilitario_poderoso(app: AppBruto, dados: DadosAparelho, sem_icone: bool) -> str | None:
+    """App "utilitário" (PDF, QR, limpador...) com poder que utilitário não precisa. Vale para qualquer loja."""
+    if app.sistema or app.pacote in UTILITARIOS_CONHECIDOS:
+        return None
+    texto = f"{app.nome or ''} {app.pacote}"
+    if not UTILITARIO.search(texto):
+        return None
+    pkg, poderes_ruins = app.pacote, []
+    if pkg in dados.acess:
+        poderes_ruins.append("controla a tela")
+    if "REQUEST_INSTALL_PACKAGES" in app.appops:
+        poderes_ruins.append("instala outros apps")
+    if pkg in dados.admins:
+        poderes_ruins.append("é administrador")
+    if pkg in dados.notif and not re.search(r"teclado|keyboard|launcher", texto, re.I):
+        poderes_ruins.append("lê notificações")
+    if "PROJECT_MEDIA" in app.appops:
+        poderes_ruins.append("grava a tela")
+    if "SYSTEM_ALERT_WINDOW" in app.appops and sem_icone:
+        poderes_ruins.append("desenha sobre outros apps sem ter ícone")
+    if {"android.permission.READ_SMS", "android.permission.RECEIVE_SMS"} & app.perms and pkg != dados.sms:
+        poderes_ruins.append("lê SMS")
+    return ", ".join(poderes_ruins) if poderes_ruins else None
+
+
 def sensivel(pkg: str) -> bool:
     """App cujo dado não volta só reinstalando: autenticador, senhas, carteira, banco, mensageiro."""
     return pkg in SENSIVEIS or pkg in pix.carregar().oficiais
@@ -255,14 +302,24 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     if ioc:
         a.append(ra["ameaca_conhecida"].achado(ioc))
     loja = LOJAS.get(app.instalador or "")
+    # 3.5: app da loja oficial ou de fábrica é "confiável" por origem. Os PODERES dele continuam visíveis, mas
+    # pesam pouco: antes WhatsApp, Caixa e outros oficiais apareciam como risco grave só por terem câmera,
+    # microfone, contatos e sobreposição — o que é normal para eles.
+    confiavel = app.sistema or bool(loja)
+
+    def leve(regra: str, peso_loja: int) -> None:
+        if app.sistema:
+            return  # serviço de fábrica (acessibilidade da marca, Encontre meu dispositivo...) não pontua
+        x = ra[regra].achado()
+        a.append({**x, "peso": peso_loja} if loja else x)
     if pkg in dados.acess:
-        a.append(ra["acessibilidade"].achado())
+        leve("acessibilidade", 15)
     if pkg in dados.admins:
-        a.append(ra["administrador"].achado())
+        leve("administrador", 10)
     if pkg in dados.owners:
         a.append(ra["device_owner"].achado())
     if pkg in dados.notif:
-        a.append(ra["leitor_notificacoes"].achado())
+        leve("leitor_notificacoes", 5)
     sem_icone = not app.sistema and dados.icones is not None and pkg not in dados.icones
     if not app.sistema:
         if sem_icone:
@@ -359,8 +416,18 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         a.append(ra["certificado_falso"].achado(pix.carregar().oficiais.get(pkg, pix.AppConhecido(pkg, pkg, ())).nome))
     if pkg == dados.sms and pkg not in SMS_CONHECIDOS:
         a.append(ra["sms_padrao"].achado())
-    a += [r.permissoes[p].achado() for p in sorted(app.perms) if p in r.permissoes]
-    a += [r.appops[o].achado() for o in sorted(app.appops) if o in r.appops]
+    if not confiavel:  # permissão sozinha não é vírus: só pesa em app de fora da loja
+        a += [r.permissoes[p].achado() for p in sorted(app.perms) if p in r.permissoes]
+        a += [r.appops[o].achado() for o in sorted(app.appops) if o in r.appops]
+    elif an.get("fora_do_app") and "SYSTEM_ALERT_WINDOW" in app.appops and "SYSTEM_ALERT_WINDOW" in r.appops:
+        a.append(r.appops["SYSTEM_ALERT_WINDOW"].achado())  # é por aqui que o pop-up aparece: pesa mesmo da loja
+    util = utilitario_poderoso(app, dados, sem_icone)
+    if util and "utilitario_poderoso" in ra:
+        a.append(ra["utilitario_poderoso"].achado(util))
+    for m in (app.motor or {}).get("achados", []):  # Motor CelScan: o que foi achado DENTRO do código do app
+        if m["chave"] in ra:
+            x = ra[m["chave"]].achado(m.get("detalhe", ""))
+            a.append({**x, "peso": m["peso_loja"]} if (confiavel and "peso_loja" in m) else x)
     if app.cert and app.cert.get("debug"):
         a.append(ra["certificado_debug"].achado())
     vt = app.vt or {}
@@ -369,7 +436,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
             f"{vt['malicioso']} antivírus detectaram ({vt.get('rotulo') or 'sem rótulo'})"))
     elif vt.get("conhecido") is False and not loja and not app.sistema:
         a.append(ra["virustotal_desconhecido"].achado())
-    if pkg in dados.sempre_ativo:
+    if pkg in dados.sempre_ativo and not confiavel:
         a.append(ra["sempre_ativo"].achado())
     if app.instalado and (agora - app.instalado).days < par.get("recente_dias", 7):
         a.append(ra["instalado_recente"].achado((agora - app.instalado).days))
@@ -408,6 +475,7 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         "sensivel": sensivel(pkg),
         "poderes": pod,
         "seguro_porque": _por_que_seguro(app, loja, permitido, cert_situacao, iocs, pod),
+        "so_lista": app.so_lista, "motor": app.motor,
     }
 
 
@@ -427,6 +495,8 @@ def _por_que_seguro(app: AppBruto, loja: str | None, permitido: bool, cert: str 
         res.append("não está na lista de ameaças conhecidas")
     if not poderes_app:
         res.append("não tem nenhum poder especial")
+    if app.motor is not None and not app.motor.get("achados"):
+        res.append(f"código lido pelo Motor CelScan ({app.motor.get('dex', 0)} arquivo(s) de código): nada suspeito")
     return res
 
 

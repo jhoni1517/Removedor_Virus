@@ -82,6 +82,19 @@ def _data(ms: str) -> str | None:
         return None
 
 
+def explicar_falha(erro: str, fabricante: str = "") -> str:
+    """Aviso em linguagem simples quando o Agente não instala (nomes e ícones ficam aproximados)."""
+    fab = fabricante.lower()
+    if "INSTALL_FAILED_USER_RESTRICTED" in erro or "USER_RESTRICTED" in erro or any(
+            m in fab for m in ("xiaomi", "redmi", "poco")):
+        return ("Nomes e ícones aproximados: o celular bloqueou o CelScan Agente. Na Xiaomi/Redmi/POCO, ligue "
+                "'Instalar via USB' em Opções do desenvolvedor (precisa de chip e conta Mi) e varra de novo.")
+    if "INSTALL_FAILED_VERIFICATION_FAILURE" in erro or "verif" in erro.lower():
+        return ("Nomes e ícones aproximados: o Play Protect barrou o CelScan Agente. Desligue 'Verificar apps "
+                "instalados por USB' em Opções do desenvolvedor e varra de novo.")
+    return f"Nomes e ícones aproximados: CelScan Agente indisponível ({erro[-120:]})."
+
+
 class Agente:
     def __init__(self, ap: Aparelho, manter: bool = False):
         self.ap, self.manter = ap, manter

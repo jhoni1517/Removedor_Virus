@@ -52,6 +52,17 @@ class Varredura:
     def ler_rotulo(self, pkg: str) -> None:
         coleta.ler_rotulo(self.ap, self.apps[pkg])
 
+    def escolher_motor(self, completo: bool = False) -> list[str]:
+        from celscan.analise import motor
+        assert self.dados is not None
+        return motor.escolher(self.apps, self.dados, completo, lambda t: bool(pontuacao.UTILITARIO.search(t)))
+
+    def analisar_motor(self, pkg: str) -> None:
+        from celscan.analise import motor
+        a = self.apps[pkg]
+        if a.tamanho:
+            a.motor = motor.analisar(self.ap, pkg, a.apk, a.tamanho, a.sha256, self.iocs)
+
     def consultar_vt(self, pkg: str) -> None:
         app = self.apps[pkg]
         if self.vt and app.sha256:

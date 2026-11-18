@@ -24,6 +24,7 @@ sec(){ echo "@@SEC $1"; }
 sec props; getprop
 sec pkgs; pm list packages -f -i {F}
 sec syspkgs; pm list packages -s
+sec sisvis; [ "{F}" = "-3" ] && pm list packages -f -i -s -e
 sec desativados; pm list packages -d
 sec acess; settings get secure enabled_accessibility_services
 sec notif; settings get secure enabled_notification_listeners
@@ -132,6 +133,8 @@ class AppBruto:
     bateria_mah: float | None = None  # energia gasta desde a última carga completa
     rodando: bool = False  # tinha processo vivo no momento da análise
     removido_antes: str | None = None  # data em que o CelScan já tinha removido este app (voltou?)
+    motor: dict | None = None  # resultado do Motor CelScan (análise local do código do APK)
+    so_lista: bool = False  # app de fábrica com ícone, mostrado na lista (varredura rápida não lê o APK)
 
 
 @dataclass
@@ -215,6 +218,16 @@ def montar(serial: str, s: dict[str, str]) -> DadosAparelho:
                 apps[pkg].sensores[nome] = seg
     if not apps:
         raise AdbErro("Nenhum app listado — o 'pm list packages' falhou.")
+    # 3.5: na varredura rápida, os apps de fábrica que TÊM ícone também entram na lista (navegador da marca,
+    # galeria, loja...). Antes a lista do CelScan tinha bem menos apps do que a gaveta do celular.
+    icones_launcher = parsers.launcher(s.get("launcher", "")) or set()
+    for pkg, (caminho, inst) in parsers.pacotes(s.get("sisvis", "")).items():
+        if pkg not in apps and pkg in icones_launcher:
+            d = dump.get(pkg, {})
+            apps[pkg] = AppBruto(pacote=pkg, apk=caminho, instalador=inst, sistema=True, so_lista=True,
+                                 perms=d.get("perms", set()), versao=d.get("versao"), instalado=d.get("instalado"),
+                                 atualizado=d.get("atualizado"), ultimo_uso=ultimo_uso.get(pkg),
+                                 tempo_uso_s=tempo_uso.get(pkg), bateria_mah=bateria.get(pkg), rodando=pkg in vivos)
     dados = DadosAparelho(
         serial=serial,
         props=parsers.props(s.get("props", "")),
@@ -334,7 +347,7 @@ def calcular_hashes(ap: Aparelho, dados: DadosAparelho, sistema: bool = False) -
             yield app.pacote
         else:
             faltam.append(caminho)
-    sem_estado = [a.apk for a in dados.apps.values() if a.apk and a.apk not in estado]
+    sem_estado = [a.apk for a in dados.apps.values() if a.apk and a.apk not in estado and not a.so_lista]
     lista = " ".join(shlex.quote(c) for c in faltam)
     if not estado or sem_estado or len(lista) > LIMITE_LISTA:
         comando = HASHES.replace("{F}", filtro(sistema))  # sem stat (ou lista grande demais): tudo, como antes

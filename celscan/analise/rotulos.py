@@ -29,7 +29,7 @@ CACHE = DIR / "icones"
 NS = "{http://schemas.android.com/apk/res/android}"
 MAX_ICONE = 512 * 1024
 MAX_ENTRADA = 48 * 1024 * 1024  # teto por arquivo lido do APK (o resources.arsc dos maiores apps fica em ~20 MB)
-VERSAO_CACHE = 5
+VERSAO_CACHE = 6  # 6: ícone lido também dos pedaços (split APK) de densidade
 
 # Classes de SDKs de anúncio que abrem tela cheia (intersticial / pop-up)
 SDK_ANUNCIO = {
@@ -121,6 +121,9 @@ class _ZipRemoto:
     def __contains__(self, nome: str) -> bool:
         return nome in self._diretorio
 
+    def nomes(self):
+        return self._diretorio.keys()
+
     def tamanho_de(self, nome: str) -> int:
         return self._diretorio[nome][1]
 
@@ -143,6 +146,48 @@ class _ZipRemoto:
         if d.unconsumed_tail:
             raise ValueError(f"{nome} descomprimido passaria de {limite // 1048576} MB")
         return saida
+
+
+class _ZipVarios:
+    """Base + pedaços (split APK) vistos como um APK só: o arquivo sai do primeiro que tiver (a base primeiro).
+
+    Apps da Play em vários pedaços guardam os ícones PNG no pedaço de densidade (config.xxhdpi.apk); lendo só a
+    base, o ícone saía genérico ou errado.
+    """
+
+    def __init__(self, zips):
+        self.zips = zips
+
+    def _dono(self, nome: str):
+        return next((z for z in self.zips if nome in z), None)
+
+    def __contains__(self, nome: str) -> bool:
+        return self._dono(nome) is not None
+
+    def nomes(self):
+        vistos: dict[str, None] = {}
+        for z in self.zips:
+            vistos.update(dict.fromkeys(z.nomes()))
+        return vistos.keys()
+
+    def tamanho_de(self, nome: str) -> int:
+        return self._dono(nome).tamanho_de(nome)
+
+    def ler_arquivo(self, nome: str, limite: int = MAX_ENTRADA) -> bytes:
+        return self._dono(nome).ler_arquivo(nome, limite)
+
+
+def pedacos(ap, pacote: str) -> list[tuple[str, int]]:
+    """Pedaços de densidade/idioma do app instalado: [(caminho, tamanho)] (sem a base)."""
+    import shlex
+    saida = ap.sh(f"for f in $(pm path {shlex.quote(pacote)} | sed 's/^package://'); do "
+                  "echo \"$(stat -c %s \"$f\" 2>/dev/null) $f\"; done", timeout=30)
+    res = []
+    for linha in saida.splitlines():
+        partes = linha.strip().split(" ", 1)
+        if len(partes) == 2 and partes[0].isdecimal() and not partes[1].endswith("/base.apk") and "split_" in partes[1]:
+            res.append((partes[1], int(partes[0])))
+    return res
 
 
 def _resolver(arsc, ref: str):
@@ -463,8 +508,19 @@ def obter(ap, pacote: str, apk: str, tamanho: int, sha256: str | None) -> Rotulo
         return cache
     ler = _memo(apksig.leitor_remoto(ap, apk))
     try:
-        r = analisar(_ZipRemoto(ler, tamanho), pacote)
+        base = _ZipRemoto(ler, tamanho)
+        r = analisar(base, pacote)
         ok = True
+        if not r.icone_png and not r.icone_svg:  # ícone pode estar no pedaço de densidade (split APK)
+            try:
+                splits = [(c, t) for c, t in pedacos(ap, pacote) if "dpi" in c]
+                if splits:
+                    zs = [_ZipRemoto(_memo(apksig.leitor_remoto(ap, c)), t) for c, t in splits]
+                    r2 = analisar(_ZipVarios([base, *zs]), pacote)
+                    if r2.icone_png or r2.icone_svg:
+                        r.icone_png, r.icone_svg, r.icone_fundo = r2.icone_png, r2.icone_svg, r2.icone_fundo
+            except Exception as e:  # noqa: BLE001
+                LOGGER.info("ícone dos pedaços de %s indisponível: %s", pacote, e)
     except Exception as e:
         LOGGER.info("rótulo de %s indisponível: %s", pacote, e)
         r, ok = Rotulo(pacote, ""), False

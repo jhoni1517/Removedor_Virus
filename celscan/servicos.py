@@ -27,8 +27,8 @@ Evento = dict[str, Any]
 Progresso = Callable[[Evento], None]
 
 MODOS = {
-    "rapido": "Rápido: apps, permissões, assinaturas e ameaças conhecidas (1–2 min)",
-    "completo": "Completo: tudo do rápido + VirusTotal nos apps suspeitos",
+    "rapido": "Rápido: apps, poderes, assinaturas, ameaças conhecidas e o código dos apps suspeitos (1–2 min)",
+    "completo": "Completo: o Motor CelScan lê o código de TODOS os seus apps, aqui no PC, sem internet",
     "profundo": "Profundo: coleta forense AndroidQF + MVT (chega na Etapa B)",
 }
 
@@ -38,6 +38,7 @@ ETAPAS = {
     "iocs": ("Carregando a lista de ameaças conhecidas", 5),
     "hashes": ("Calculando a impressão digital de cada app", 40),
     "rotulos": ("Lendo nome, ícone e assinatura de cada app", 25),
+    "motor": ("Motor CelScan: lendo o código dos apps", 30),
     "virustotal": ("Consultando o VirusTotal", 0),
     "analise": ("Analisando e montando o resultado", 2),
 }
@@ -194,8 +195,6 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
             sc.coletar()
         passos.n_apps = len(sc.apps)  # antes da próxima etapa: o tempo da coleta entra na média deste PC
         avisos = list(sc.avisos)
-        if opcoes.modo == "completo" and not vt:
-            avisos.append("VirusTotal não consultado: cadastre sua chave gratuita em Configurações.")
 
         if atualizacao is not None:
             passos.etapa("iocs")
@@ -215,7 +214,7 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
         # (redes de anúncio, disfarces...) e a assinatura só era conferida nos suspeitos.
         todos = list(sc.apps)
         sem_nome = todos
-        if preferencias.ler().get("usar_agente") and agente_mod.disponivel():
+        if preferencias.usar_agente() and agente_mod.disponivel():
             passos.etapa("rotulos", 0, len(todos), "CelScan Agente")
             try:
                 with log.etapa("agente"), agente_mod.Agente(ap) as ag:
@@ -223,9 +222,15 @@ def executar_varredura(ap: Aparelho, opcoes: OpcoesVarredura | None = None, prog
                         if pkg in sc.apps:
                             sc.apps[pkg].nome, sc.apps[pkg].icone = dados["nome"], dados["icone"]
             except AdbErro as e:  # inclui AgenteIndisponivel: cai para a leitura do APK
-                avisos.append(f"CelScan Agente indisponível ({e}); nomes lidos direto dos APKs.")
+                avisos.append(agente_mod.explicar_falha(str(e), sc.info().get("fabricante", "")))
         with log.etapa("rotulos"):
             _em_paralelo(sem_nome, sc.ler_rotulo, lambda i, pkg: passos.etapa("rotulos", i, len(sem_nome), pkg))
+
+        # Motor CelScan: antivírus local que lê o código dos apps (cache por hash: 2ª vez é instantânea)
+        alvo_motor = sc.escolher_motor(completo=opcoes.modo == "completo")
+        with log.etapa("motor"):
+            _em_paralelo(alvo_motor, sc.analisar_motor,
+                         lambda i, pkg: passos.etapa("motor", i, len(alvo_motor), pkg))
 
         if vt:
             alvo = sc.candidatos(todos=opcoes.vt_todos)

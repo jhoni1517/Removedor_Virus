@@ -176,7 +176,7 @@ export function IconeApp({ nome, pacote, icone, tamanho = 40 }: { nome?: string 
     <span className="icone-app grid shrink-0 place-items-center overflow-hidden" aria-hidden
       style={{ width: tamanho, height: tamanho, background: mostrar ? "transparent" : `hsl(${matiz} 38% 42%)` }}>
       {mostrar ? <img src={icone} alt="" className="h-full w-full object-contain" loading="lazy" onError={() => setFalhou(true)} />
-        : <span className="font-bold text-white" style={{ fontSize: tamanho * 0.45 }}>{(nome || pacote)[0]?.toUpperCase()}</span>}
+        : <span className="font-bold text-white" style={{ fontSize: tamanho * 0.45 }}>{nomeApp({ nome, pacote })[0]?.toUpperCase()}</span>}
     </span>
   );
 }

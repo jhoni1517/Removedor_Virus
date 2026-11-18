@@ -32,6 +32,12 @@ def _keyring():
         return None
 
 
+def usar_agente() -> bool:
+    """CelScan Agente ligado por padrão (3.5): sem ele, apps da Play em vários pedaços (split APK) ficam sem o
+    ícone e com o nome errado, porque o ícone e os textos estão nos pedaços que o PC não lê."""
+    return bool(ler().get("usar_agente", True))
+
+
 def ler() -> dict[str, Any]:
     try:
         return json.loads(ARQUIVO.read_text(encoding="utf-8"))

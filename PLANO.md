@@ -9,6 +9,22 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.5.0b1 (18/11/2026) — varredura de vírus refeita (Motor CelScan local, menos falso alarme)
+
+Problemas relatados num aparelho real: ícones errados, nomes estranhos, apps faltando na lista, alarme grave em
+apps oficiais (Caixa, WhatsApp) e um "gerenciador de PDF" malicioso que passou batido.
+
+| Problema | Causa | Correção |
+|---|---|---|
+| Ícones e nomes errados | Agente desligado por padrão; apps da Play em pedaços guardam ícone no `split_config.*dpi.apk` | Agente ligado por padrão; sem ele, ícone lido também dos pedaços de densidade; aviso específico da Xiaomi ("Instalar via USB") |
+| Faltavam apps na lista | varredura rápida só listava apps do usuário | apps de fábrica COM ícone entram na lista (`so_lista`) |
+| WhatsApp/Caixa como risco grave | permissões (câmera, microfone, contatos, sobreposição) somavam pontos até em app da loja | permissões/appops só pesam fora da loja; acessibilidade/admin/notificações pesam pouco em app da loja e nada em app de fábrica |
+| PDF malicioso não detectado | droppers chegam pela Play Store como utilitários | regra "Utilitário com poder de vírus" (PDF, QR, limpador... + acessibilidade/instalar apps/admin/SMS), vale para qualquer loja |
+| Antivírus online ruim | dependia do VirusTotal | **Motor CelScan**: lê os `classes*.dex` e `assets/` pelo cabo e acha lista de bancos-alvo + acessibilidade, Pix, APK/DEX/bloco cifrado escondido, robô do Telegram/Discord, domínios de spyware, SMS, root, empacotadores. Cache por hash. VirusTotal virou opcional |
+
+Rápido: motor nos apps que dão motivo (fora da loja, com poderes, sem ícone, utilitários). Completo: motor em todos.
+Testes: `testes/test_motor.py` (12). Suíte: 348 ok.
+
 ## Beta 3.4.0b2 (18/11/2026) — Faxina geral (anúncios, apps da marca, DNS, câmera, Xiaomi)
 
 - **Faxina da marca** (`celscan/acoes/faxina.py`): lista curada por fabricante com o que cada app faz e o que se

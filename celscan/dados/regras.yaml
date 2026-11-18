@@ -240,6 +240,56 @@ apps:
     titulo: "Instalado há {detalhe} dia(s)"
     significa: "Apps instalados logo antes de começarem os problemas merecem atenção."
     fazer: "Se os anúncios ou problemas começaram depois deste app, remova."
+  utilitario_poderoso:
+    peso: 45
+    titulo: "Utilitário com poder de vírus ({detalhe})"
+    significa: "É um app simples (PDF, QR, limpador, lanterna, arquivos...) com um poder que esse tipo de app não precisa. É o disfarce mais usado pelos trojans bancários, inclusive dentro da Play Store: o app chega limpo e o vírus vem numa atualização."
+    fazer: "Remova. Se precisar de um leitor de PDF ou scanner, use o do Google (Files, Drive) ou o Adobe."
+  motor_bancos_alvo:
+    peso: 80
+    titulo: "Código traz uma lista de bancos-alvo ({detalhe})"
+    significa: "O Motor CelScan achou, dentro do código do app, os nomes de vários apps de banco junto com comandos para tocar e digitar sozinho na tela. É a assinatura dos trojans bancários."
+    fazer: "Remova agora, antes de abrir qualquer banco. Depois confira as últimas transações e troque as senhas a partir de outro aparelho."
+  motor_pix:
+    peso: 50
+    titulo: "Código preparado para mexer no Pix"
+    significa: "O app tem textos de Pix (chave, copia e cola) e usa a acessibilidade para tocar e digitar sozinho. É como os golpes trocam a chave Pix na hora da transferência."
+    fazer: "Remova e confira as últimas transferências."
+  motor_payload:
+    peso: 45
+    titulo: "Esconde outro app dentro dele ({detalhe})"
+    significa: "O Motor CelScan achou um APK, um código extra ou um bloco cifrado escondido nos arquivos do app. Droppers usam isso para instalar o vírus de verdade depois."
+    fazer: "Se não reconhece o app, remova."
+  motor_carrega_codigo:
+    peso: 20
+    titulo: "Carrega código escondido ({detalhe})"
+    significa: "O app vem protegido por um empacotador e carrega código extra na hora de rodar, o que impede a análise. Vírus fazem isso para não serem detectados."
+    fazer: "Se o app veio de fora da loja e você não confia, remova."
+  motor_canal_envio:
+    peso: 50
+    titulo: "Envia dados direto para um robô do {detalhe}"
+    significa: "O código tem um endereço de robô de mensagens embutido. Vírus brasileiros usam isso para mandar senhas, SMS e fotos roubadas para o golpista."
+    fazer: "Remova e troque as senhas usadas no celular, a partir de outro aparelho."
+  motor_dominio_ameaca:
+    peso: 90
+    titulo: "Fala com servidor de espionagem: {detalhe}"
+    significa: "O código do app contém um endereço que aparece em listas públicas de spyware (Amnesty/MVT, Echap)."
+    fazer: "Remova e procure ajuda: o aparelho pode estar sendo espionado."
+  motor_envia_sms:
+    peso: 15
+    titulo: "Código consegue mandar SMS sozinho"
+    significa: "Usado por vírus que assinam serviços pagos ou repassam códigos. Apps de mensagem também têm."
+    fazer: "Se o app não é de mensagens, desconfie."
+  motor_root:
+    peso: 15
+    titulo: "Código tenta usar root"
+    significa: "O app procura acesso de administrador total (root). Comum em apps de técnico e em vírus que se escondem."
+    fazer: "Se não é uma ferramenta que você instalou de propósito, remova."
+  motor_empacotado:
+    peso: 10
+    titulo: "Protegido por empacotador ({detalhe})"
+    significa: "O código vem cifrado por um protetor comum em apps de fora da loja e em vírus. Sozinho não prova nada."
+    fazer: "Só desconfie junto com outros sinais."
 
 permissoes:
   android.permission.READ_SMS:
