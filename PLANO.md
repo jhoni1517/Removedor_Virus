@@ -9,6 +9,41 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b1 (19/11/2026) — antivírus mais forte e otimização que mostra resultado
+
+Remoção de vírus
+- **Remoção forte**: além de desinstalar, corta instalar outros apps, rodar escondido e notificar; se não sair,
+  o app é suspenso (pm suspend). Depois de remover, o CelScan confere se o app **voltou sozinho** (dropper) e
+  aponta quem o instalou.
+- **"É falso alarme"**: o técnico marca o app; vale só para aquela assinatura digital (se trocar, volta a ser
+  analisado). Ameaça com prova (lista pública, código de trojan) aparece sempre. Lista em Configurações.
+- **Assinaturas offline**: impressões digitais (SHA-256) de APKs maliciosos do MalwareBazaar (chave gratuita do
+  abuse.ch, guardada no cofre do Windows, atualiza 1x/dia) + listas próprias importadas em Configurações. Bateu =
+  "ameaça confirmada", sem internet na hora da verificação.
+- **Pegar no flagra**: observa o celular de 1 a 5 min enquanto a pessoa usa e aponta de qual app é o anúncio que
+  aparece do nada (tela de anúncio aberta por cima de outro app), quem desenha por cima e quem usa a internet
+  escondido (conexões por app em /proc/net/tcp).
+- **Blindar o celular** (aparece depois de remover): Play Protect ligado, só a loja instala apps (tira a permissão
+  de quem é de fora), DNS contra golpes (Cloudflare Security) e checklist do dono (senha Google, Pix, WhatsApp Web,
+  PIN do chip). Tudo desfaz no Histórico.
+
+Otimização
+- **Antes e depois**: a Otimização completa mede a nota antes e depois e mostra o ganho em pontos e %.
+- **Quem gasta a bateria**: mAh por app desde a última carga e tempo que cada um impediu o celular de dormir,
+  com botão "Só rodar aberto".
+- **Espaço**: maiores arquivos, repetidos (confere por hash, fica sempre 1) e mídia com mais de 6 meses
+  (WhatsApp, Telegram, Downloads). Tudo é copiado para "CelScan Backups" no PC antes de apagar.
+- **Monitor ao vivo** no Modo de jogo: temperatura, uso dos núcleos, FPS e quadros travados a cada 2 s, em
+  gráfico. Jogos Unity/Unreal não informam quadros ao Android: aparecem só temperatura e processador.
+
+O que ainda depende de celular de verdade (honesto)
+- **Ajustes por marca**: testados em simulador e nas chaves documentadas do Android. Xiaomi/HyperOS, Samsung One UI
+  e Motorola podem ignorar alguns (o CelScan confere depois de aplicar e avisa "o Android não aceitou"). Falta a
+  tabela validada aparelho a aparelho — cada teste real que você fizer vira uma linha dela.
+- **Formato do batterystats**: lido nos dois formatos conhecidos (Android 9–11 e 12+). Se algum aparelho mostrar a
+  lista vazia, mande o modelo.
+- **Fase 2 (app no celular via Shizuku)**: segue no plano, não começou. Hoje tudo roda do PC por cabo/Wi-Fi.
+
 ## Beta 3.6.0b3 (18/11/2026) — telas mais limpas
 
 - **Otimizar**: os 12 painéis empilhados viraram 5 abas — Otimizar (otimização completa + nota), Limpeza (anúncios,
