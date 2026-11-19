@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BateriaBaixa } from "../bateria";
 import { BuscaRapida } from "./BuscaRapida";
 import { PainelBlindagem } from "./Blindagem";
+import { PainelFlagrante } from "./Flagrante";
 import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 
 import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
@@ -659,6 +660,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
         </div>
       </section>
       {conectado && (removidos.size > 0 || confirmados > 0) && <div className="mb-6"><PainelBlindagem serial={v.info.serial} destaque /></div>}
+      {conectado && confirmados === 0 && contagem.ALTO + contagem["MÉDIO"] === 0 && <div className="mb-6"><PainelFlagrante serial={v.info.serial} /></div>}
 
       <div className="resultado-grade">
       <RaioX apps={v.resultados} aoEscolher={abrirApp} removidos={removidos} />

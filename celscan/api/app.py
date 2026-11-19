@@ -31,6 +31,7 @@ from celscan.acoes import (
     blindagem,
     evidencias,
     faxina,
+    flagrante,
     navegacao,
     otimizacao,
     quarentena,
@@ -353,6 +354,11 @@ class PedidoConfiavel(BaseModel):
 class PedidoBlindagem(BaseModel):
     serial: str
     itens: list[Literal["play_protect", "instaladores", "dns"]] = Field(min_length=1, max_length=3)
+
+
+class PedidoFlagrante(BaseModel):
+    serial: str
+    duracao_s: int = Field(default=120, ge=15, le=900)
 
 
 class PedidoAssinaturas(BaseModel):
@@ -1252,6 +1258,17 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
         _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
         return r
+
+    # ---- modo flagrante (observa o celular em uso e pega quem age escondido)
+    @app.post("/api/flagrante")
+    def flagrante_iniciar(p: PedidoFlagrante) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, cancelar):
+            r = flagrante.observar(ap, p.duracao_s, progresso, cancelar)
+            _registrar_turbo(p.serial, f"Modo flagrante: {len(r['apps'])} app(s) apontado(s)")
+            return r
+        return nova_tarefa("flagrante", p.serial, rodar)
 
     # ---- blindagem pós-limpeza
     @app.get("/api/blindagem")
