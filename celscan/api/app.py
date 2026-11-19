@@ -1186,6 +1186,10 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         _registrar_turbo(p.serial, f"{len(p.pacotes)} app(s) {acao} em segundo plano", r["desfazer_id"])
         return r
 
+    @app.get("/api/turbo/monitor")
+    def turbo_monitor(serial: str, pacote: str | None = Query(None, max_length=200)) -> dict[str, Any]:
+        return _turbo(turbo.monitor, aparelhos.pronto(serial), pacote or None)
+
     @app.get("/api/turbo/jogo")
     def turbo_jogo_info(serial: str, pacote: str) -> dict[str, Any]:
         return _turbo(turbo.jogo_info, aparelhos.pronto(serial), pacote)

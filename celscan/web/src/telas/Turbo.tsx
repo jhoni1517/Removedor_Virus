@@ -6,6 +6,7 @@ import Diagnostico, { PainelDebloat, PainelIPhone } from "./Diagnostico";
 import { PainelBlindagem } from "./Blindagem";
 import { PainelFlagrante } from "./Flagrante";
 import { PainelBateria, PainelEspaco } from "./Gastos";
+import { MonitorJogo } from "./Monitor";
 import { num } from "../nomes";
 import { Barra, Botao, Cartao, corNota, Miniatura, nomeApp, Titulo } from "../ui";
 
@@ -580,6 +581,7 @@ function PainelJogo({ d }: { d: Dispositivo }) {
         <div><p className="mb-1 text-sm font-medium">FPS do jogo</p><Escolha rotulo="FPS" opcoes={[["auto", "Auto"], ["30", "30"], ["45", "45"], ["60", "60"], ["90", "90"], ["120", "120"]]} valor={fps} mudar={setFps} /></div>
         <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || !/^[\w.]+\.[\w.]+$/.test(pacote.trim())}>{ocupado ? "Aplicando..." : "Aplicar no jogo"}</Botao>
       </div>
+      <MonitorJogo serial={d.serial} pacote={/^[\w.]+\.[\w.]+$/.test(pacote.trim()) ? pacote.trim() : ""} />
     </Cartao>
   );
 }

@@ -1172,3 +1172,50 @@ def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[
             continue
         feitos.append({"id": ident, "ok": ok})
     return {"etapas": feitos, "desfazer_ids": desfazer_ids}
+
+
+# ---------------------------------------------------------------------------------------------- monitor ao vivo
+
+def _monitor_cmd(pacote: str | None) -> str:
+    alvo = shlex.quote(pacote) if pacote else \
+        "$(dumpsys window | grep -m1 mCurrentFocus | sed -E 's/.* u[0-9]+ ([^/ }]+).*/\\1/')"
+    return ("echo @@foco; dumpsys window | grep -m1 mCurrentFocus; echo @@termico; dumpsys thermalservice 2>/dev/null "
+            "| grep -E 'Thermal Status|mType=0' | head -n 4; echo @@bat; dumpsys battery | "
+            "grep -E 'temperature|level'; "
+            "echo @@freq; for p in /sys/devices/system/cpu/cpufreq/policy*; do echo \"$(basename $p) "
+            "$(cat $p/scaling_cur_freq 2>/dev/null) $(cat $p/cpuinfo_max_freq 2>/dev/null)\"; done; "
+            f"echo @@gfx; dumpsys gfxinfo {alvo} 2>/dev/null | grep -E -m2 'Total frames rendered|Janky frames'")
+
+
+def montar_monitor(texto: str) -> dict[str, Any]:
+    """Uma amostra: temperatura, frequência de cada grupo de núcleos e contadores de quadros (acumulados)."""
+    sec: dict[str, str] = {}
+    atual = None
+    for linha in texto.splitlines():
+        if linha.startswith("@@"):
+            atual = linha[2:].strip()
+            sec[atual] = ""
+        elif atual:
+            sec[atual] += linha + "\n"
+    m = re.search(r"u\d+ ([\w.]+)", sec.get("foco", ""))
+    st = re.search(r"Thermal Status:\s*(\d+)", sec.get("termico", ""))
+    cpu_c = re.findall(r"mValue=([\d.]+), mType=0", sec.get("termico", ""))
+    bat = _bat(sec.get("bat", ""))
+    nucleos = []
+    for linha in sec.get("freq", "").splitlines():
+        p = linha.split()
+        if len(p) == 3 and p[1].isdigit() and p[2].isdigit() and int(p[2]):
+            nucleos.append({"grupo": p[0], "mhz": int(p[1]) // 1000, "max_mhz": int(p[2]) // 1000,
+                            "pct": round(100 * int(p[1]) / int(p[2]))})
+    q = re.search(r"Total frames rendered:\s*(\d+)", sec.get("gfx", ""))
+    j = re.search(r"Janky frames:\s*(\d+)", sec.get("gfx", ""))
+    return {"t": time.time(), "app": m.group(1) if m else None,
+            "termico": int(st.group(1)) if st else None,
+            "cpu_c": max(float(x) for x in cpu_c) if cpu_c else None, "bateria_c": bat["temperatura"],
+            "nucleos": nucleos, "quadros": int(q.group(1)) if q else None, "travados": int(j.group(1)) if j else None}
+
+
+def monitor(ap, pacote: str | None = None) -> dict[str, Any]:
+    if pacote:
+        exigir_pacote(pacote)
+    return montar_monitor(ap.sh(_monitor_cmd(pacote), timeout=20))

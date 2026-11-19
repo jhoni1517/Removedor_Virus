@@ -388,3 +388,19 @@ def test_receita_mede_antes_e_depois(monkeypatch):
     assert ad["total"] == {"antes": 50, "depois": 60, "pontos": 10, "ganho_pct": 20}
     assert ad["categorias"] == {"fluidez": {"antes": 40, "depois": 50, "pontos": 10, "ganho_pct": 25}}
     assert "antes_depois" not in turbo.aplicar_receita(Celular(), ["animacoes_rapidas"])
+
+
+def test_monitor_amostra():
+    t = ("@@foco\n  mCurrentFocus=Window{a u0 com.jogo/com.unity3d.player.UnityPlayerActivity}\n@@termico\n"
+         "Thermal Status: 2\nTemperature{mValue=58.5, mType=0, mName=cpu0}\n"
+         "Temperature{mValue=61.0, mType=0, mName=cpu7}\n"
+         "@@bat\n  level: 80\n  temperature: 401\n@@freq\npolicy0 1800000 2000000\npolicy7 2400000 3200000\n"
+         "policy9  0\n"
+         "@@gfx\nTotal frames rendered: 1500\nJanky frames: 75 (5.00%)\n")
+    m = turbo.montar_monitor(t)
+    assert m["app"] == "com.jogo" and m["termico"] == 2 and m["cpu_c"] == 61.0 and m["bateria_c"] == 40.1
+    assert m["nucleos"] == [{"grupo": "policy0", "mhz": 1800, "max_mhz": 2000, "pct": 90},
+                            {"grupo": "policy7", "mhz": 2400, "max_mhz": 3200, "pct": 75}]
+    assert m["quadros"] == 1500 and m["travados"] == 75
+    with pytest.raises(ValueError):
+        turbo.monitor(Celular(), "rm -rf /")
