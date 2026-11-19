@@ -295,11 +295,15 @@ function PainelCalor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- receita */
+interface Diferenca { antes: number; depois: number; pontos: number; ganho_pct: number | null }
+interface AntesDepois { total: Diferenca | null; categorias: Record<string, Diferenca>; obs: string }
+
 function PainelReceita({ d }: { d: Dispositivo }) {
   const { esperar, avisar } = useApp();
   const { ocupado, rodar } = useAcao();
   const [etapas, setEtapas] = useState<Etapa[] | null>(null);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
+  const [ad, setAd] = useState<AntesDepois | null>(null);
 
   async function montar() {
     await rodar("montar", async () => {
@@ -309,8 +313,10 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   }
   async function aplicar() {
     await rodar("aplicar", async () => {
-      const t = await esperar(await api<Tarefa<{ etapas: { id: string; ok: boolean }[] }>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
+      setAd(null);
+      const t = await esperar(await api<Tarefa<{ etapas: { id: string; ok: boolean }[]; antes_depois?: AntesDepois }>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
       const ok = (t.resultado?.etapas ?? []).filter((e) => e.ok).length;
+      if (t.resultado?.antes_depois?.total) setAd(t.resultado.antes_depois);
       avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
     });
   }
@@ -327,8 +333,20 @@ function PainelReceita({ d }: { d: Dispositivo }) {
             </Marcador>
           ))}
           <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || marcadas.size === 0}>
-            <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Otimizando (pode levar alguns minutos)..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
+            <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Otimizando (mede antes e depois, leva alguns minutos)..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
           </Botao>
+        </div>
+      )}
+      {ad?.total && (
+        <div className="mt-4 rounded-md border border-linha p-3 text-sm">
+          <p className="text-base">Nota <b className="numeros">{ad.total.antes}</b> → <b className="numeros">{ad.total.depois}</b>
+            <span className={ad.total.pontos >= 0 ? "ml-2 text-ok" : "ml-2 text-atencao"}>{ad.total.pontos >= 0 ? "+" : ""}{ad.total.pontos} pontos{ad.total.ganho_pct != null ? ` (${ad.total.ganho_pct >= 0 ? "+" : ""}${ad.total.ganho_pct}%)` : ""}</span></p>
+          <ul className="mt-2 space-y-0.5">
+            {Object.entries(ad.categorias).map(([k, c]) => (
+              <li key={k} className="flex justify-between gap-4"><span className="capitalize">{k}</span><span className="numeros">{c.antes} → {c.depois}</span></li>
+            ))}
+          </ul>
+          <p className="mt-2 text-fraco">{ad.obs}</p>
         </div>
       )}
     </Cartao>

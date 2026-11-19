@@ -325,6 +325,7 @@ class PedidoTurboManutencao(BaseModel):
 class PedidoTurboReceita(BaseModel):
     serial: str
     etapas: Annotated[list[str], _categorias(turbo.ETAPAS), Field(min_length=1)]
+    medir: bool = True  # nota antes e depois, com o ganho em %
 
 
 class PedidoTurboConfig(BaseModel):
@@ -1210,8 +1211,10 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         ap = livre(p.serial)
 
         def rodar(progresso, cancelar):
-            r = turbo.aplicar_receita(ap, p.etapas, progresso, cancelar)
-            _registrar_turbo(p.serial, f"Receita sob medida: {sum(e['ok'] for e in r['etapas'])} etapa(s)")
+            r = turbo.aplicar_receita(ap, p.etapas, progresso, cancelar, medir=p.medir)
+            ad = (r.get("antes_depois") or {}).get("total")
+            ganho = f" · nota {ad['antes']} → {ad['depois']}" if ad else ""
+            _registrar_turbo(p.serial, f"Receita sob medida: {sum(e['ok'] for e in r['etapas'])} etapa(s){ganho}")
             return r
         return nova_tarefa("turbo_receita", p.serial, rodar)
 

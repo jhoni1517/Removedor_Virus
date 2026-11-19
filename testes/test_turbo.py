@@ -377,3 +377,14 @@ def test_ajuste_da_xiaomi_so_na_xiaomi():
     ap = Xiaomi()
     r = turbo.aplicar_ajustes(ap, ["xiaomi_interface_leve"])
     assert r["resultado"][0]["ok"] and ap.settings[("system", "deviceLevelList")] == "v:1,c:3,g:3"
+
+
+def test_receita_mede_antes_e_depois(monkeypatch):
+    notas = iter([{"total": 50, "categorias": {"fluidez": {"nota": 40}, "memoria": {"nota": None}}},
+                  {"total": 60, "categorias": {"fluidez": {"nota": 50}, "memoria": {"nota": 70}}}])
+    monkeypatch.setattr(turbo, "nota", lambda ap, progresso=None: next(notas))
+    r = turbo.aplicar_receita(Celular(), ["animacoes_rapidas"], medir=True)
+    ad = r["antes_depois"]
+    assert ad["total"] == {"antes": 50, "depois": 60, "pontos": 10, "ganho_pct": 20}
+    assert ad["categorias"] == {"fluidez": {"antes": 40, "depois": 50, "pontos": 10, "ganho_pct": 25}}
+    assert "antes_depois" not in turbo.aplicar_receita(Celular(), ["animacoes_rapidas"])

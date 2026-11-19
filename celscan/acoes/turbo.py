@@ -1085,10 +1085,45 @@ ETAPAS = {"compilar_mais_usados", "dexopt", "art_cleanup", "fantasmas", "congela
           "faxina_marca", "camera", "dns_anuncios", "xiaomi_interface_leve"}
 
 
-def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=None) -> dict[str, Any]:
+def comparar_notas(antes: dict[str, Any], depois: dict[str, Any]) -> dict[str, Any]:
+    """Antes x depois: diferença em pontos e ganho em % (só onde as duas medidas existem)."""
+    def dif(a, d):
+        if a is None or d is None:
+            return None
+        return {"antes": a, "depois": d, "pontos": d - a, "ganho_pct": round((d - a) / a * 100) if a else None}
+
+    cats = {k: dif(v["nota"], depois["categorias"].get(k, {}).get("nota"))
+            for k, v in antes.get("categorias", {}).items()}
+    return {"total": dif(antes.get("total"), depois.get("total")), "categorias": {k: v for k, v in cats.items() if v},
+            "obs": "Logo depois de compilar o celular ainda está quente e ocupado: meça de novo amanhã para o ganho "
+                   "real (costuma ser maior)."}
+
+
+def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=None,
+                    medir: bool = False) -> dict[str, Any]:
     desconhecidas = set(ids) - ETAPAS
     if desconhecidas:
         raise ValueError(f"etapa desconhecida: {', '.join(sorted(desconhecidas))}")
+    antes = None
+    if medir:
+        try:
+            antes = nota(ap, progresso)
+        except AdbErro:
+            antes = None
+    r = _aplicar_etapas(ap, ids, progresso, cancelar)
+    if antes and antes.get("total") is not None and not (cancelar is not None and cancelar.is_set()):
+        if progresso:
+            progresso({"etapa": "nota", "descricao": "Medindo de novo para comparar", "detalhe": "", "atual": None,
+                       "total": None, "estimativa_s": 40})
+        try:
+            depois = nota(ap)
+            r["antes_depois"] = comparar_notas(antes, depois)
+        except AdbErro:
+            pass
+    return r
+
+
+def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[str, Any]:
     ids = [i for i in dict.fromkeys(ids) if i != "aviso_calor"]
     feitos, desfazer_ids = [], []
     for n, ident in enumerate(ids, 1):
