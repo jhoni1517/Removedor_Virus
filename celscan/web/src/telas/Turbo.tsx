@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import Diagnostico, { PainelDebloat, PainelIPhone } from "./Diagnostico";
+import { PainelBlindagem } from "./Blindagem";
 import { num } from "../nomes";
 import { Barra, Botao, Cartao, corNota, Miniatura, nomeApp, Titulo } from "../ui";
 
@@ -735,6 +736,7 @@ export default function Turbo() {
           <PainelFaxina d={d} />
           <PainelEsquecidosTurbo d={d} />
           <PainelRam d={d} />
+          <PainelBlindagem serial={d.serial} />
         </>)}
         {secao === "saude" && <Diagnostico serialFixo={d.serial} />}
         {secao === "desempenho" && (<>

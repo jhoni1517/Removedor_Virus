@@ -25,7 +25,18 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import atendimento, backup, evidencias, faxina, navegacao, otimizacao, quarentena, recuperacao, turbo
+from celscan.acoes import (
+    atendimento,
+    backup,
+    blindagem,
+    evidencias,
+    faxina,
+    navegacao,
+    otimizacao,
+    quarentena,
+    recuperacao,
+    turbo,
+)
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
@@ -337,6 +348,11 @@ class PedidoConfiavel(BaseModel):
     pacote: Pacote
     cert: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{64}$")
     nome: str | None = Field(default=None, max_length=120)
+
+
+class PedidoBlindagem(BaseModel):
+    serial: str
+    itens: list[Literal["play_protect", "instaladores", "dns"]] = Field(min_length=1, max_length=3)
 
 
 class PedidoAssinaturas(BaseModel):
@@ -1235,6 +1251,20 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(422, "Escolha um provedor da lista OU digite um servidor, não os dois.")
         r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
         _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
+        return r
+
+    # ---- blindagem pós-limpeza
+    @app.get("/api/blindagem")
+    def blindagem_estado(serial: str) -> dict[str, Any]:
+        return _turbo(blindagem.estado, aparelhos.pronto(serial))
+
+    @app.post("/api/blindagem")
+    def blindagem_aplicar(p: PedidoBlindagem) -> dict[str, Any]:
+        r = _turbo(blindagem.aplicar, livre(p.serial), p.itens)
+        if r["desfazer_id"]:
+            _registrar_turbo(p.serial, "Blindagem pós-limpeza", r["desfazer_id"])
+        if r.get("desfazer_dns_id"):
+            _registrar_turbo(p.serial, "DNS contra golpes", r["desfazer_dns_id"])
         return r
 
     @app.post("/api/faxina/camera")

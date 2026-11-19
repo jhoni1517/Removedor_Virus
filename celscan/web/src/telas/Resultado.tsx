@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowUp, ChevronDown, PartyPopper, Copy, Download, Exter
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BateriaBaixa } from "../bateria";
 import { BuscaRapida } from "./BuscaRapida";
+import { PainelBlindagem } from "./Blindagem";
 import { ehVigilancia, planoDeAcao, planoRemocao } from "../plano";
 
 import { CATEGORIAS, categoriasDoApp, type Categoria } from "../categorias";
@@ -657,6 +658,7 @@ export default function Resultado({ v, onNova }: { v: Varredura; onNova: () => v
           <Botao variante="fantasma" onClick={onNova}>Nova verificação</Botao>
         </div>
       </section>
+      {conectado && (removidos.size > 0 || confirmados > 0) && <div className="mb-6"><PainelBlindagem serial={v.info.serial} destaque /></div>}
 
       <div className="resultado-grade">
       <RaioX apps={v.resultados} aoEscolher={abrirApp} removidos={removidos} />
