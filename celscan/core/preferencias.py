@@ -17,7 +17,7 @@ from celscan.core.log import LOGGER
 
 ARQUIVO = config.DIR / "config.json"
 SERVICO = "CelScan"
-SEGREDOS = ("chave_virustotal", "chave_ia")  # nunca vão para o config.json em texto puro
+SEGREDOS = ("chave_virustotal", "chave_ia", "abusech_chave")  # nunca vão para o config.json em texto puro
 
 
 def _keyring():
@@ -108,6 +108,11 @@ def salvar(**valores: Any) -> dict[str, Any]:
 def chave_virustotal() -> str | None:
     """A variável VT_API_KEY tem prioridade sobre a chave guardada."""
     return os.getenv("VT_API_KEY") or ler_segredo("chave_virustotal")
+
+
+def chave_abusech() -> str | None:
+    """Chave gratuita do abuse.ch (MalwareBazaar): assinaturas de APKs maliciosos."""
+    return os.getenv("ABUSECH_KEY") or ler_segredo("abusech_chave")
 
 
 def aplicar() -> None:

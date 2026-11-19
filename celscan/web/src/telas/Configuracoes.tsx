@@ -65,8 +65,51 @@ function SomAoTerminar() {
   );
 }
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number; contato_loja: string }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number; contato_loja: string; abusech_chave?: string | null }
 
+
+interface ResumoAssin { baixadas: number; proprias: number; idade_h: number | null; tem_chave: boolean }
+
+function Assinaturas() {
+  const { avisar } = useApp();
+  const [r, setR] = useState<ResumoAssin | null>(null);
+  const [chave, setChave] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const carregar = () => api<ResumoAssin>("/assinaturas").then(setR).catch(() => undefined);
+  useEffect(() => { carregar(); }, []);
+  async function rodar(f: () => Promise<unknown>, ok: string) {
+    setOcupado(true);
+    try { await f(); avisar({ tipo: "ok", texto: ok }); await carregar(); }
+    catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+  async function importar(arq: File) {
+    const conteudo = await arq.text();
+    await rodar(() => api("/assinaturas/importar", { corpo: { nome: arq.name.replace(/\.[^.]+$/, ""), conteudo } }), "Lista importada.");
+  }
+  return (
+    <Cartao className="p-5 text-sm">
+      <h2 className="font-semibold">Assinaturas de vírus (offline)</h2>
+      <p className="mt-1 text-fraco">
+        Impressões digitais de APKs maliciosos já conhecidos. A verificação compara sem internet; quando bate, o app vira ameaça confirmada.
+      </p>
+      {r && <p className="mt-2">
+        <b>{r.baixadas.toLocaleString("pt-BR")}</b> do MalwareBazaar{r.idade_h != null ? ` (atualizado há ${r.idade_h} h)` : ""} · <b>{r.proprias.toLocaleString("pt-BR")}</b> de listas próprias
+      </p>}
+      <p className="mt-3 text-fraco">Chave gratuita do abuse.ch (auth.abuse.ch): baixa as novas assinaturas 1x por dia.{r?.tem_chave ? " Chave cadastrada." : ""}</p>
+      <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); rodar(() => api("/config", { metodo: "PUT", corpo: { abusech_chave: chave.trim() } }), "Chave salva."); setChave(""); }}>
+        <input type="password" autoComplete="off" className="w-80 max-w-full rounded-md border border-linha bg-superficie-2 px-3 py-2 font-mono text-sm"
+          placeholder="Chave do abuse.ch" value={chave} onChange={(e) => setChave(e.target.value)} aria-label="Chave do abuse.ch" />
+        <Botao type="submit" disabled={!chave.trim() || ocupado}>Salvar chave</Botao>
+        {r?.tem_chave && <Botao disabled={ocupado} onClick={() => rodar(() => api("/assinaturas/atualizar", { corpo: {} }), "Assinaturas atualizadas.")}>Atualizar agora</Botao>}
+      </form>
+      <label className="mt-3 inline-block cursor-pointer text-destaque">
+        Importar lista (.txt/.csv, um SHA-256 por linha)
+        <input type="file" accept=".txt,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importar(f); e.target.value = ""; }} />
+      </label>
+    </Cartao>
+  );
+}
 
 function Confiaveis() {
   const { avisar } = useApp();
@@ -146,6 +189,8 @@ export default function Configuracoes() {
           {cfg?.chave_virustotal && <Botao onClick={() => salvar({ chave_virustotal: "" })}>Remover chave</Botao>}
         </form>
       </Cartao>
+
+      <Assinaturas />
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Proteção Pix</h2>

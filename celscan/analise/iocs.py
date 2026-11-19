@@ -152,11 +152,16 @@ def carregar(forcar=False, avisar=print):
         ok, msg = bases.atualizar("iocs", forcar=forcar)
         if not ok:
             avisar(f"Indicadores: {msg}. " + ("Usando cópia local." if BASE.caminho.exists() else "Seguindo sem eles."))
+    from celscan.analise import assinaturas
+
     texto = bases.ler("iocs")
-    if not texto:
+    extras = assinaturas.carregar()
+    if not texto and not extras:
         return None
     try:
-        return IOCs(json.loads(texto))
+        d = json.loads(texto) if texto else {"pacotes": {}, "certs": {}, "hashes": {}, "dominios": {}, "atualizado": 0}
+        d["hashes"] = {**d.get("hashes", {}), **extras}  # assinaturas de APKs maliciosos (offline)
+        return IOCs(d)
     except (ValueError, KeyError):
         avisar("Cópia local dos indicadores corrompida; será baixada de novo na próxima vez.")
         BASE.caminho.unlink(missing_ok=True)

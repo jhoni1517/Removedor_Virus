@@ -51,7 +51,7 @@ def todas() -> list[Base]:
 def _carregar_registro() -> None:
     # As bases se registram ao importar seus módulos (evita import circular).
     from celscan.acoes import otimizacao  # noqa: F401
-    from celscan.analise import certificados, iocs  # noqa: F401
+    from celscan.analise import assinaturas, certificados, iocs  # noqa: F401
 
 
 def obter_base(nome: str) -> Base:

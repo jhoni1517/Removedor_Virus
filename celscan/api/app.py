@@ -30,7 +30,7 @@ from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
 from celscan.api.tarefas import Gerenciador, Ocupado
-from celscan.core import adb, agente, balcao, db, log, preferencias, seguranca
+from celscan.core import adb, agente, balcao, bases, db, log, preferencias, seguranca
 
 WEB = config.PACOTE / "web" / "dist"
 HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -171,6 +171,7 @@ class PedidoDesfazer(BaseModel):
 
 class PedidoConfig(BaseModel):
     chave_virustotal: str | None = Field(default=None, max_length=128)  # o cofre do Windows limita o tamanho
+    abusech_chave: str | None = Field(default=None, max_length=128)
     offline: bool | None = None
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
@@ -336,6 +337,11 @@ class PedidoConfiavel(BaseModel):
     pacote: Pacote
     cert: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{64}$")
     nome: str | None = Field(default=None, max_length=120)
+
+
+class PedidoAssinaturas(BaseModel):
+    nome: str = Field(min_length=1, max_length=60)
+    conteudo: str = Field(min_length=64, max_length=20_000_000)
 
 
 # ---------------------------------------------------------------- aparelhos conectados
@@ -706,7 +712,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                 "canal_atualizacao": c.get("canal_atualizacao", "beta"),
                 "usar_agente": preferencias.usar_agente(), "agente_disponivel": agente.disponivel(),
                 "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO)),
-                "contato_loja": c.get("contato_loja") or ""}
+                "contato_loja": c.get("contato_loja") or "",
+                "abusech_chave": f"…{ab[-4:]}" if (ab := preferencias.chave_abusech()) else None}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:
@@ -1259,6 +1266,29 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         if not confianca.desmarcar(pacote):
             raise HTTPException(404, "Esse app não estava marcado.")
         return {"ok": True}
+
+    # ---- assinaturas de vírus offline (MalwareBazaar + listas próprias)
+    @app.get("/api/assinaturas")
+    def assinaturas_resumo() -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        return assinaturas.resumo()
+
+    @app.post("/api/assinaturas/atualizar")
+    def assinaturas_atualizar() -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        if not preferencias.chave_abusech():
+            raise HTTPException(409, "Cadastre a chave gratuita do abuse.ch primeiro.")
+        ok, msg = bases.atualizar("assinaturas", forcar=True)
+        return {"ok": ok, "mensagem": msg, **assinaturas.resumo()}
+
+    @app.post("/api/assinaturas/importar")
+    def assinaturas_importar(p: PedidoAssinaturas) -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        try:
+            n = assinaturas.importar(p.nome, p.conteudo)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        return {"importadas": n, **assinaturas.resumo()}
 
     @app.post("/api/otimizar-apps")
     def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:
