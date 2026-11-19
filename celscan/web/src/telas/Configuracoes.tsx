@@ -67,6 +67,35 @@ function SomAoTerminar() {
 
 interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number; contato_loja: string }
 
+
+function Confiaveis() {
+  const { avisar } = useApp();
+  const [apps, setApps] = useState<{ pacote: string; nome?: string | null; cert?: string | null }[] | null>(null);
+  const carregar = () => api<{ apps: { pacote: string; nome?: string | null; cert?: string | null }[] }>("/confiaveis").then((r) => setApps(r.apps)).catch(() => setApps([]));
+  useEffect(() => { carregar(); }, []);
+  async function tirar(pacote: string) {
+    try { await api(`/confiaveis/${encodeURIComponent(pacote)}`, { metodo: "DELETE" }); avisar({ tipo: "ok", texto: "Marcação removida: o app volta a ser analisado normalmente." }); carregar(); }
+    catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
+  return (
+    <Cartao className="p-5 text-sm">
+      <h2 className="font-semibold">Apps marcados como falso alarme</h2>
+      <p className="mt-1 text-fraco">Não aparecem mais como suspeitos enquanto a assinatura do app for a mesma. Ameaça com prova (lista pública, antivírus, código de trojan) aparece sempre.</p>
+      {apps && apps.length === 0 && <p className="mt-2 text-fraco">Nenhum app marcado.</p>}
+      {apps && apps.length > 0 && (
+        <ul className="mt-2 divide-y divide-linha">
+          {apps.map((a) => (
+            <li key={a.pacote} className="flex items-center justify-between gap-3 py-2">
+              <span><b>{a.nome || a.pacote}</b> <span className="font-mono text-xs text-fraco">{a.pacote}</span></span>
+              <button className="text-destaque" onClick={() => tirar(a.pacote)}>Desmarcar</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Cartao>
+  );
+}
+
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar, modelo, mudarModelo } = useApp();
   const pronto = dispositivos.find((d) => d.estado === "device");
@@ -245,6 +274,8 @@ export default function Configuracoes() {
           ))}
         </div>
       </Cartao>
+
+      <Confiaveis />
 
       <Cartao className="p-5 text-sm">
         <h2 className="font-semibold">Dados</h2>

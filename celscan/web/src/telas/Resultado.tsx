@@ -58,12 +58,20 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
   const [aberto, setAberto] = useState(r.nivel === "ALTO");
   useEffect(() => { if (foco) setAberto(true); }, [foco]);
   const [ajustar, setAjustar] = useState(false);
+  const [confiado, setConfiado] = useState(false);
   const { avisar } = useApp();
+  async function falsoAlarme() {
+    try {
+      await api("/confiaveis", { corpo: { pacote: r.pacote, cert: r.cert?.sha256 ?? null, nome: r.nome ?? null } });
+      setConfiado(true);
+      avisar({ tipo: "ok", texto: `${nomeApp(r)} marcado como falso alarme. Vale enquanto a assinatura do app for a mesma; desfaça em Configurações.` });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
   const copiar = (texto: string, msg: string) => {
     navigator.clipboard?.writeText(texto).then(() => { if (msg) avisar({ tipo: "ok", texto: msg, duracao: 2000 }); }).catch(() => undefined);
   };
   const achados = r.achados.filter((a) => a.chave !== "ameaca_conhecida");
-  const acionavel = !r.sistema && r.nivel !== "OK" && r.nivel !== "PERMITIDO" && !removido;
+  const acionavel = !r.sistema && r.nivel !== "OK" && r.nivel !== "PERMITIDO" && !removido && !confiado;
   return (
     <Cartao id={`app-${r.pacote}`} className={`entrar cartao-app border-l-4 ${COR_BORDA[r.nivel] ?? "border-l-ok"} ${removido ? "opacity-60" : ""} ${foco ? "ring-2 ring-destaque" : ""}`}>
       <div className="flex items-start gap-3 p-4">
@@ -140,8 +148,14 @@ function CartaoApp({ r, selecionado, alternar, remover, permissoes, abrirNoCelul
               title="Tira poderes do app sem desinstalar">
               <SlidersHorizontal size={15} aria-hidden /> Permissões
             </Botao>
+            {r.certeza !== "confirmado" && (
+              <Botao variante="fantasma" onClick={falsoAlarme} title="Você conhece este app e sabe que é seguro">
+                É falso alarme
+              </Botao>
+            )}
           </div>
         )}
+        {confiado && <p className="shrink-0 text-sm text-ok">Marcado como confiável</p>}
       </div>
       {ajustar && acionavel && (
         <div className="border-t border-linha p-4">

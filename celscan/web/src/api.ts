@@ -12,6 +12,8 @@ export interface Achado {
 }
 
 export interface AppResultado {
+  cert?: { sha256?: string; sha1?: string; debug?: boolean } | null;
+  falso_alarme?: boolean;
   certeza?: "confirmado" | "provavel" | "conferir" | "nenhuma";
   pacote: string;
   score: number;

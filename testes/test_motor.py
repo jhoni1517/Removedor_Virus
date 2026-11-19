@@ -198,3 +198,16 @@ def test_certeza_separa_prova_de_suspeita():
     assert pontuacao.certeza("ALTO", [{"chave": "fora_da_loja"}, {"chave": "utilitario_poderoso"}]) == "provavel"
     assert pontuacao.certeza("MÉDIO", [{"chave": "sem_icone"}]) == "conferir"
     assert pontuacao.certeza("OK", []) == "nenhuma"
+
+
+def test_falso_alarme_preso_a_assinatura(tmp_path, monkeypatch):
+    from celscan.analise import confianca
+    monkeypatch.setattr(confianca, "DIR", tmp_path)
+    confianca.marcar("com.x.app", "AB" * 32)
+    assert confianca.confiavel("com.x.app", {"sha256": "ab" * 32})
+    assert not confianca.confiavel("com.x.app", {"sha256": "CD" * 32})  # outro app com o mesmo nome
+    x = AppBruto("com.x.app", "/x", None, False, nome="X", appops={"SYSTEM_ALERT_WINDOW"},
+                 perms={"android.permission.READ_SMS"}, cert={"sha256": "AB" * 32}, instalado=datetime(2025, 1, 1))
+    r = pontuacao.pontuar_app(x, _dados(**{"com.x.app": x}), agora=AGORA)
+    assert r["nivel"] == "PERMITIDO" and r["falso_alarme"]
+    assert confianca.desmarcar("com.x.app") and not confianca.confiavel("com.x.app", None)

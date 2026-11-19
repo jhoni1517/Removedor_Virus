@@ -283,8 +283,21 @@ def remover_apps(ap: Aparelho, alvos: list[dict], progresso: Progresso = _nada,
             db.registrar_acao(con, ap.serial, "remocao", r["pacote"], msg, qid)
         elif qid and r.get("parcial"):  # não removeu, mas já tirou poderes do app: fica no histórico para desfazer
             db.registrar_acao(con, ap.serial, "permissoes", r["pacote"], f"remoção incompleta: {msg}", qid)
+        pai = remocao.instalador_suspeito(ap, r) if ok else None
+        if pai and pai not in {a["pacote"] for a in alvos}:
+            msg += f". Atenção: quem instalou foi o app {pai}; remova ele também, senão o vírus pode voltar"
         feitos.append({"pacote": r["pacote"], "ok": ok, "mensagem": msg, "quarentena_id": qid,
-                       "parcial": bool(r.get("parcial"))})
+                       "parcial": bool(r.get("parcial")), "instalador": pai})
+    # vírus que se reinstala: confere se algum removido voltou
+    removidos = [f["pacote"] for f in feitos if f["ok"]]
+    if removidos:
+        progresso({"etapa": "remocao", "descricao": "Conferindo se algum app voltou sozinho", "detalhe": "",
+                   "atual": None, "total": None, "estimativa_s": 8})
+        for pkg in remocao.voltou(ap, removidos):
+            f = next(x for x in feitos if x["pacote"] == pkg)
+            f["voltou"] = True
+            f["mensagem"] += (". O app VOLTOU sozinho: algum outro app está reinstalando. Rode a verificação de "
+                              "novo e remova o app que aparecer como instalador")
     return feitos
 
 

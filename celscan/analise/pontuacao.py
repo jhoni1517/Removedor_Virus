@@ -469,6 +469,9 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
     a.sort(key=lambda x: x["peso"], reverse=True)
     score = min(lim.get("maximo", 100), sum(x["peso"] for x in a))
     permitido = pkg in (permitidos or set()) and bool(loja) and not ioc
+    from celscan.analise import confianca
+    marcado = not ioc and confianca.confiavel(pkg, app.cert) and not any(x.get("chave") in PROVAS for x in a)
+    permitido = permitido or marcado
     if permitido:
         score = min(score, lim.get("permitido_teto", 10))
     pod = poderes(app, dados)
@@ -500,7 +503,9 @@ def pontuar_app(app: AppBruto, dados: DadosAparelho, iocs: Any = None, permitido
         or any(x["chave"] == "padrao_espiao" for x in a),
         "sensivel": sensivel(pkg),
         "poderes": pod,
-        "seguro_porque": _por_que_seguro(app, loja, permitido, cert_situacao, iocs, pod),
+        "seguro_porque": (["você marcou como falso alarme (vale enquanto a assinatura do app for a mesma)"]
+                          if marcado else []) + _por_que_seguro(app, loja, permitido, cert_situacao, iocs, pod),
+        "falso_alarme": marcado,
         "so_lista": app.so_lista, "motor": app.motor,
     }
 

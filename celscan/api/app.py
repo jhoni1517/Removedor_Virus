@@ -332,6 +332,12 @@ class PedidoDns(BaseModel):
     servidor: str | None = Field(default=None, max_length=253)
 
 
+class PedidoConfiavel(BaseModel):
+    pacote: Pacote
+    cert: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{64}$")
+    nome: str | None = Field(default=None, max_length=120)
+
+
 # ---------------------------------------------------------------- aparelhos conectados
 
 class Aparelhos:
@@ -1235,6 +1241,24 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             _registrar_turbo(p.serial, f"Câmera mais rápida ({len(r['apps'])} app(s))")
             return r
         return nova_tarefa("faxina_camera", p.serial, rodar)
+
+    # ---- "é falso alarme": apps confiáveis marcados pelo técnico (presos à assinatura do app)
+    @app.get("/api/confiaveis")
+    def confiaveis_listar() -> dict[str, Any]:
+        from celscan.analise import confianca
+        return {"apps": [{"pacote": k, **v} for k, v in sorted(confianca.ler().items())]}
+
+    @app.post("/api/confiaveis")
+    def confiaveis_marcar(p: PedidoConfiavel) -> dict[str, Any]:
+        from celscan.analise import confianca
+        return {"pacote": p.pacote, **confianca.marcar(p.pacote, p.cert, p.nome)}
+
+    @app.delete("/api/confiaveis/{pacote}")
+    def confiaveis_desmarcar(pacote: str) -> dict[str, Any]:
+        from celscan.analise import confianca
+        if not confianca.desmarcar(pacote):
+            raise HTTPException(404, "Esse app não estava marcado.")
+        return {"ok": True}
 
     @app.post("/api/otimizar-apps")
     def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:

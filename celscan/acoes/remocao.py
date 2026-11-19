@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 
 from celscan.acoes import quarentena
@@ -24,6 +25,15 @@ def neutralizar(ap: Aparelho, pkg: str, pasta, admins: list[str]) -> list[str]:
         quarentena.adicionar_ajuste(pasta, {"tipo": "appops", "pacote": pkg, "op": "SYSTEM_ALERT_WINDOW",
                                             "anterior": "allow"})
         ap.sh(f"appops set {pkg} SYSTEM_ALERT_WINDOW deny")
+    # 3.7: vírus que se defende — não instala mais nada, não roda escondido, não manda notificação/propaganda
+    for op, alvo in (("REQUEST_INSTALL_PACKAGES", "deny"), ("RUN_ANY_IN_BACKGROUND", "ignore"),
+                     ("POST_NOTIFICATION", "ignore")):
+        saida = ap.sh(f"appops get {pkg} {op}")
+        m = re.search(rf"{op}:\s*(\w+)", saida)
+        anterior = m.group(1) if m else "default"
+        if anterior != alvo:
+            quarentena.adicionar_ajuste(pasta, {"tipo": "appops", "pacote": pkg, "op": op, "anterior": anterior})
+            ap.sh(f"appops set {pkg} {op} {alvo}")
     for comp in admins:
         # componentes de classe interna têm "$" (ex.: pkg/.App$Admin): sem aspas o shell apagava o "$Admin"
         out = ap.sh(f"dpm remove-active-admin --user 0 {shlex.quote(comp)}", erro=True)
@@ -83,4 +93,32 @@ def remover(ap: Aparelho, r: dict) -> tuple[bool, str]:
     out3 = ap.sh(f"pm disable-user --user 0 {pkg}", erro=True)
     if "disabled" in out3:
         return fim(True, "desativado", "desativado (não foi possível desinstalar)")
+    # último recurso: SUSPENDER. O app fica cinza, não abre nem roda nada, mesmo sendo administrador.
+    out4 = ap.sh(f"pm suspend --user 0 {pkg}", erro=True)
+    if "suspended: true" in out4 or "new suspended state: true" in out4.lower():
+        quarentena.adicionar_ajuste(pasta, {"tipo": "cmd", "desfazer": f"pm unsuspend --user 0 {pkg}",
+                                            "descricao": f"{pkg} liberado"})
+        return fim(True, "suspenso", "suspenso: o app não abre nem roda mais. Para remover de vez, desative o "
+                                     "administrador dele em Configurações e rode de novo.")
     return fim(False, None, f"falhou: {(juntos or out3).strip()[:300]}")
+
+
+def voltou(ap: Aparelho, pacotes: list[str], espera_s: float = 8.0) -> list[str]:
+    """Confere, alguns segundos depois, se algum app removido voltou (vírus que se reinstala)."""
+    import os
+    import time
+    time.sleep(float(os.environ.get("CELSCAN_ESPERA_VOLTOU", espera_s)))
+    ativos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e --user 0"), re.M))
+    return [p for p in pacotes if p in ativos]
+
+
+def instalador_suspeito(ap: Aparelho, r: dict) -> str | None:
+    """App que instalou este (quando não é loja nem o instalador do sistema): é o 'dropper', o pai do vírus."""
+    from celscan.config import LOJAS
+    inst = r.get("instalador") or ""
+    sistema = ("com.android.", "com.google.android.packageinstaller", "com.samsung.android.packageinstaller",
+               "com.miui.packageinstaller")
+    if not inst or inst in LOJAS or inst.startswith(sistema):
+        return None
+    instalados = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -3"), re.M))
+    return inst if inst in instalados and not essencial(inst) else None
