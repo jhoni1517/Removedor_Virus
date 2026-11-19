@@ -32,6 +32,7 @@ from celscan.acoes import (
     evidencias,
     faxina,
     flagrante,
+    gastos,
     navegacao,
     otimizacao,
     quarentena,
@@ -360,6 +361,13 @@ class PedidoBlindagem(BaseModel):
 class PedidoFlagrante(BaseModel):
     serial: str
     duracao_s: int = Field(default=120, ge=15, le=900)
+
+
+class PedidoApagar(BaseModel):
+    serial: str
+    caminhos: list[Annotated[str, Field(min_length=9, max_length=1024)]] = Field(default=[], max_length=5000)
+    pasta_velha: Literal["whatsapp", "whatsapp_antigo", "downloads", "telegram"] | None = None
+    backup: bool = True
 
 
 class PedidoAssinaturas(BaseModel):
@@ -1261,6 +1269,36 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
         _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
         return r
+
+    # ---- quem gasta a bateria / quem ocupa o espaço
+    @app.get("/api/gastos/bateria")
+    def gastos_bateria(serial: str) -> dict[str, Any]:
+        return _turbo(gastos.bateria, aparelhos.pronto(serial))
+
+    @app.post("/api/gastos/espaco")
+    def gastos_espaco(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("espaco", p.serial, lambda progresso, _c: gastos.espaco(ap, progresso))
+
+    @app.post("/api/gastos/apagar")
+    def gastos_apagar(p: PedidoApagar) -> dict[str, Any]:
+        ap = livre(p.serial)
+        if not p.caminhos and not p.pasta_velha:
+            raise HTTPException(422, "Nada escolhido para apagar.")
+        if any(not gastos.seguro(c) for c in p.caminhos):
+            raise HTTPException(422, "Só dá para apagar arquivos das pastas do usuário.")
+
+        def rodar(progresso, _c):
+            caminhos = list(p.caminhos) + (gastos.listar_velhos(ap, p.pasta_velha) if p.pasta_velha else [])
+            destino = None
+            if p.backup:
+                from celscan.acoes import backup as bk
+                destino = bk.pasta_padrao() / f"{p.serial}-espaco-{time.strftime('%Y%m%d-%H%M%S')}"
+            r = gastos.apagar(ap, caminhos, destino, progresso)
+            _registrar_turbo(p.serial, f"Espaço: {len(r['apagados'])} arquivo(s) apagado(s)"
+                             + (f", cópia em {destino}" if destino else ""))
+            return r
+        return nova_tarefa("apagar", p.serial, rodar)
 
     # ---- modo flagrante (observa o celular em uso e pega quem age escondido)
     @app.post("/api/flagrante")

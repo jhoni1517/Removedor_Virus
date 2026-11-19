@@ -5,6 +5,7 @@ import { useApp } from "../estado";
 import Diagnostico, { PainelDebloat, PainelIPhone } from "./Diagnostico";
 import { PainelBlindagem } from "./Blindagem";
 import { PainelFlagrante } from "./Flagrante";
+import { PainelBateria, PainelEspaco } from "./Gastos";
 import { num } from "../nomes";
 import { Barra, Botao, Cartao, corNota, Miniatura, nomeApp, Titulo } from "../ui";
 
@@ -755,10 +756,14 @@ export default function Turbo() {
           <PainelFaxina d={d} />
           <PainelEsquecidosTurbo d={d} />
           <PainelRam d={d} />
+          <PainelEspaco serial={d.serial} />
           <PainelFlagrante serial={d.serial} />
           <PainelBlindagem serial={d.serial} />
         </>)}
-        {secao === "saude" && <Diagnostico serialFixo={d.serial} />}
+        {secao === "saude" && (<>
+          <PainelBateria serial={d.serial} />
+          <Diagnostico serialFixo={d.serial} />
+        </>)}
         {secao === "desempenho" && (<>
           <PainelAjustes d={d} />
           <PainelJogo d={d} />
