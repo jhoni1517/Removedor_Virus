@@ -309,15 +309,26 @@ def test_api_escolhidos_sem_apps(api):
 
 # ---------------------------------------------------------------------------------------------- faxina
 class Xiaomi(Celular):
+    mente = False  # HyperOS que responde "disabled-user" e deixa o app ativo
+
     def sh(self, cmd, timeout=120, erro=False):
+        fora = self.__dict__.setdefault("fora", set())
         if cmd.startswith("getprop ro.product.manufacturer"):
             return "Xiaomi"
         if cmd.startswith("pm list packages"):
             pkgs = ["com.miui.msa.global", "com.mi.globalbrowser", "com.miui.home", "com.android.camera"]
-            return "\n".join(f"package:{p}" for p in pkgs)
+            if " -e" in cmd:
+                pkgs = [p for p in pkgs if p not in fora]
+            filtro = cmd.split()[-1] if not cmd.split()[-1].startswith("-") and cmd.split()[-1] != "packages" else ""
+            return "\n".join(f"package:{p}" for p in pkgs if not filtro or filtro in p)
         if cmd.startswith("pm disable-user"):
             self.cmds.append(cmd)
+            if not self.mente:
+                fora.add(cmd.split()[-1])
             return f"Package {cmd.split()[-1]} new state: disabled-user"
+        if cmd.startswith("pm uninstall"):
+            self.cmds.append(cmd)
+            return "Failure [DELETE_FAILED_INTERNAL_ERROR]" if self.mente else "Success"
         if cmd.startswith("pm clear --cache-only"):
             self.cmds.append(cmd)
             return "Success"
@@ -339,7 +350,16 @@ def test_faxina_recusa_app_fora_da_lista():
     with pytest.raises(ValueError):
         faxina.remover_apps(Xiaomi(), ["com.miui.home"])
     r = faxina.remover_apps(Xiaomi(), ["com.mi.globalbrowser"])
-    assert r["apps"][0]["ok"]
+    assert r["apps"][0]["ok"] and r["removidos"] == 1
+
+
+def test_faxina_nao_finge_quando_o_app_continua_la():
+    from celscan.acoes import faxina
+    x = Xiaomi()
+    x.mente = True
+    r = faxina.remover_apps(x, ["com.mi.globalbrowser"])
+    assert not r["apps"][0]["ok"] and r["removidos"] == 0 and "DELETE_FAILED" in r["falhas"][0]["motivo"]
+    assert any(c.startswith("pm uninstall -k --user 0") for c in x.cmds)
 
 
 def test_dns_privado_liga_e_desfaz():

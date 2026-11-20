@@ -215,20 +215,47 @@ def sugestoes_debloat(ap, nivel="recomendado"):
     return res
 
 
-def desativar(ap, pkg):
+XIAOMI_SEGURANCA = ("o Xiaomi bloqueou: ative 'Depuração USB (Configurações de segurança)' nas Opções do "
+                    "desenvolvedor e tente de novo")
+
+
+def _ativo(ap, pkg: str) -> bool:
+    """O app ainda aparece para o usuário (instalado E ativado)?"""
+    return f"package:{pkg}" in ap.sh(f"pm list packages -e {pkg}").split()
+
+
+def _motivo(saida: str) -> str:
+    s = saida.lower()
+    if "securityexception" in s or "permission denial" in s or "not allowed" in s:
+        return XIAOMI_SEGURANCA
+    if "cannot disable" in s or "protected" in s:
+        return "o sistema protege este app (não deixa tirar)"
+    if "not installed" in s or "unknown package" in s:
+        return "o app não está instalado"
+    return (saida.strip().splitlines() or ["o Android recusou"])[-1][:140]
+
+
+def desativar_detalhado(ap, pkg) -> tuple[bool, str]:
+    """Tira o app de cena e CONFERE: antes, 'pediu para desativar' já contava como feito, e o app continuava lá."""
     from celscan.core.seguranca import essencial, exigir_pacote
 
     exigir_pacote(pkg)
     if essencial(pkg):
-        return False  # nunca desativa app essencial, mesmo que alguma lista sugira
+        return False, "app essencial do sistema (o CelScan nunca tira)"  # mesmo que alguma lista sugira
+    if not _ativo(ap, pkg):
+        return True, "já estava fora"
     pasta = quarentena.criar(ap, pkg, {"motivos": ["debloat"]}, copiar_apk=False)
-    out = ap.sh(f"pm disable-user --user 0 {pkg}", erro=True)
-    if "disabled" in out:
+    out1 = ap.sh(f"pm disable-user --user 0 {pkg}", erro=True)
+    if not _ativo(ap, pkg):
         quarentena.registrar(pasta, "desativado")
-        return True
-    out = ap.sh(f"pm uninstall -k --user 0 {pkg}", erro=True)
-    if "Success" in out:
+        return True, "desativado"
+    out2 = ap.sh(f"pm uninstall -k --user 0 {pkg}", erro=True)
+    if not _ativo(ap, pkg):
         quarentena.registrar(pasta, "removido_usuario0")
-        return True
+        return True, "removido para o usuário"
     quarentena.descartar(pasta)  # não mexeu em nada: não deixa um item "Incompleto" no Histórico
-    return False
+    return False, _motivo(out2 if out2.strip() else out1)
+
+
+def desativar(ap, pkg):
+    return desativar_detalhado(ap, pkg)[0]

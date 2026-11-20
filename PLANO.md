@@ -9,6 +9,38 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b4 (20/11/2026) — o que o CelScan diz que fez, ele fez (e prova)
+
+Relato do Jhoni (Redmi Note 14 Pro 5G): "mandei remover, disse que fez, o Google TV continua lá"; "otimizei e a
+análise acusa os mesmos problemas". Causas achadas no código e corrigidas:
+
+CRÍTICO
+- [feito] Remoção de apps contava como feita só porque o comando respondeu ("disabled-user"); agora confere no
+  celular (pm list packages -e). Se continuar ativo, tenta remover só para o usuário e confere de novo; se ainda
+  assim ficar, mostra o app em "Não saíram" com o motivo real (ex.: bloqueio do Xiaomi).
+- [feito] O aviso dizia "N app(s) removidos" mesmo com 0 ou com a tarefa em erro.
+- [feito] Diagnóstico acusava sempre "Xiaomi fechando apps", "Vídeo engasgando" e "Câmera travando" (bastava ter
+  RAM ≥ 7 GB, ter Netflix ou ter câmera). Agora mede o ESTADO: ajuste já ligado, app de vídeo já com compilação
+  completa e câmera compilada não aparecem mais; aparece a lista "Já está bom".
+- [feito] Teste de gravação no diagnóstico: se o celular recusa os ajustes (Xiaomi sem "Depuração USB
+  (Configurações de segurança)"), vira problema CRÍTICO com o passo a passo, em vez de fingir que otimizou.
+- [feito] Resultado da otimização etapa por etapa (✓/✗ + o que foi feito ou por que falhou) e nova medição no
+  fim: "Resolvidos" x "Ainda pendente".
+
+ALTO
+- [feito] Ajustes de device_config (fim dos processos fantasmas) voltavam sozinhos: o Google sincroniza as flags e
+  sobrescreve. Agora a sincronização é travada (device_config set_sync_disabled_for_tests persistent), com desfazer.
+- [feito] "Câmera (Xiaomi) (everything)" e "Galeria (?)" viraram texto claro (completa / sem compilar / parcial).
+- [feito] Lista de apps: Facebook pré-instalado e "Ativação Netflix (parceiro)".
+
+RECOMENDADO (próximos)
+- Validar no Redmi real cada etapa e montar a tabela por marca (o que o HyperOS aceita/recusa).
+- Reanalisar sozinho depois que o celular volta do reinício.
+- "Apps do sistema": mostrar também os demais apps pré-instalados fora da lista curada (hoje só na aba Técnico).
+
+BAIXO / OPCIONAL
+- App companheiro via Shizuku (fase 2), atalhos de perfil por horário, exportar relatório da otimização em PDF.
+
 ## Beta 3.7.0b3 (20/11/2026) — andamento em tempo real que não some
 
 - A análise da Otimização virou tarefa do programa (POST /api/turbo/receita/analisar) com 5 etapas e progresso:

@@ -70,7 +70,8 @@ def test_app_esquecido_sai_mantendo_os_dados():
 
 def test_debloat_que_falha_nao_deixa_item_incompleto():
     from celscan.acoes import otimizacao
-    assert otimizacao.desativar(Ap({"pm disable-user": "erro", "pm uninstall": "Failure"}), "com.x") is False
+    ap = Ap({"pm disable-user": "erro", "pm uninstall": "Failure", "pm list packages": "package:com.x"})
+    assert otimizacao.desativar(ap, "com.x") is False
     assert quarentena.listar() == []
 
 

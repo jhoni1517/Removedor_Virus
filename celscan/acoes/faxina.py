@@ -163,6 +163,11 @@ LISTAS: dict[str, tuple[AppMarca, ...]] = {
         AppMarca("com.google.android.apps.subscriptions.red", "Google One", "google", "Assinatura de espaço do "
                  "Google.", "O app (o backup do Google continua funcionando)."),
         AppMarca("com.google.android.feedback", "Feedback do Google", "google", "Envio de relatórios ao Google."),
+        AppMarca("com.facebook.katana", "Facebook (vem instalado)", "opcional",
+                 "O app do Facebook que veio de fábrica.",
+                 "O Facebook (dá para instalar de novo pela Play Store quando quiser)."),
+        AppMarca("com.netflix.partner.activation", "Ativação Netflix (parceiro)", "inutil",
+                 "Serviço de parceria da fábrica. NÃO é o app da Netflix, que continua funcionando."),
         AppMarca("com.facebook.appmanager", "Facebook App Manager", "anuncios",
                  "Serviço do Facebook pré-instalado que roda escondido (mesmo sem o app do Facebook)."),
         AppMarca("com.facebook.services", "Facebook Services", "anuncios", "Serviço de fundo do Facebook."),
@@ -211,8 +216,10 @@ def remover_apps(ap, pacotes: list[str], progresso=None, cancelar=None) -> dict[
         if progresso:
             progresso({"etapa": "faxina", "descricao": "Tirando apps inúteis", "detalhe": pkg, "atual": i,
                        "total": len(pacotes), "estimativa_s": 2 * (len(pacotes) - i)})
-        feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
-    return {"apps": feitos}
+        ok, motivo = otimizacao.desativar_detalhado(ap, pkg)
+        feitos.append({"pacote": pkg, "ok": ok, "motivo": motivo})
+    return {"apps": feitos, "removidos": sum(f["ok"] for f in feitos),
+            "falhas": [f for f in feitos if not f["ok"]]}
 
 
 def devolver(ap, pkg: str) -> dict[str, Any]:

@@ -232,6 +232,7 @@ function PainelAppsSistema({ d }: { d: Dispositivo }) {
   const [dados, setDados] = useState<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] } | null>(null);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [feito, setFeito] = useState(false);
+  const [falhas, setFalhas] = useState<{ nome: string; motivo: string }[]>([]);
 
   async function carregar() {
     await rodar("carregar", async () => {
@@ -243,9 +244,15 @@ function PainelAppsSistema({ d }: { d: Dispositivo }) {
 
   async function remover() {
     await rodar("remover", async () => {
-      const t = await esperar(await api<Tarefa<{ apps: { ok: boolean }[] }>>("/faxina/apps", { corpo: { serial: d.serial, pacotes: [...escolhidos] } }));
-      const ok = (t.resultado?.apps ?? []).filter((x) => x.ok).length;
-      avisar({ tipo: "ok", texto: `${ok} app(s) removidos. Reinicie para a propaganda sumir de vez.` });
+      const t = await esperar(await api<Tarefa<{ apps: { pacote: string; ok: boolean; motivo: string }[] }>>("/faxina/apps", { corpo: { serial: d.serial, pacotes: [...escolhidos] } }));
+      if (t.estado !== "concluida") throw new Error(t.erro ?? "A remoção não terminou.");
+      const lista = t.resultado?.apps ?? [];
+      const ok = lista.filter((x) => x.ok).length;
+      const nomes = Object.fromEntries((dados?.apps ?? []).map((a) => [a.pacote, a.nome]));
+      setFalhas(lista.filter((x) => !x.ok).map((x) => ({ nome: nomes[x.pacote] ?? x.pacote, motivo: x.motivo })));
+      avisar({ tipo: ok === lista.length ? "ok" : "erro", duracao: 9000, texto: ok === lista.length
+        ? `${ok} app(s) removidos e conferidos no celular.`
+        : `${ok} de ${lista.length} app(s) saíram. Veja abaixo por que os outros não saíram.` });
       setFeito(true);
     });
     await carregar();
@@ -306,6 +313,12 @@ function PainelAppsSistema({ d }: { d: Dispositivo }) {
             {feito && <Botao onClick={reiniciar} disabled={!!ocupado}>Reiniciar o celular</Botao>}
           </div>
         )}
+        {falhas.length > 0 && (
+          <div className="mt-4 rounded-md border border-perigo/50 p-3 text-sm">
+            <p className="font-semibold text-perigo">Não saíram ({falhas.length})</p>
+            <ul className="mt-1 space-y-1">{falhas.map((f) => <li key={f.nome}><b>{f.nome}</b>: <span className="text-fraco">{f.motivo}</span></li>)}</ul>
+          </div>
+        )}
         {fora.length > 0 && (
           <div className="mt-6">
             <p className="mb-2 text-sm font-semibold">Já removidos</p>
@@ -357,8 +370,23 @@ function PainelCalor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- receita */
-interface Analise { etapas: Etapa[]; problemas?: Problema[]; reiniciar?: boolean }
-interface Problema { id: string; gravidade: "alta" | "media" | "baixa"; titulo: string; prova: string; conserto: string; etapas: string[]; marcar: boolean }
+interface Analise { etapas: Etapa[]; problemas?: Problema[]; bons?: string[]; reiniciar?: boolean }
+interface EtapaFeita { id: string; ok: boolean; detalhe?: string }
+interface Aplicacao { etapas: EtapaFeita[]; antes_depois?: AntesDepois; depois?: { problemas: Problema[]; bons: string[] } }
+const GRAV: Record<string, [string, string]> = { critica: ["crítico", "text-perigo"], alta: ["alto", "text-perigo"], media: ["médio", "text-atencao"], baixa: ["baixo", "text-fraco"] };
+
+function ItemProblema({ p }: { p: Problema }) {
+  const [rotulo, cor] = GRAV[p.gravidade] ?? ["", "text-fraco"];
+  return (
+    <li className={`rounded-md border p-3 text-sm ${p.gravidade === "critica" ? "border-perigo/60" : "border-linha"}`}>
+      <span className={`mr-2 text-xs font-semibold uppercase ${cor}`}>{rotulo}</span>
+      <span className="font-medium">{p.titulo}</span>
+      <span className="block numeros text-fraco">{p.prova}</span>
+      <span className="block">{p.conserto}</span>
+    </li>
+  );
+}
+interface Problema { id: string; gravidade: "critica" | "alta" | "media" | "baixa"; titulo: string; prova: string; conserto: string; etapas: string[]; marcar: boolean }
 interface Diferenca { antes: number; depois: number; pontos: number; ganho_pct: number | null }
 interface AntesDepois { total: Diferenca | null; categorias: Record<string, Diferenca>; obs: string }
 
@@ -367,7 +395,7 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   const { ocupado, rodar } = useAcao();
   // análise e otimização são tarefas do programa: continuam rodando e o resultado aparece mesmo trocando de tela
   const analise = useUltimaTarefa<Analise>(d.serial, "turbo_analise");
-  const aplicacao = useUltimaTarefa<{ etapas: { id: string; ok: boolean }[]; antes_depois?: AntesDepois }>(d.serial, "turbo_receita");
+  const aplicacao = useUltimaTarefa<Aplicacao>(d.serial, "turbo_receita");
   const res = analise?.estado === "concluida" ? analise.resultado : null;
   const etapas = res?.etapas ?? null;
   const problemas = res?.problemas ?? [];
@@ -376,6 +404,10 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   const otimizando = aplicacao?.estado === "executando";
   const aplicado = aplicacao?.estado === "concluida" && (aplicacao.criada ?? 0) > (analise?.criada ?? 0);
   const ad = aplicado ? aplicacao?.resultado?.antes_depois ?? null : null;
+  const feito = aplicado ? aplicacao?.resultado ?? null : null;
+  const titulos = Object.fromEntries((etapas ?? []).map((e) => [e.id, e.titulo]));
+  const depois = feito?.depois;
+  const resolvidos = depois ? problemas.filter((p) => !depois.problemas.some((q) => q.id === p.id)) : [];
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   useEffect(() => { if (res) setMarcadas(new Set(res.etapas.filter((e) => e.marcada).map((e) => e.id))); }, [analise?.id, res]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (analise?.estado === "erro") avisar({ tipo: "erro", texto: analise.erro ?? "A análise falhou." }); }, [analise?.id, analise?.estado]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -389,9 +421,11 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   }
   async function aplicar() {
     await rodar("aplicar", async () => {
-      const t = await esperar(await api<Tarefa<{ etapas: { id: string; ok: boolean }[]; antes_depois?: AntesDepois }>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
+      const t = await esperar(await api<Tarefa<Aplicacao>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
       const ok = (t.resultado?.etapas ?? []).filter((e) => e.ok).length;
-      if (t.estado === "concluida") avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
+      const total = t.resultado?.etapas.length ?? 0;
+      if (t.estado === "concluida") avisar({ tipo: ok === total ? "ok" : "info", texto: ok === total ? `Otimização concluída e conferida: ${ok} etapa(s).` : `${ok} de ${total} etapa(s) funcionaram. Veja o que falhou e por quê.` });
+      else if (t.estado === "erro") avisar({ tipo: "erro", texto: t.erro ?? "A otimização falhou." });
     });
   }
 
@@ -401,24 +435,43 @@ function PainelReceita({ d }: { d: Dispositivo }) {
       {!analisando && !otimizando && <Botao className="mt-3" variante={etapas ? "secundario" : "primario"} onClick={montar} disabled={!!ocupado}>{etapas ? "Analisar de novo" : "Ver o que dá para otimizar"}</Botao>}
       {analisando && analise && <div className="mt-4"><ProgressoTarefa tarefa={analise} /></div>}
       {otimizando && aplicacao && <div className="mt-4"><ProgressoTarefa tarefa={aplicacao} /></div>}
-      {etapas && problemas.length > 0 && (
+      {etapas && !feito && problemas.length > 0 && (
         <div className="mt-4">
           <p className="text-sm font-semibold">Por que está travando</p>
-          <ul className="mt-2 space-y-2">
-            {problemas.map((p) => (
-              <li key={p.id} className="rounded-md border border-linha p-3 text-sm">
-                <span className={`mr-2 text-xs font-semibold uppercase ${p.gravidade === "alta" ? "text-perigo" : p.gravidade === "media" ? "text-atencao" : "text-fraco"}`}>{p.gravidade === "media" ? "média" : p.gravidade}</span>
-                <span className="font-medium">{p.titulo}</span>
-                <span className="block numeros text-fraco">{p.prova}</span>
-                <span className="block">{p.conserto}</span>
-              </li>
-            ))}
-          </ul>
+          <ul className="mt-2 space-y-2">{problemas.map((p) => <ItemProblema key={p.id} p={p} />)}</ul>
+          {(res?.bons ?? []).length > 0 && <p className="mt-3 text-sm text-ok">Já está bom: {res?.bons?.join(" · ")}</p>}
           <p className="mt-3 text-sm font-semibold">O que vai ser feito</p>
         </div>
       )}
-      {etapas && problemas.length === 0 && <p className="mt-4 text-sm text-ok">Nenhuma causa de travamento encontrada. Dá para aplicar a manutenção abaixo mesmo assim.</p>}
-      {etapas && (
+      {feito && (
+        <div className="mt-4 space-y-4 text-sm">
+          <div>
+            <p className="font-semibold">O que foi feito</p>
+            <ul className="mt-2 space-y-1.5">
+              {feito.etapas.map((e) => (
+                <li key={e.id} className="flex gap-2">
+                  <span className={e.ok ? "text-ok" : "text-perigo"} aria-label={e.ok ? "funcionou" : "falhou"}>{e.ok ? "✓" : "✗"}</span>
+                  <span><span className="font-medium">{titulos[e.id] ?? e.id}</span>{e.detalhe ? <span className="text-fraco"> · {e.detalhe}</span> : null}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {depois && (
+            <div>
+              <p className="font-semibold">Conferido depois (medido de novo)</p>
+              {resolvidos.length > 0 && <p className="mt-1 text-ok">Resolvidos ({resolvidos.length}): {resolvidos.map((p) => p.titulo).join(" · ")}</p>}
+              {depois.problemas.length === 0
+                ? <p className="mt-1 text-ok">Nenhum problema restante.</p>
+                : (<>
+                  <p className="mt-2">Ainda pendente ({depois.problemas.length}):</p>
+                  <ul className="mt-2 space-y-2">{depois.problemas.map((p) => <ItemProblema key={p.id} p={p} />)}</ul>
+                </>)}
+            </div>
+          )}
+        </div>
+      )}
+      {etapas && !feito && problemas.length === 0 && <p className="mt-4 text-sm text-ok">Nenhuma causa de travamento encontrada. Dá para aplicar a manutenção abaixo mesmo assim.</p>}
+      {etapas && !feito && (
         <div className="mt-3 space-y-2">
           {etapas.map((e) => (
             <Marcador key={e.id} marcado={marcadas.has(e.id)} mudar={() => setMarcadas(alternar(marcadas, e.id))} desativado={e.id === "aviso_calor"}>

@@ -29,25 +29,46 @@ def test_ler_dexopt_dois_formatos():
 
 def test_diagnostico_xiaomi_travando():
     s = {"df": "/dev/block/dm-50 115000000 110000000 5000000 96% /data", "lowpower": "1\n",
-         "anim": "1.5\n1.0\n1.0\n", "dexopt": DEX14,
+         "anim": "1.5\n1.0\n1.0\n", "dexopt": DEX14, "escrita": "7\n",
          "ativos": "package:com.netflix.mediaclient\npackage:com.android.camera\npackage:com.xiaomi.joyose\n"}
     marca = [{"nome": "MSA", "ativo": True, "marcado": True}, {"nome": "Notas", "ativo": True, "marcado": False}]
-    r = destravar.montar(FICHA, s, marca, interface_leve=False)
+    r = destravar.montar(FICHA, s, marca, {"xiaomi_interface_leve": False, "fantasmas": False})
     ids = [p["id"] for p in r["problemas"]]
     assert ids[:4] == ["sem_compilar", "armazenamento", "economia", "video"]
-    assert {"memoria_xiaomi", "reiniciar", "bloat", "interface", "joyose", "animacoes", "camera"} <= set(ids)
+    assert {"memoria_xiaomi", "reiniciar", "bloat", "interface", "joyose", "animacoes"} <= set(ids)
+    assert "camera" not in ids  # a câmera já está compilada: não acusa
     p = {x["id"]: x for x in r["problemas"]}
     assert "2 de 4 apps (50%)" in p["sem_compilar"]["prova"] and p["armazenamento"]["gravidade"] == "alta"
-    assert "Netflix" in p["video"]["prova"] and p["video"]["etapas"] == ["destravar_video"]
+    assert "Netflix (sem compilar)" in p["video"]["prova"] and p["video"]["etapas"] == ["destravar_video"]
     assert p["bloat"]["prova"].startswith("1 apps") and not p["joyose"]["marcar"]
-    assert "Câmera (Xiaomi) (speed-profile)" in p["camera"]["prova"]
+    assert "Câmera e galeria compiladas" in r["bons"] and r["escrita"] is True
+
+
+def test_o_que_foi_consertado_nao_volta_a_aparecer():
+    dex = DEX14.replace("[status=verify] [reason=install]", "[status=speed] [reason=cmdline]")
+    s = {"df": "/dev/block/dm-50 115000000 50000000 65000000 44% /data", "lowpower": "0", "anim": "0.5\n",
+         "dexopt": dex.replace("run-from-apk", "speed-profile"), "escrita": "7",
+         "ativos": "package:com.netflix.mediaclient\npackage:com.android.camera\n"}
+    aj = {"xiaomi_interface_leve": True, "fantasmas": True, "mais_processos": True}
+    r = destravar.montar({**FICHA, "ligado_h": 1}, s, [{"nome": "MSA", "ativo": False, "marcado": True}], aj)
+    assert r["problemas"] == []
+    assert {"Interface leve ligada", "Apps em segundo plano liberados (não resetam)",
+            "Sem apps de propaganda da marca ativos", "Modo economia desligado"} <= set(r["bons"])
+    assert any(b.startswith("Apps de vídeo destravados") for b in r["bons"])
+
+
+def test_celular_que_recusa_gravar_vira_critico():
+    s = {"escrita": "java.lang.SecurityException: Permission denial\nnull\n", "dexopt": "", "ativos": ""}
+    r = destravar.montar(FICHA, s, [], {})
+    assert r["problemas"][0]["id"] == "bloqueado" and r["problemas"][0]["gravidade"] == "critica"
+    assert "Configurações de segurança" in r["problemas"][0]["conserto"]
 
 
 def test_diagnostico_celular_saudavel():
     s = {"df": "/dev/block/dm-50 115000000 50000000 65000000 44% /data", "lowpower": "0", "anim": "1.0\n0.5\n",
          "dexopt": "[com.a]\n arm64: [status=speed-profile]\n", "ativos": ""}
     f = {**FICHA, "fabricante": "motorola", "ligado_h": 10}
-    assert destravar.montar(f, s, [], None)["problemas"] == []
+    assert destravar.montar(f, s, [], {"fantasmas": True, "mais_processos": True})["problemas"] == []
 
 
 @pytest.fixture(autouse=True)
@@ -134,3 +155,26 @@ def test_apps_da_marca_mostra_removidos_e_devolve():
     assert por["com.miui.msa.global"]["marcado"] and not por["com.miui.notes"]["marcado"]
     assert not por["com.android.thememanager"]["marcado"] and not por["com.mi.globalbrowser"]["ativo"]
     assert faxina.devolver(x, "com.mi.globalbrowser")["ok"]
+
+
+def test_receita_mostra_detalhe_de_cada_etapa_e_confere_no_fim(monkeypatch):
+    from celscan.acoes import turbo
+
+    chamadas = []
+    monkeypatch.setattr(destravar, "diagnostico", lambda ap, *a, **k: chamadas.append(1) or
+                        {"problemas": [{"id": "reiniciar"}], "bons": ["Modo economia desligado"]})
+
+    class Cel:
+        serial = "ABC"
+        low = "1"
+
+        def sh(self, cmd, timeout=120, erro=False):
+            if cmd == "settings get global low_power":
+                return self.low
+            if cmd == "settings put global low_power 0":
+                self.low = "0"
+            return ""
+
+    r = turbo.aplicar_receita(Cel(), ["economia_off"])
+    assert r["etapas"] == [{"id": "economia_off", "ok": True, "detalhe": "desligado"}]
+    assert r["depois"]["problemas"] == [{"id": "reiniciar"}] and chamadas == [1]

@@ -24,6 +24,7 @@ from typing import Any
 from celscan.acoes import quarentena
 from celscan.core import parsers
 from celscan.core.adb import AdbErro
+from celscan.core.log import LOGGER
 from celscan.core.seguranca import essencial, exigir_pacote
 
 Progresso = Callable[[dict[str, Any]], None] | None
@@ -786,8 +787,20 @@ def aplicar_ajustes(ap, ids: list[str], descricao: str | None = None) -> dict[st
     for a, _ in planos:
         for tipo, ns, chave, _v in a.mudancas:
             desfazer.append({"tipo": tipo, "ns": ns, "chave": chave, "anterior": _ler(ap, tipo, ns, chave)})
+    # o Google reescreve os valores do device_config de tempos em tempos (sincronização de "flags"): sem travar
+    # essa sincronização, ajustes como o fim dos processos fantasmas voltavam sozinhos horas depois
+    trava_sync = any(t == "device_config" for a, _ in planos for t, *_ in a.mudancas)
+    if trava_sync:
+        antes_sync = (ap.sh("device_config get_sync_disabled_for_tests", erro=True).strip() or "none").split()[0]
+        if antes_sync not in ("none", "persistent", "until_reboot"):
+            antes_sync = "none"
+        if antes_sync != "persistent":
+            desfazer.append({"tipo": "cmd", "desfazer": f"device_config set_sync_disabled_for_tests {antes_sync}",
+                             "descricao": "sincronização de flags do Google de volta ao normal"})
     pasta = quarentena.criar_ajuste(ap, "turbo", descricao or f"Turbo: {len(planos)} ajuste(s)", desfazer) \
         if desfazer else None
+    if trava_sync:
+        ap.sh("device_config set_sync_disabled_for_tests persistent", erro=True)
     # 2) aplica e confere
     for a, valores in planos:
         for (tipo, ns, chave, _), v in zip(a.mudancas, valores, strict=True):
@@ -1154,6 +1167,18 @@ def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=No
         except AdbErro:
             antes = None
     r = _aplicar_etapas(ap, ids, progresso, cancelar)
+    if not (cancelar is not None and cancelar.is_set()):
+        # prova de que funcionou: mede de novo e devolve o que ainda falta (o que foi consertado some da lista)
+        from celscan.acoes import destravar
+
+        if progresso:
+            progresso({"etapa": "conferir", "descricao": "Conferindo o resultado", "detalhe": "medindo de novo",
+                       "atual": None, "total": None, "estimativa_s": 40})
+        try:
+            d = destravar.diagnostico(ap)
+            r["depois"] = {"problemas": d["problemas"], "bons": d["bons"]}
+        except Exception as e:  # noqa: BLE001 - conferir nunca derruba a otimização já feita
+            LOGGER.info("receita: conferência final falhou (%s)", e)
     if antes and antes.get("total") is not None and not (cancelar is not None and cancelar.is_set()):
         if progresso:
             progresso({"etapa": "nota", "descricao": "Medindo de novo para comparar", "detalhe": "", "atual": None,
@@ -1166,6 +1191,36 @@ def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=No
     return r
 
 
+NOMES_ETAPA = {
+    "dexopt": "Compilando os apps pendentes", "sistema_leve": "Compilando o sistema", "compilar_mais_usados":
+    "Compilando seus apps mais usados", "faxina_marca": "Tirando apps inúteis da marca", "camera":
+    "Otimizando a câmera", "economia_off": "Desligando o modo economia", "joyose": "Desativando o Joyose",
+    "destravar_video": "Destravando os apps de vídeo", "dns_anuncios": "Ligando o bloqueio de anúncios",
+    "esquecidos": "Fazendo apps esquecidos dormirem", "fantasmas": "Liberando apps em segundo plano",
+    "mais_processos": "Mais apps abertos ao mesmo tempo", "xiaomi_interface_leve": "Deixando a interface leve",
+    "animacoes_rapidas": "Acelerando as animações", "armazenamento": "Manutenção do armazenamento",
+}
+
+
+def _resumo_compilacao(r: dict[str, Any]) -> str:
+    f = len(r.get("falhas") or [])
+    n = r.get("ok")
+    if isinstance(n, list) and not n and not r.get("falhas"):
+        return "nada pendente para compilar"
+    base = f"{len(n)} app(s) compilados" if isinstance(n, list) else "compilação feita"
+    return base + (f", {f} recusado(s) pelo Android" if f else "")
+
+
+def _resumo_remocao(r: dict[str, Any], faxina) -> str:
+    nomes = {a.pacote: a.nome for lista in faxina.LISTAS.values() for a in lista}
+    falhas = r.get("falhas") or []
+    txt = f"{r.get('removidos', 0)} app(s) removidos e conferidos"
+    if falhas:
+        txt += "; não saíram: " + "; ".join(f"{nomes.get(x['pacote'], x['pacote'])} ({x['motivo']})"
+                                           for x in falhas[:4])
+    return txt
+
+
 def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[str, Any]:
     ids = [i for i in dict.fromkeys(ids) if i != "aviso_calor"]
     feitos, desfazer_ids = [], []
@@ -1173,32 +1228,42 @@ def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[
         if cancelar is not None and cancelar.is_set():
             break
         if progresso:
-            progresso({"etapa": "receita", "descricao": "Aplicando a receita", "detalhe": ident, "atual": n,
-                       "total": len(ids), "estimativa_s": 60 * (len(ids) - n + 1)})
+            progresso({"etapa": "receita", "descricao": NOMES_ETAPA.get(ident, ident), "detalhe":
+                       f"etapa {n} de {len(ids)}", "atual": n - 1, "total": len(ids),
+                       "estimativa_s": 40 * (len(ids) - n + 1)})
+        detalhe = ""
         try:
             if ident in POR_ID:
                 r = aplicar_ajustes(ap, [ident], f"Receita: {POR_ID[ident].titulo}")
                 ok = all(x["ok"] for x in r["resultado"])
+                detalhe = "aplicado e conferido" if ok else "; ".join(x.get("motivo") or "" for x in r["resultado"]
+                                                                       if not x["ok"])
                 if r["desfazer_id"]:
                     desfazer_ids.append(r["desfazer_id"])
             elif ident in MANUTENCOES:
                 ok = manutencao(ap, ident)["ok"]
+                detalhe = "feita" if ok else "o Android recusou"
             elif ident == "compilar_mais_usados":
                 r = compilar_apps(ap, "completa", alvos_compilacao(ap, "mais_usados"), cancelar=cancelar)
                 ok = not r["falhas"]
+                detalhe = _resumo_compilacao(r)
             elif ident == "sistema_leve":
                 r = compilar_apps(ap, "completa", alvos_compilacao(ap, "sistema"), cancelar=cancelar)
                 ok = not r["falhas"]
+                detalhe = _resumo_compilacao(r)
             elif ident == "faxina_marca":
                 from celscan.acoes import faxina
 
                 alvos = [a["pacote"] for a in faxina.apps_da_marca(ap)["apps"] if a["marcado"] and a["ativo"]]
                 r = faxina.remover_apps(ap, alvos, cancelar=cancelar)
                 ok = all(x["ok"] for x in r["apps"])
+                detalhe = _resumo_remocao(r, faxina)
             elif ident == "camera":
                 from celscan.acoes import faxina
 
-                ok = bool(faxina.camera_rapida(ap)["apps"])
+                c = faxina.camera_rapida(ap)
+                ok = bool(c["apps"])
+                detalhe = f"{len(c['apps'])} app(s) de câmera/galeria" if ok else "câmera não encontrada"
             elif ident == "economia_off":
                 ant = quarentena.ler_setting(ap, "global", "low_power")
                 pasta = quarentena.criar_ajuste(ap, "economia_off", "Modo economia desligado", [
@@ -1206,36 +1271,45 @@ def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[
                 ap.sh("settings put global low_power 0")
                 ok = quarentena.ler_setting(ap, "global", "low_power") in ("0", None)
                 desfazer_ids.append(pasta.name)
+                detalhe = "desligado" if ok else "o Android não deixou desligar"
             elif ident == "joyose":
                 from celscan.acoes import faxina
 
-                ok = all(x["ok"] for x in faxina.remover_apps(ap, ["com.xiaomi.joyose"])["apps"])
+                r = faxina.remover_apps(ap, ["com.xiaomi.joyose"])
+                ok = all(x["ok"] for x in r["apps"])
+                detalhe = _resumo_remocao(r, faxina)
             elif ident == "destravar_video":
                 from celscan.acoes import destravar
 
                 ativos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e"), re.M))
-                ok = True
+                ok, partes = True, []
                 for pkg in [p for p in destravar.VIDEO if p in ativos]:
                     if cancelar is not None and cancelar.is_set():
                         break
                     r = destravar.destravar_app(ap, pkg)
                     if r["desfazer_id"]:
                         desfazer_ids.append(r["desfazer_id"])
+                    compilou = "compilado por completo" in r["feitos"]
+                    ok = ok and compilou
+                    partes.append(f"{destravar.VIDEO[pkg]} {'✓' if compilou else '✗ (compilação recusada)'}")
+                detalhe = ", ".join(partes) or "nenhum app de vídeo instalado"
             elif ident == "dns_anuncios":
                 from celscan.acoes import faxina
 
                 r = faxina.definir_dns(ap, "adguard")
                 ok = r["ok"]
                 desfazer_ids.append(r["desfazer_id"])
+                detalhe = f"ligado ({r['servidor']})" if ok else "o Android não aceitou o DNS"
             else:  # esquecidos
                 r = dormir(ap, [x["pacote"] for x in esquecidos(ap, 30)], "rare")
                 ok = True
+                detalhe = f"{len(r.get('apps', []))} app(s) parados há 30 dias foram dormir"
                 if r["desfazer_id"]:
                     desfazer_ids.append(r["desfazer_id"])
         except (AdbErro, ValueError) as e:
-            feitos.append({"id": ident, "ok": False, "erro": str(e)[:150]})
+            feitos.append({"id": ident, "ok": False, "erro": str(e)[:150], "detalhe": str(e)[:150]})
             continue
-        feitos.append({"id": ident, "ok": ok})
+        feitos.append({"id": ident, "ok": ok, "detalhe": detalhe})
     return {"etapas": feitos, "desfazer_ids": desfazer_ids}
 
 
