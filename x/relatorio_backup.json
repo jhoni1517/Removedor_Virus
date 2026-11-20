@@ -1,0 +1,25 @@
+{
+  "data": "2026-10-11T17:06:57",
+  "aparelho": {
+    "serial": "ABC123",
+    "estado": "device",
+    "fabricante": "motorola",
+    "modelo": "moto g54 5G",
+    "android": "14",
+    "marca": "motorola"
+  },
+  "destino": "x",
+  "copiados": 2,
+  "pulados": 0,
+  "falhas": [],
+  "bytes_copiados": 6144,
+  "por_categoria": {
+    "fotos": {
+      "arquivos": 2,
+      "bytes": 6144
+    }
+  },
+  "verificado_hash": false,
+  "duracao_s": 0.04995697999999038,
+  "total_arquivos": 2
+}

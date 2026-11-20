@@ -33,6 +33,7 @@ from reportlab.platypus import (
 )
 
 from celscan import __version__
+from celscan.analise.plano import plano_de_acao
 
 VERDE, AMBAR, VERMELHO = colors.HexColor("#1f7a4d"), colors.HexColor("#b7791f"), colors.HexColor("#b3261e")
 CINZA, TINTA, LINHA = colors.HexColor("#5b6b7a"), colors.HexColor("#1d1d1b"), colors.HexColor("#d9d3c5")
@@ -139,11 +140,30 @@ def _achado(a: dict, e: dict, nivel: str | None = None) -> list:
             Paragraph(f"<b>O que fazer:</b> {_t(a['fazer'])}", e["normal"]), Spacer(1, 5)]
 
 
+def _inicial_pdf(r: dict, lado: float) -> Drawing:
+    """Sem ícone legível: quadrado colorido com a inicial do nome (como na interface), em vez de buraco."""
+    from reportlab.graphics.shapes import String
+
+    nome = _nome(r).strip() or "?"
+    inicial = nome[0].upper()
+    try:
+        inicial.encode("latin-1")  # a fonte padrão do PDF não tem letras de outros alfabetos
+    except UnicodeEncodeError:
+        inicial = (r.get("pacote") or "?")[0].upper()
+    paleta = ("#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#4f46e5", "#b45309")
+    cor = colors.HexColor(paleta[int(hashlib.sha1(r.get("pacote", "").encode()).hexdigest(), 16) % len(paleta)])
+    d = Drawing(lado, lado)
+    d.add(Rect(0, 0, lado, lado, rx=lado * 0.22, ry=lado * 0.22, fillColor=cor, strokeColor=None))
+    d.add(String(lado / 2, lado * 0.3, inicial, fontName="Helvetica-Bold", fontSize=lado * 0.5,
+                 fillColor=colors.white, textAnchor="middle"))
+    return d
+
+
 def _icone_pdf(r: dict, lado: float):
-    """Ícone do app para o PDF (PNG/WebP); SVG e ausência voltam None."""
+    """Ícone do app para o PDF (PNG/WebP); SVG ou ausência viram a inicial do nome."""
     uri = r.get("icone") or ""
     if not uri.startswith(("data:image/png;base64,", "data:image/webp;base64,")):
-        return None
+        return _inicial_pdf(r, lado)
     try:
         import base64
 
@@ -156,7 +176,7 @@ def _icone_pdf(r: dict, lado: float):
         buf.seek(0)
         return RLImage(buf, width=lado, height=lado)
     except Exception:
-        return None
+        return _inicial_pdf(r, lado)
 
 
 def _nome(r: dict) -> str:
@@ -227,6 +247,43 @@ def _veredito_bateria(pct: Any) -> tuple[str, colors.Color]:
     if p >= 60:
         return "desgastada (dura menos que nova)", AMBAR
     return "recomenda-se trocar", VERMELHO
+
+
+def _tabela_simples(cabecalho: tuple[str, ...], linhas: list[list[str]], larguras: list[float], e: dict) -> Table:
+    dados = [[Paragraph(f"<b>{_t(c)}</b>", e["fraco"]) for c in cabecalho]]
+    dados += [[Paragraph(_t(c), e["fraco"]) for c in linha] for linha in linhas]
+    t = Table(dados, colWidths=[w * mm for w in larguras], repeatRows=1)
+    t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINHA), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    return t
+
+
+def _secao_anuncios_e_sensores(apps: list[dict], e: dict) -> list:
+    """Pop-ups de anúncio e uso recente de câmera/microfone/localização (só se houver o que mostrar)."""
+    from celscan.analise.pontuacao import quando
+
+    hist: list = []
+    anuncios = [r for r in apps
+                if (r.get("anuncios") or {}).get("fora_do_app") or (r.get("anuncios") or {}).get("tela_cheia")]
+    if anuncios:
+        anuncios.sort(key=lambda r: (-r["anuncios"]["fora_do_app"], -r["anuncios"]["tela_cheia"]))
+        hist.append(Paragraph("Anúncios e pop-ups", e["h2"]))
+        hist.append(Paragraph("Pop-up fora do app é a propaganda que aparece na tela inicial ou por cima de outro app.",
+                              e["fraco"]))
+        hist.append(_tabela_simples(
+            ("App", "Pop-ups fora do app", "Em tela cheia", "Último", "Redes de anúncio"),
+            [[_nome(r), str(r["anuncios"]["fora_do_app"]), str(r["anuncios"]["tela_cheia"]),
+              _data_br(r["anuncios"].get("ultimo")) if r["anuncios"].get("ultimo") else "—",
+              ", ".join(r["anuncios"].get("sdks") or []) or "—"] for r in anuncios[:15]],
+            [52, 28, 24, 24, 44], e))
+    usos = sorted(((r, s, seg) for r in apps for s, seg in (r.get("sensores") or {}).items() if seg < 7 * 86400),
+                  key=lambda x: x[2])
+    if usos:
+        hist.append(Paragraph("Câmera, microfone e localização (últimos 7 dias)", e["h2"]))
+        hist.append(_tabela_simples(("App", "Usou", "Quando", "Origem"),
+                                    [[_nome(r), s, quando(seg), r.get("loja") or ("sistema" if r.get("sistema")
+                                                                                  else "fora da loja")]
+                                     for r, s, seg in usos[:20]], [62, 34, 34, 42], e))
+    return hist
 
 
 def _tabela_campos(campos: list[tuple[str, Any]], e: dict) -> Table:
@@ -300,6 +357,16 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
         return _finalizar(historia, meta, h, codigo, e, retrato)
 
     achados = retrato.get("achados_aparelho", [])
+    apps = retrato.get("apps", [])
+    removidos = {a.get("pacote") for a in acoes or [] if a.get("tipo") == "remocao" and not a.get("desfeita_em")}
+    passos = plano_de_acao(apps, achados, removidos)
+    if passos:
+        historia.append(Paragraph("O que fazer agora" if versao == "cliente" else "Plano de ação", e["h2"]))
+        historia += [Paragraph(_t(f"{i}. {p}"), e["normal"]) for i, p in enumerate(passos, 1)]
+    elif removidos:
+        historia.append(Paragraph("O que fazer agora", e["h2"]))
+        historia.append(Paragraph(_t("Os problemas encontrados foram resolvidos neste atendimento. Evite instalar apps "
+                                     "fora da loja oficial e mantenha o celular atualizado."), e["normal"]))
     historia.append(Paragraph("Configurações do aparelho", e["h2"]))
     if achados:
         for a in achados:
@@ -307,19 +374,20 @@ def gerar_pdf(meta: dict[str, Any], retrato: dict[str, Any], versao: str = "clie
     else:
         historia.append(Paragraph("Nenhum problema encontrado nas configurações.", e["normal"]))
 
-    apps = retrato.get("apps", [])
     risco = [r for r in apps if r.get("nivel") in ("ALTO", "MÉDIO")]
     historia.append(Paragraph("Apps que merecem atenção", e["h2"]))
     if not risco:
         historia.append(Paragraph("Nenhum app com risco médio ou alto.", e["normal"]))
     historia += [_cartao_app(r, e, tecnico) for r in risco]
+    historia += _secao_anuncios_e_sensores(apps, e)
 
     if acoes:
+        nomes = {r["pacote"]: _nome(r) for r in apps}
         historia.append(Paragraph("Ações realizadas", e["h2"]))
         for a in acoes:
             desfeita = " (desfeita depois)" if a.get("desfeita_em") else ""
-            historia.append(Paragraph(_t(f"- {a.get('pacote') or ''} {a.get('detalhe') or ''}{desfeita}"),
-                                      e["normal"]))
+            quem = nomes.get(a.get("pacote") or "", a.get("pacote") or "")
+            historia.append(Paragraph(_t(f"- {quem}: {a.get('detalhe') or ''}{desfeita}"), e["normal"]))
     avisos = retrato.get("avisos") or []
     if avisos:
         historia.append(Paragraph("Verificações não disponíveis neste aparelho", e["h2"]))
@@ -367,11 +435,16 @@ def _finalizar(historia: list, meta: dict, h: str, codigo: str, e: dict, retrato
                                 ("TOPPADDING", (0, 0), (-1, -1), 8)]))
     historia += [Spacer(1, 12), KeepTogether([rodape])]
 
+    from celscan.core import preferencias
+    contato = str(preferencias.ler().get("contato_loja") or "").strip()[:90]
+
     def numerar(canvas, doc) -> None:
         canvas.saveState()
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(CINZA)
         canvas.drawString(18 * mm, 10 * mm, f"CelScan · laudo nº {meta['id']} · verificação {codigo}")
+        if contato:  # dúvidas do cliente: como falar com a loja que fez a análise
+            canvas.drawCentredString(105 * mm, 6 * mm, contato.encode("latin-1", "replace").decode("latin-1"))
         canvas.drawRightString(192 * mm, 10 * mm, f"página {doc.page}")
         canvas.restoreState()
 

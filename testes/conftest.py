@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+os.environ.setdefault("CELSCAN_ESPERA_VOLTOU", "0")  # remoção: não esperar o "voltou?" nos testes
+
 # Antes de importar o celscan: dados em pasta temporária e nada de internet.
 os.environ["CELSCAN_HOME"] = tempfile.mkdtemp(prefix="celscan_teste_")
 os.environ["CELSCAN_OFFLINE"] = "1"

@@ -89,8 +89,12 @@ foreach ($par in $lista) {
   $dir = Join-Path $env:CELSCAN_MTP_DESTINO ($rel -replace '/', '\')
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $alvo = Join-Path $dir $nome
-  if (Test-Path -LiteralPath $alvo) { "@@PULOU`t$rel/$nome"; continue }
   $esperado = [int64]($i.ExtendedProperty('System.Size'))
+  if (Test-Path -LiteralPath $alvo) {
+    # só pula o que está inteiro: um arquivo cortado (cabo caiu no meio) era pulado para sempre
+    if ($esperado -le 0 -or (Get-Item -LiteralPath $alvo).Length -eq $esperado) { "@@PULOU`t$rel/$nome"; continue }
+    Remove-Item -LiteralPath $alvo -Force
+  }
   $sh.Namespace($dir).CopyHere($i, 1556)
   $ant = -1; $parado = 0
   while ($parado -lt 300) {
@@ -102,9 +106,14 @@ foreach ($par in $lista) {
       if ($esperado -le 0 -and $parado -ge 10) { break }
     } else { $parado++ }
   }
-  if (Test-Path -LiteralPath $alvo) {
-    "@@OK`t$rel/$nome`t$((Get-Item -LiteralPath $alvo).Length)"
-  } else { "@@FALHOU`t$rel/$nome" }
+  $final = if (Test-Path -LiteralPath $alvo) { (Get-Item -LiteralPath $alvo).Length } else { -1 }
+  if ($final -ge 0 -and ($esperado -le 0 -or $final -eq $esperado)) {
+    "@@OK`t$rel/$nome`t$final"
+  } else {
+    # travou no meio: apaga o pedaço para a próxima tentativa copiar de novo
+    if ($final -ge 0) { Remove-Item -LiteralPath $alvo -Force }
+    "@@FALHOU`t$rel/$nome"
+  }
 }
 "@@FIM"
 """
@@ -172,8 +181,15 @@ def copiar(aparelho: str, armazenamento: str, pastas: list[str], destino: Path,
     destino.mkdir(parents=True, exist_ok=True)
     p = _processo(COPIAR, {"CELSCAN_MTP_APARELHO": aparelho, "CELSCAN_MTP_ARMAZENAMENTO": armazenamento,
                            "CELSCAN_MTP_PASTAS": "|".join(pastas), "CELSCAN_MTP_DESTINO": str(destino)})
-    res = processar_copia(p.stdout or [], progresso, cancelar, parar=p.kill)
-    p.wait(timeout=30)
+    try:
+        res = processar_copia(p.stdout or [], progresso, cancelar, parar=p.kill)
+    finally:
+        if p.poll() is None and (cancelar is None or cancelar.is_set()):
+            p.kill()
+        try:
+            p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()
     return {**res, "pasta": str(destino)}
 
 
@@ -193,7 +209,7 @@ def processar_copia(linhas, progresso=None, cancelar: threading.Event | None = N
         if tipo == "@@ERRO":
             raise MtpErro(partes[1] if len(partes) > 1 else "Falha na cópia.")
         if tipo == "@@TOTAL":
-            res["total"] = int(partes[1])
+            res["total"] = int(partes[1]) if len(partes) > 1 and partes[1].isdecimal() else 0
         elif tipo in ("@@OK", "@@PULOU", "@@FALHOU"):
             feitos += 1
             if tipo == "@@OK":

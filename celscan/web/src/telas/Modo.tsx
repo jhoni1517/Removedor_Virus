@@ -1,13 +1,13 @@
 import { Gauge, Microscope, ShieldCheck, Zap } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 
 const MODOS = [
   { id: "rapido", nome: "Rápido", tempo: "1 a 2 minutos", icone: Zap,
-    texto: "Apps, permissões, assinaturas e comparação com a lista pública de ameaças conhecidas." },
+    texto: "Todos os apps (inclusive os de fábrica com ícone), poderes, assinaturas, ameaças conhecidas e o código dos apps suspeitos." },
   { id: "completo", nome: "Completo", tempo: "3 a 10 minutos", icone: ShieldCheck,
-    texto: "Tudo do rápido e mais a opinião de mais de 70 antivírus (VirusTotal) sobre os apps suspeitos." },
+    texto: "O Motor CelScan lê o código de TODOS os seus apps aqui no PC, sem internet: acha trojan bancário, dropper e espião mesmo vindos da Play Store." },
   { id: "profundo", nome: "Profundo", tempo: "15 minutos ou mais", icone: Microscope,
     texto: "Coleta forense completa (AndroidQF + MVT) para suspeita de espionagem. Chega na próxima etapa." },
 ];
@@ -16,9 +16,22 @@ export default function Modo({ serial, onIniciar, onVoltar, onConfig }: {
   serial: string; onIniciar: (modo: string) => void; onVoltar: () => void; onConfig: () => void;
 }) {
   const { estado, dispositivos } = useApp();
-  const [modo, setModo] = useState("rapido");
+  // M1: lembra o último modo usado neste PC
+  const [modo, setModoEstado] = useState(() => {
+    try { const m = localStorage.getItem("celscan-modo"); return m && MODOS.some((x) => x.id === m && x.id !== "profundo") ? m : "rapido"; }
+    catch { return "rapido"; }
+  });
+  const setModo = (m: string) => { setModoEstado(m); try { localStorage.setItem("celscan-modo", m); } catch { /* sem storage */ } };
   const d = dispositivos.find((x) => x.serial === serial);
   const conectado = d?.estado === "device";
+  // M7: Ctrl+Enter inicia de qualquer lugar da tela
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && conectado) { e.preventDefault(); onIniciar(modo); }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [conectado, modo, onIniciar]);
 
   return (
     <div className="max-w-4xl">
@@ -41,17 +54,17 @@ export default function Modo({ serial, onIniciar, onVoltar, onConfig }: {
           );
         })}
       </div>
-      {modo === "completo" && estado && !estado.vt && (
-        <Cartao className="mt-4 border-atencao/40 bg-atencao-suave p-4 text-sm text-atencao">
-          Sem a chave gratuita do VirusTotal, o modo Completo funciona como o Rápido.{" "}
-          <button className="font-semibold underline" onClick={onConfig}>Cadastrar a chave</button>
+      {modo === "completo" && estado && (
+        <Cartao className="mt-4 p-4 text-sm text-fraco">
+          Tudo é analisado no próprio CelScan. A 1ª vez demora mais (lê o código de cada app); depois fica guardado e as próximas varreduras do mesmo celular são rápidas.
+          {estado.vt ? " O VirusTotal também será consultado nos suspeitos." : <> Opcional: <button className="font-semibold underline" onClick={onConfig}>ligar o VirusTotal</button> como segunda opinião.</>}
         </Cartao>
       )}
       {!conectado && (
         <p className="mt-4 text-perigo" role="alert">O celular foi desconectado. Reconecte o cabo para continuar.</p>
       )}
       <div className="mt-6 flex gap-3">
-        <Botao variante="primario" disabled={!conectado} onClick={() => onIniciar(modo)} autoFocus>Iniciar varredura</Botao>
+        <Botao variante="primario" disabled={!conectado} onClick={() => onIniciar(modo)} autoFocus title="Ctrl+Enter">Iniciar varredura</Botao>
         <Botao onClick={onVoltar}>Trocar de aparelho</Botao>
       </div>
     </div>

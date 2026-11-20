@@ -111,6 +111,9 @@ def cmd_android(a):
     ap = escolher_aparelho(a.serial)
     modo = a.modo or ("completo" if preferencias.chave_virustotal() else "rapido")
     opcoes = servicos.OpcoesVarredura(modo=modo, sistema=a.sistema, usar_iocs=not a.sem_iocs, vt_todos=a.vt_todos)
+    if getattr(a, "json", False):  # saída só com o JSON (para scripts e integrações), sem barra nem laudo
+        _json(servicos.executar_varredura(ap, opcoes).como_dict())
+        return
     con.print(f"[dim]Modo: {servicos.MODOS[modo]}[/]")
 
     with barra() as p:
@@ -152,9 +155,20 @@ def cmd_android(a):
         for r in alvos:
             texto = "\n".join(f"• [bold]{x['titulo']}[/]\n  [dim]{x['significa']}[/]\n  → {x['fazer']}"
                               for x in r["achados"])
-            con.print(Panel(texto, title=f"{r['pacote']} (risco {r['score']})",
+            con.print(Panel(texto, title=f"{r.get('nome') or r['pacote']} · {r['pacote']} (risco {r['score']})",
                             border_style="red" if r["score"] >= 60 else "yellow"))
-            if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60):
+            from celscan.acoes import evidencias
+            cuidado = False
+            if evidencias.eh_vigilancia(r):
+                cuidado = True
+                con.print("[bold yellow]Atenção:[/] parece app espião. Remover pode avisar quem instalou. Se a pessoa "
+                          "corre risco, guarde as provas antes (interface: 'Documentar antes de remover') e procure "
+                          "ajuda: 190 (polícia) ou 180 (Central de Atendimento à Mulher).")
+            if r.get("sensivel"):
+                cuidado = True
+                con.print("[bold yellow]Atenção:[/] este app guarda senhas, códigos de 2 etapas, carteira ou "
+                          "conversas. Confirme com o dono que ele tem como entrar nas contas.")
+            if Confirm.ask("Remover? (fica cópia na quarentena)", default=r["score"] >= 60 and not cuidado):
                 with con.status("Removendo..."):
                     feito = servicos.remover_apps(ap, [r])[0]
                 con.print(f"  {'[green]✔' if feito['ok'] else '[red]✘'}[/] {feito['mensagem']}")
@@ -294,6 +308,8 @@ def cmd_quarentena(a):
         if ok:
             db.marcar_desfeita(db.conectar(), a.id)
         con.print(("[green]✔ Restaurado[/]" if ok else "[red]✘ Falhou[/]") + f"  {out[-300:]}")
+        if not ok:
+            sys.exit(1)  # scripts do técnico precisam saber que não deu certo
 
 
 # ---------------------------------------------------------------- ios
@@ -373,6 +389,17 @@ def cmd_parear(a):
 
 def cmd_historico(a):
     con_db = db.conectar()
+    if a.app:
+        achou = db.buscar_app(con_db, a.app, a.limite)
+        if not achou:
+            return con.print(f"Nenhuma análise com '{a.app}' (use pelo menos 3 letras).")
+        t = Table(header_style="bold", title=f"Onde '{a.app}' apareceu")
+        for c in ("Varredura", "Data", "Aparelho", "App", "Pacote", "Risco"):
+            t.add_column(c, overflow="fold")
+        for x in achou:
+            t.add_row(str(x["varredura_id"]), x["data"][:16].replace("T", " "), x["aparelho"], x["nome"] or "",
+                      x["pacote"] or "", f"{x['nivel']} ({x['score']})")
+        return con.print(t)
     linhas = db.varreduras(con_db, a.serial, a.limite)
     if not linhas:
         return con.print("Nenhuma varredura registrada ainda.")
@@ -558,6 +585,18 @@ def cmd_fixtures(a):
 
 
 def cmd_bases(a):
+    if a.exportar:
+        feitas = bases.exportar(a.exportar)
+        con.print(f"[green]✔[/] {len(feitas)} base(s) gravada(s) em {a.exportar}: {', '.join(feitas)}")
+        con.print("Leve o arquivo para o PC sem internet e rode: [bold]celscan bases --importar ARQUIVO[/]")
+        return
+    if a.importar:
+        try:
+            for nome, situacao in bases.importar(a.importar):
+                con.print(f"{'[green]✔' if situacao == 'importada' else '[dim]·'}[/] {nome}: {situacao}")
+        except (OSError, ValueError) as e:
+            con.print(f"[red]Não consegui importar:[/] {e}")
+            sys.exit(1)
     if a.atualizar:
         for b in bases.todas():
             with con.status(f"Atualizando {b.descricao}..."):
@@ -574,11 +613,30 @@ def cmd_bases(a):
     con.print(t)
 
 
+def cmd_finalizar(a):
+    from celscan.acoes import atendimento
+    ap = escolher_aparelho(a.serial)
+    for linha in atendimento.finalizar(ap, desligar_depuracao=not a.manter_depuracao):
+        con.print(f"[green]✔[/] {linha}")
+    if not a.manter_depuracao:
+        con.print("Pode desconectar o cabo. Se precisar de novo, ligue a Depuração USB nas Opções do desenvolvedor.")
+
+
+def _json(obj) -> None:
+    """Imprime JSON puro no stdout (sem cores do rich), com acentos legíveis."""
+    import json
+
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False, indent=2, default=str) + "\n")
+
+
 def cmd_na_tela(a):
     """Qual app está na tela agora (pegar no flagra o app do pop-up)."""
     from celscan.acoes import na_tela
 
     x = na_tela.ler(escolher_aparelho(a.serial))
+    if a.json:
+        _json(x)
+        return
     if not x:
         sys.exit("Não deu para identificar o app na tela. Desbloqueie o celular e tente de novo.")
     con.print(Panel(f"[bold]{x['pacote']}[/]\nTela: {x['classe']}"
@@ -591,6 +649,9 @@ def cmd_consumo(a):
     from celscan.acoes import consumo
 
     d = consumo.ler(escolher_aparelho(a.serial))
+    if a.json:
+        _json({**d, "apps": d["apps"][:a.limite]})
+        return
     if not d["disponivel"]:
         sys.exit("Este aparelho não expôs o consumo por app pelo cabo.")
     t = Table(header_style="bold")
@@ -600,6 +661,73 @@ def cmd_consumo(a):
         t.add_row(r["pacote"], f"{r['movel_mb']} MB", f"{r['wifi_mb']} MB", f"{r['enviado_mb']} MB")
     con.print(t)
     con.print(f"[dim]{d['observacao']}[/]")
+
+
+def cmd_autodiagnostico(a):
+    """Confere a instalação do CelScan."""
+    from celscan.core import autodiagnostico as ad
+
+    itens = ad.verificar()
+    t = Table(header_style="bold", title="Autodiagnóstico do CelScan")
+    for c in ("", "Item", "Situação", "O que fazer"):
+        t.add_column(c, overflow="fold")
+    for i in itens:
+        marca = "[green]✔[/]" if i["ok"] else "[red]✘[/]" if i["ok"] is False else "[dim]•[/]"
+        t.add_row(marca, i["item"], i["detalhe"], i["dica"])
+    con.print(t)
+    con.print(ad.resumo(itens))
+    sys.exit(1 if any(i["ok"] is False for i in itens) else 0)
+
+
+def _celula_csv(v) -> str:
+    """Mesma proteção da interface: texto que começa com = + - @ viraria fórmula no Excel."""
+    t = "" if v is None else str(v)
+    return "'" + t if t[:1] in ("=", "+", "-", "@", "\t", "\r") else t
+
+
+def cmd_apps(a):
+    """Lista os apps de uma varredura salva (a última do aparelho, ou --id), com nome real e datas."""
+    import csv
+    from contextlib import closing
+
+    from celscan.core import db
+    with closing(db.conectar()) as con_db:
+        vid = a.id
+        if vid is None:
+            linhas = db.varreduras(con_db, a.serial, 1)
+            if not linhas:
+                sys.exit("Nenhuma varredura salva" + (f" para {a.serial}" if a.serial else "") + ".")
+            vid = linhas[0]["id"]
+        retrato = db.retrato(con_db, vid)
+    if retrato is None:
+        sys.exit(f"Varredura {vid} não encontrada.")
+    apps = retrato.get("apps", [])
+    if a.risco:  # só o que precisa de atenção (alto e médio; com --risco alto, só alto)
+        niveis = {"alto": ("ALTO",), "medio": ("ALTO", "MÉDIO")}[a.risco]
+        apps = [r for r in apps if r.get("nivel") in niveis]
+    if a.json:
+        _json(apps)
+        return
+    colunas = ("nome", "pacote", "instalado", "ultimo_uso", "origem", "nivel", "score")
+    if a.csv:
+        with open(a.csv, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(colunas)
+            for r in apps:
+                valores = [r.get(c) if c != "origem" else (r.get("loja") or r.get("origem")) for c in colunas]
+                w.writerow([_celula_csv(v) for v in valores])
+        con.print(f"Planilha salva em {a.csv}")
+        return
+    t = Table(header_style="bold", title=f"Varredura nº {vid}")
+    for c in ("App", "Pacote", "Instalado", "Último uso", "Origem", "Risco"):
+        t.add_column(c, overflow="fold")
+    for r in apps:
+        cor = {"ALTO": "red", "MÉDIO": "yellow"}.get(r["nivel"], "green")
+        t.add_row(r.get("nome") or r["pacote"], r["pacote"], (r.get("instalado") or "")[:10],
+                  (r.get("ultimo_uso") or "")[:10], r.get("loja") or r.get("origem") or ("sistema" if r.get("sistema")
+                                                                                       else "fora da loja"),
+                  f"[{cor}]{r['score']} {r['nivel']}[/]")
+    con.print(t)
 
 
 def cmd_iocs(a):
@@ -613,6 +741,7 @@ def cmd_iocs(a):
 def main():
     p = argparse.ArgumentParser(prog="celscan", description=f"CelScan {VERSAO} — segurança e otimização via USB")
     p.add_argument("--offline", action="store_true", help="Não acessa a internet (usa só as cópias locais)")
+    p.add_argument("--version", "-V", action="version", version=f"CelScan {VERSAO}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("android", help="Varredura de segurança do Android")
@@ -628,6 +757,7 @@ def main():
     s.add_argument("--loja", help="Nome da loja/assistência no laudo")
     s.add_argument("--saida", default="laudos")
     s.add_argument("--nao-abrir", action="store_true", help="Não abre o laudo no navegador")
+    s.add_argument("--json", action="store_true", help="Só imprime o resultado em JSON (sem laudo nem remoção)")
     s.set_defaults(func=cmd_android)
 
     s = sub.add_parser("otimizar", help="Diagnóstico e otimização do Android")
@@ -668,6 +798,7 @@ def main():
     s = sub.add_parser("historico", help="Varreduras e ações anteriores (banco local)")
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
+    s.add_argument("--app", metavar="NOME", help="Procura um app (nome ou pacote) em todas as análises")
     s.set_defaults(func=cmd_historico)
 
     s = sub.add_parser("laudo", help="Gera o laudo PDF de uma varredura do histórico")
@@ -716,13 +847,27 @@ def main():
     s.add_argument("--revogar", nargs="*", help="permissões Android a revogar (ex: android.permission.READ_SMS)")
     s.set_defaults(func=cmd_permissoes)
 
+    s = sub.add_parser("autodiagnostico", help="Confere se a instalação do CelScan está inteira")
+    s.set_defaults(func=cmd_autodiagnostico)
+
+    s = sub.add_parser("apps", help="Lista os apps de uma varredura salva (nome real, datas, origem, risco)")
+    s.add_argument("--serial")
+    s.add_argument("--id", type=int, help="Número da varredura (padrão: a última)")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--csv", metavar="ARQUIVO", help="Salva em planilha CSV")
+    s.add_argument("--risco", nargs="?", const="medio", choices=("alto", "medio"),
+                   help="Só os apps de risco (padrão: alto e médio; 'alto' para só os de risco alto)")
+    s.set_defaults(func=cmd_apps)
+
     s = sub.add_parser("na-tela", help="Mostra qual app está na tela agora (pega o app do pop-up no flagra)")
     s.add_argument("--serial")
+    s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_na_tela)
 
     s = sub.add_parser("consumo", help="Internet gasta por app (dados móveis e Wi-Fi)")
     s.add_argument("--serial")
     s.add_argument("--limite", type=int, default=20)
+    s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_consumo)
 
     s = sub.add_parser("certificados-bancos",
@@ -742,7 +887,14 @@ def main():
 
     s = sub.add_parser("bases", help="Situação das bases (indicadores, UAD, certificados)")
     s.add_argument("--atualizar", action="store_true", help="Baixa todas agora")
+    s.add_argument("--exportar", metavar="ARQUIVO.zip", help="Grava as bases num .zip para levar a um PC sem internet")
+    s.add_argument("--importar", metavar="ARQUIVO.zip", help="Usa as bases de um .zip gerado com --exportar")
     s.set_defaults(func=cmd_bases)
+
+    s = sub.add_parser("finalizar", help="Fim do atendimento: limpa os rastros do CelScan e desliga a depuração USB")
+    s.add_argument("--serial")
+    s.add_argument("--manter-depuracao", action="store_true", help="Só limpa; deixa a depuração ligada")
+    s.set_defaults(func=cmd_finalizar)
 
     s = sub.add_parser("iocs", help="Atualiza os indicadores de ameaças")
     s.set_defaults(func=cmd_iocs)
@@ -758,6 +910,10 @@ def main():
     except (servicos.ModoIndisponivel, servicos.Cancelado) as e:
         con.print(Panel(str(e), border_style="yellow"))
         sys.exit(1)
+    except ValueError as e:  # entrada inválida (pacote, categoria...): mensagem curta em vez de traceback
+        log.LOGGER.info("entrada inválida: %s", e)
+        con.print(Panel(str(e), title="Não deu", border_style="red"))
+        sys.exit(2)
     except adb.AdbErro as e:
         log.LOGGER.error("erro de conexão: %s", e)
         con.print(Panel(f"{e}\n\n[dim]Detalhes no log: {arquivo_log}[/]", title="Erro de conexão", border_style="red"))

@@ -1,0 +1,4 @@
+com.exemplo.jogo
+com.systemservice
+com.whatsapp
+com.x8bit.bitwarden

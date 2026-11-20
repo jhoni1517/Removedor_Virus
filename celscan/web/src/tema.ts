@@ -1,24 +1,19 @@
 // Temas do CelScan: tokens vêm do estilo.css; aqui só se escolhe qual vale e se aplica a marca da loja.
 
 export const TEMAS: { id: string; nome: string; amostra: [string, string, string] }[] = [
-  { id: "oficina", nome: "Oficina (destaque)", amostra: ["#0a0c10", "#00e0c6", "#39ff8b"] },
-  { id: "sistema", nome: "Igual ao sistema", amostra: ["#eef0f4", "#1f6feb", "#0b0e12"] },
-  { id: "claro", nome: "Bancada", amostra: ["#eef0f4", "#1f6feb", "#141a22"] },
-  { id: "escuro", nome: "Noite", amostra: ["#0b0e12", "#3cc6ff", "#e9edf3"] },
-  { id: "terminal", nome: "Terminal", amostra: ["#050705", "#5df26b", "#ffb84d"] },
+  { id: "sistema", nome: "Igual ao Windows", amostra: ["#e8eae5", "#f0b400", "#202427"] },
+  { id: "claro", nome: "Bancada (claro)", amostra: ["#e8eae5", "#f0b400", "#16191b"] },
+  { id: "escuro", nome: "Bancada (escuro)", amostra: ["#1a1d1f", "#f0b400", "#eceee9"] },
   { id: "contraste", nome: "Alto contraste", amostra: ["#000000", "#ffd400", "#ffffff"] },
-  { id: "loja", nome: "Minha loja", amostra: ["#eef0f4", "#888888", "#141a22"] },
+  { id: "loja", nome: "Cor da minha loja", amostra: ["#e8eae5", "#888888", "#16191b"] },
 ];
 
 // Modelos de interface: mudam a ESTRUTURA (onde fica o menu, densidade, tipografia, formas e o que
 // aparece), não só as cores. Combinam com qualquer tema de cor.
 export const MODELOS: { id: string; nome: string; descricao: string }[] = [
-  { id: "estudio", nome: "Estúdio", descricao: "Menu lateral com nomes, cartões arejados. O padrão." },
-  { id: "compacto", nome: "Compacto", descricao: "Trilho só de ícones, letra menor, cantos retos e listas densas. Cabe muito mais na tela." },
-  { id: "toque", nome: "Toque", descricao: "Barra de botões grandes embaixo, tudo maior e espaçado. Para tablet ou tela de toque no balcão." },
-  { id: "revista", nome: "Revista", descricao: "Menu no topo, títulos serifados e leitura em coluna central. Bom para mostrar ao cliente." },
-  { id: "assistente", nome: "Assistente", descricao: "Sem menus: um passo por vez (conectar, analisar, resolver) com botões grandes. Para leigos." },
-  { id: "cliente", nome: "Modo cliente", descricao: "Para uma segunda tela virada ao cliente: nota, Raio-X e o que foi encontrado, atualizando sozinho." },
+  { id: "estudio", nome: "Completo", descricao: "Menu lateral com todas as seções. O padrão." },
+  { id: "assistente", nome: "Assistente", descricao: "Sem menus: um passo por vez (conectar, analisar, resolver) com botões grandes. Para quem não é técnico." },
+  { id: "cliente", nome: "Tela do cliente", descricao: "Para uma segunda tela virada ao cliente: nota e o que foi encontrado, atualizando sozinho." },
 ];
 
 export function modeloValido(modelo: string | null | undefined): string {

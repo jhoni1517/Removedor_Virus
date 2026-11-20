@@ -104,7 +104,12 @@ PREFIXOS_SISTEMA = ("com.android.", "com.google.android.", "com.samsung.android.
 NOMES_SISTEMA = {_norm(n) for n in (
     "Configurações", "Settings", "Serviços do Google Play", "Google Play Services", "Sistema", "System",
     "Atualização do sistema", "System update", "Android System", "Sistema Android", "Segurança", "Security",
-    "Wi-Fi", "Bateria", "Battery", "Google Services", "System Service", "Serviço do sistema")}
+    "Wi-Fi", "Bateria", "Battery", "Google Services", "System Service", "Serviço do sistema",
+    # disfarces comuns de apps espiões (stalkerware) e trojans
+    "Sync Services", "Sync Service", "System Update Service", "Update Service", "Device Health", "Device Services",
+    "Android Services", "Android System WebView Update", "Google Play Update", "Play Update", "System Info",
+    "Wi-Fi Service", "WiFi Service", "Battery Service", "Security Service", "Cloud Service", "Core Services",
+    "Serviços do sistema", "Atualização", "Atualizador", "Serviços Google", "Gerenciador do sistema")}
 
 
 def finge_sistema(pacote: str, nome: str | None) -> str | None:

@@ -1,0 +1,15 @@
+@@SEC thermal
+Thermal Status: 1
+@@SEC cpu
+policy0 1500000 2000000 2000000
+policy6 1600000 1650000 2200000
+@@SEC top
+  PID USER PR NI VIRT RES SHR S[%CPU] %MEM TIME+ ARGS
+ 4211 u0_a210 10 -10 5.1G 400M 120M S 48.0 5.1 12:01.00 com.exemplo.jogo
+ 1200 system 18 -2 9G 200M 90M S 9.0 2.6 50:00.00 system_server
+@@SEC bateria
+  USB powered: true
+  status: 2
+  level: 80
+  temperature: 395
+@@SEC fim

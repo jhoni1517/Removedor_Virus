@@ -13,7 +13,7 @@ def servidor(monkeypatch):
         "getprop ro.product.model": b"Redmi Note 14\r\n",
         "screencap": b"\x89PNG\r\n\x1a\n\r\nBIN",
         "pm list packages": b"package:a\npackage:b\npackage:c\n",
-        "sh /data/local/tmp/celscan.sh": b"@@SEC props\n[ro.x]: [1]\n@@SEC fim\n",
+        "sh /data/local/tmp/celscan": b"@@SEC props\n[ro.x]: [1]\n@@SEC fim\n",
         "rm -f": b"",
     })
     monkeypatch.setenv("ANDROID_ADB_SERVER_PORT", str(s.porta))
@@ -42,7 +42,8 @@ def test_linhas_direto(servidor):
 def test_script_envia_por_sync_e_executa(servidor):
     s = adb.Aparelho("ABC123").script("sec(){ echo \"@@SEC $1\"; }\nsec props; getprop\nsec fim\n")
     assert "props" in s and "fim" in s
-    assert servidor.arquivos["/data/local/tmp/celscan.sh"].startswith(b"sec(){")
+    enviados = [k for k in servidor.arquivos if k.startswith("/data/local/tmp/celscan_") and k.endswith(".sh")]
+    assert len(enviados) == 1 and servidor.arquivos[enviados[0]].startswith(b"sec(){")
 
 
 def test_aparelho_inexistente_cai_para_o_modo_por_processo(servidor, monkeypatch):

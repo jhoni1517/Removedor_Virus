@@ -9,6 +9,307 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b5 (20/11/2026) — recomendados e opcionais da 3.7.0b4
+
+RECOMENDADO
+- [feito] **Memória por modelo** (compatibilidade.json): cada otimização grava, por fabricante + modelo + Android, o
+  que funcionou e o que foi recusado (com o motivo). No próximo celular igual, a etapa que o modelo sempre recusa
+  vem desmarcada com o aviso. Tabela "O que cada modelo aceita" na aba Técnico — a tabela por marca agora é
+  montada com aparelhos reais.
+- [feito] **Reanalisa sozinho depois do reinício** (o botão Reiniciar marca; quando o celular volta, a análise roda).
+- [feito] **Outros apps de fábrica** na aba Apps do sistema: apps pré-instalados fora da lista curada, pela lista
+  pública UAD (seguros / + avançados), com remoção conferida e motivo de cada falha.
+
+OPCIONAL
+- [feito] **Relatório da otimização em PDF**: o que estava errado (medido antes), o que foi feito etapa por etapa e
+  o que foi medido depois, com a nota. Botão "Baixar relatório (PDF)" no resultado.
+- [feito] **Otimizar sozinho ao conectar** (Configurações, desligado por padrão): ao conectar, analisa e aplica as
+  etapas recomendadas, no máximo 1x a cada 20 h por celular. É a versão "agendada" possível pelo PC.
+- [pendente] App companheiro via Shizuku (perfis por horário rodando no próprio celular): exige um app Android
+  separado; fica para uma fase própria.
+
+CRÍTICO/ALTO aplicados de novo
+- "Destravar app" confere no Android se a compilação ficou mesmo completa (antes confiava no "Success").
+- Aba Técnico (debloat UAD) também mostra o motivo real de cada app que não saiu.
+
+## Beta 3.7.0b4 (20/11/2026) — o que o CelScan diz que fez, ele fez (e prova)
+
+Relato do Jhoni (Redmi Note 14 Pro 5G): "mandei remover, disse que fez, o Google TV continua lá"; "otimizei e a
+análise acusa os mesmos problemas". Causas achadas no código e corrigidas:
+
+CRÍTICO
+- [feito] Remoção de apps contava como feita só porque o comando respondeu ("disabled-user"); agora confere no
+  celular (pm list packages -e). Se continuar ativo, tenta remover só para o usuário e confere de novo; se ainda
+  assim ficar, mostra o app em "Não saíram" com o motivo real (ex.: bloqueio do Xiaomi).
+- [feito] O aviso dizia "N app(s) removidos" mesmo com 0 ou com a tarefa em erro.
+- [feito] Diagnóstico acusava sempre "Xiaomi fechando apps", "Vídeo engasgando" e "Câmera travando" (bastava ter
+  RAM ≥ 7 GB, ter Netflix ou ter câmera). Agora mede o ESTADO: ajuste já ligado, app de vídeo já com compilação
+  completa e câmera compilada não aparecem mais; aparece a lista "Já está bom".
+- [feito] Teste de gravação no diagnóstico: se o celular recusa os ajustes (Xiaomi sem "Depuração USB
+  (Configurações de segurança)"), vira problema CRÍTICO com o passo a passo, em vez de fingir que otimizou.
+- [feito] Resultado da otimização etapa por etapa (✓/✗ + o que foi feito ou por que falhou) e nova medição no
+  fim: "Resolvidos" x "Ainda pendente".
+
+ALTO
+- [feito] Ajustes de device_config (fim dos processos fantasmas) voltavam sozinhos: o Google sincroniza as flags e
+  sobrescreve. Agora a sincronização é travada (device_config set_sync_disabled_for_tests persistent), com desfazer.
+- [feito] "Câmera (Xiaomi) (everything)" e "Galeria (?)" viraram texto claro (completa / sem compilar / parcial).
+- [feito] Lista de apps: Facebook pré-instalado e "Ativação Netflix (parceiro)".
+
+RECOMENDADO (próximos)
+- Validar no Redmi real cada etapa e montar a tabela por marca (o que o HyperOS aceita/recusa).
+- Reanalisar sozinho depois que o celular volta do reinício.
+- "Apps do sistema": mostrar também os demais apps pré-instalados fora da lista curada (hoje só na aba Técnico).
+
+BAIXO / OPCIONAL
+- App companheiro via Shizuku (fase 2), atalhos de perfil por horário, exportar relatório da otimização em PDF.
+
+## Beta 3.7.0b3 (20/11/2026) — andamento em tempo real que não some
+
+- A análise da Otimização virou tarefa do programa (POST /api/turbo/receita/analisar) com 5 etapas e progresso:
+  trocar de aba ou de menu não cancela nem esconde mais — ao voltar, a barra continua de onde estava e o
+  resultado aparece quando terminar.
+- Barra de andamento nova (etapa, detalhe, %, tempo decorrido e quanto falta, trilha de etapas) em todas as abas
+  do Otimizar para qualquer operação rodando no celular (otimizar, remover apps, destravar, espaço, flagrante...).
+- O estado das tarefas em andamento é sincronizado pelo /api/estado: sobrevive a recarregar a janela; a tarefa
+  que terminou com a tela fechada tem o resultado buscado sozinho.
+- "Há uma operação em andamento" agora diz QUAL operação ("Espere terminar: otimização em andamento...").
+
+## Beta 3.7.0b2 (20/11/2026) — por que trava, destravar app e Apps do sistema (foco Xiaomi)
+
+- **Por que está travando** (aba Otimizar): antes do plano, o CelScan mede e mostra cada causa com a prova —
+  apps sem compilar (% medido no dexopt; causa nº 1 depois de atualização do HyperOS), armazenamento quase cheio,
+  modo economia ligado, calor, memória apertada / Xiaomi fechando apps, dias sem reiniciar, apps da marca ativos,
+  interface pesada, Joyose ligado, animações lentas, apps de vídeo e câmera sem compilar. Cada causa já marca a
+  etapa que a resolve no plano; no fim aparece "Reiniciar o celular" quando algum ajuste precisa.
+- **Etapas novas**: desligar modo economia, destravar apps de vídeo (Netflix, YouTube, Prime, Disney+,
+  Globoplay...), desativar o Joyose (opcional, avisa do calor).
+- **Um app específico travando?**: Netflix, câmera, galeria ou qualquer pacote: compilação completa, sai do balde
+  "raro/restrito", fica fora da economia de bateria da marca, cache limpo e reaberto do zero. Desfaz no Histórico.
+- **Apps do sistema** (aba própria): lista curada maior — Xiaomi 44 apps (anúncios, duplicados, inúteis no Brasil,
+  opcionais, avançados), Samsung 16, Google pouco usados 7, parceiros. Grupos com "marcar todos", o que se perde
+  em cada app, lista "Já removidos" com botão Devolver e Reiniciar no fim. Nada é apagado: some só para o
+  usuário.
+- Limpeza: o card de faxina virou "Anúncios e câmera" (DNS + câmera).
+
+## Beta 3.7.0b1 (19/11/2026) — antivírus mais forte e otimização que mostra resultado
+
+Remoção de vírus
+- **Remoção forte**: além de desinstalar, corta instalar outros apps, rodar escondido e notificar; se não sair,
+  o app é suspenso (pm suspend). Depois de remover, o CelScan confere se o app **voltou sozinho** (dropper) e
+  aponta quem o instalou.
+- **"É falso alarme"**: o técnico marca o app; vale só para aquela assinatura digital (se trocar, volta a ser
+  analisado). Ameaça com prova (lista pública, código de trojan) aparece sempre. Lista em Configurações.
+- **Assinaturas offline**: impressões digitais (SHA-256) de APKs maliciosos do MalwareBazaar (chave gratuita do
+  abuse.ch, guardada no cofre do Windows, atualiza 1x/dia) + listas próprias importadas em Configurações. Bateu =
+  "ameaça confirmada", sem internet na hora da verificação.
+- **Pegar no flagra**: observa o celular de 1 a 5 min enquanto a pessoa usa e aponta de qual app é o anúncio que
+  aparece do nada (tela de anúncio aberta por cima de outro app), quem desenha por cima e quem usa a internet
+  escondido (conexões por app em /proc/net/tcp).
+- **Blindar o celular** (aparece depois de remover): Play Protect ligado, só a loja instala apps (tira a permissão
+  de quem é de fora), DNS contra golpes (Cloudflare Security) e checklist do dono (senha Google, Pix, WhatsApp Web,
+  PIN do chip). Tudo desfaz no Histórico.
+
+Otimização
+- **Antes e depois**: a Otimização completa mede a nota antes e depois e mostra o ganho em pontos e %.
+- **Quem gasta a bateria**: mAh por app desde a última carga e tempo que cada um impediu o celular de dormir,
+  com botão "Só rodar aberto".
+- **Espaço**: maiores arquivos, repetidos (confere por hash, fica sempre 1) e mídia com mais de 6 meses
+  (WhatsApp, Telegram, Downloads). Tudo é copiado para "CelScan Backups" no PC antes de apagar.
+- **Monitor ao vivo** no Modo de jogo: temperatura, uso dos núcleos, FPS e quadros travados a cada 2 s, em
+  gráfico. Jogos Unity/Unreal não informam quadros ao Android: aparecem só temperatura e processador.
+
+O que ainda depende de celular de verdade (honesto)
+- **Ajustes por marca**: testados em simulador e nas chaves documentadas do Android. Xiaomi/HyperOS, Samsung One UI
+  e Motorola podem ignorar alguns (o CelScan confere depois de aplicar e avisa "o Android não aceitou"). Falta a
+  tabela validada aparelho a aparelho — cada teste real que você fizer vira uma linha dela.
+- **Formato do batterystats**: lido nos dois formatos conhecidos (Android 9–11 e 12+). Se algum aparelho mostrar a
+  lista vazia, mande o modelo.
+- **Fase 2 (app no celular via Shizuku)**: segue no plano, não começou. Hoje tudo roda do PC por cabo/Wi-Fi.
+
+## Beta 3.6.0b3 (18/11/2026) — telas mais limpas
+
+- **Otimizar**: os 12 painéis empilhados viraram 5 abas — Otimizar (otimização completa + nota), Limpeza (anúncios,
+  apps da marca, câmera, apps parados, RAM), Bateria e espaço (o antigo Diagnóstico, sem os painéis repetidos),
+  Desempenho (perfis, ajustes, jogo, calor, rede) e Técnico (compilação manual, lista completa de apps de fábrica,
+  manutenção, editor, iPhone). Some a sub-aba duplicada do menu. Ação principal: "Ver o que dá para otimizar".
+- **Resultado da verificação**: só 2 abas grandes (Problemas, Todos os apps); poderes, anúncios, câmera/microfone e
+  internet viram "Detalhes" discretos.
+
+## Beta 3.6.0b2 (18/11/2026) — certeza: "ameaça confirmada" × "suspeito"
+
+Cada app ganha `certeza`: **confirmado** (lista pública, assinatura falsa, antivírus, código de trojan bancário,
+robô do Telegram/Discord, servidor de spyware), **provável** (risco alto só por sinais), **vale conferir** (médio).
+A frase do resultado só fala em "ameaça confirmada" quando há prova; senão diz "nenhum vírus confirmado, N apps
+suspeitos para conferir".
+
+## Beta 3.6.0b1 (18/11/2026) — visual novo, verificação estável e fim do "github.com espionagem"
+
+Teste real num Xiaomi 24090RA29G (HyperOS, Android 16) mostrou 9 apps "ALTO" que eram falsos alarmes.
+
+| Problema visto | Causa | Correção |
+|---|---|---|
+| "Fala com servidor de espionagem: github.com" em quase todo app | a lista MVT/Echap traz URLs de arquivos no GitHub; a URL virava o domínio inteiro | sites de hospedagem pública (GitHub, Google, nuvens, Telegram...) nunca viram domínio de ameaça, nem em cache antigo |
+| Apps da Play sem ícone como "escondidos" (Verifier, Watch Manager, Editor da Galeria) | regra "sem ícone" valia para app da loja | só pesa em app de fora da loja |
+| Facebook "fora da loja" e "instalado há 26 anos" | instalador `com.facebook.system` (pré-instalado) e data de fábrica 1970/2000 | instalador de parceiro conta como origem confiável; datas antes de 2009 são descartadas |
+| "Código tenta usar root", "manda SMS", "bloco cifrado" em app sério | bancos procuram root para se proteger; recursos comprimidos parecem cifrados | "root" saiu; SMS só fora da loja; bloco cifrado só se o app também carrega código; sinal sem peso nem aparece |
+| Processador "-3343 ms" | `date +%s%N` não existe em alguns Android | tempo medido pelo `/proc/uptime`; valor inválido vira "sem dados" |
+| Tela de verificação parada nas bolinhas cinzas | no WebView2 o WebSocket não entregava o progresso | a consulta periódica também atualiza o andamento |
+| Sair da tela perdia o andamento | tempo e etapas eram da tela, não da tarefa | tempo vem da tarefa; aviso "Verificação em andamento NN%" no menu |
+| Porcentagem estranha | cada etapa valia o mesmo | porcentagem pelo peso de tempo de cada etapa, nunca volta para trás |
+
+Visual: tema "Bancada" (cinza mineral, trilho grafite, amarelo de instrumento de medição), fonte Archivo,
+sem brilhos/gradientes/papel quadriculado. Menu com 5 seções (Verificar vírus, Otimizar, Recuperar arquivos,
+Atendimentos, Configurações). Tela de verificação centralizada com o personagem Lupi e medidor de régua.
+Resultado abre com uma frase ("2 apps perigosos neste celular") e 3 ações; o resto fica em "Mais opções".
+
+## Beta 3.5.0b1 (18/11/2026) — varredura de vírus refeita (Motor CelScan local, menos falso alarme)
+
+Problemas relatados num aparelho real: ícones errados, nomes estranhos, apps faltando na lista, alarme grave em
+apps oficiais (Caixa, WhatsApp) e um "gerenciador de PDF" malicioso que passou batido.
+
+| Problema | Causa | Correção |
+|---|---|---|
+| Ícones e nomes errados | Agente desligado por padrão; apps da Play em pedaços guardam ícone no `split_config.*dpi.apk` | Agente ligado por padrão; sem ele, ícone lido também dos pedaços de densidade; aviso específico da Xiaomi ("Instalar via USB") |
+| Faltavam apps na lista | varredura rápida só listava apps do usuário | apps de fábrica COM ícone entram na lista (`so_lista`) |
+| WhatsApp/Caixa como risco grave | permissões (câmera, microfone, contatos, sobreposição) somavam pontos até em app da loja | permissões/appops só pesam fora da loja; acessibilidade/admin/notificações pesam pouco em app da loja e nada em app de fábrica |
+| PDF malicioso não detectado | droppers chegam pela Play Store como utilitários | regra "Utilitário com poder de vírus" (PDF, QR, limpador... + acessibilidade/instalar apps/admin/SMS), vale para qualquer loja |
+| Antivírus online ruim | dependia do VirusTotal | **Motor CelScan**: lê os `classes*.dex` e `assets/` pelo cabo e acha lista de bancos-alvo + acessibilidade, Pix, APK/DEX/bloco cifrado escondido, robô do Telegram/Discord, domínios de spyware, SMS, root, empacotadores. Cache por hash. VirusTotal virou opcional |
+
+Rápido: motor nos apps que dão motivo (fora da loja, com poderes, sem ícone, utilitários). Completo: motor em todos.
+Testes: `testes/test_motor.py` (12). Suíte: 348 ok.
+
+## Beta 3.4.0b2 (18/11/2026) — Faxina geral (anúncios, apps da marca, DNS, câmera, Xiaomi)
+
+- **Faxina da marca** (`celscan/acoes/faxina.py`): lista curada por fabricante com o que cada app faz e o que se
+  perde. Xiaomi/Redmi/POCO: MSA e Analytics (anúncios em Configurações/Segurança/Arquivos/Temas), App Vault,
+  carrossel de papéis de parede, Quick Apps, Navegador Mi, Mi Vídeo, Mi Música, GetApps; Joyose em "avançado".
+  Samsung, Motorola e parceiros (Facebook, Amazon, operadora). Só aceita pacotes da lista; desativa via quarentena.
+- **Bloqueio de anúncios por DNS privado** (no lugar de VPN): AdGuard, AdGuard Família, Mullvad, Cloudflare ou
+  servidor próprio (NextDNS). `private_dns_mode=hostname`; desfaz pelo Histórico.
+- **Câmera mais rápida**: compila câmera/galeria em `speed`, `pm clear --cache-only` (Android 14+), reinicia a
+  câmera e avisa quando o armazenamento cheio é a causa.
+- **Ajustes novos**: "Mais apps abertos" (`max_cached_processes=64`, contra apps que recomeçam) e
+  "Interface leve Xiaomi" (`deviceLevelList v:1,c:3,g:3`, experimental). Ajustes agora podem ser por marca.
+- **Receita** inclui faxina da marca, câmera, mais apps abertos (≥7 GB), DNS e interface leve (opcionais).
+
+## Beta 3.4.0b1 (18/11/2026) — aba Turbo (funções dos otimizadores via Shizuku, pelo PC)
+
+Base: análise de 64 fotos de dois apps (otimizador de compilação Rápida/Completa/Extrema e VOID ADB).
+Decisão: **tudo pelo computador (USB ou Wi-Fi ADB)**. O shell do ADB tem o mesmo poder do Shizuku, sem
+instalar nada no celular do cliente (importante em aparelho infectado) e sem o Shizuku cair com a tela apagada.
+
+| Função vista nas fotos | No CelScan | Como (real) |
+|---|---|---|
+| Otimização Rápida/Completa/Extrema | Compilação por modo e grupo | `cmd package compile -m speed-profile/speed/everything -f` |
+| Seus apps mais usados compilados | Escopo "5 mais usados" | estatística de uso do Android (`dumpsys usagestats`) |
+| Apps do sistema / Play Services / WebView compilados | Escopos Sistema, Google, WebView | idem |
+| Manter tela ligada durante a otimização | automático | `svc power stayon` e volta ao valor anterior |
+| Ficha do aparelho | Ficha | getprop, `dumpsys display/thermalservice`, `/proc`, Vulkan das features |
+| Nota VOID | Nota medida (0–100) | laço de CPU 1 e N núcleos, banda de memória, quadros travados, disco, latência |
+| Calor e Lentidão | Calor e lentidão | status térmico, limite de cada cluster da CPU, `top`, carregando |
+| Comilões de RAM (Leve/Soneca/Forte) | Comilões de RAM | `dumpsys meminfo` por estado; `am kill` / balde rare / `force-stop` |
+| Fim dos processos fantasmas | Ajuste | `device_config max_phantom_processes` + `settings_enable_monitor_phantom_procs` |
+| Congelador de cache | Ajuste | `device_config activity_manager_native_boot use_freezer` |
+| Limite de processos | Ajuste "Menos apps escondidos" | `max_cached_processes` |
+| Dados em repouso no Wi-Fi, Sem Wi-Fi automático, Sem troca de rede | Ajustes | `mobile_data_always_on`, `wifi_wakeup_enabled`, `network_avoid_bad_wifi` |
+| Sem atualização automática | Ajuste | `ota_disable_automatic_update` |
+| Hz sem queda / 60 Hz | Ajustes de tela | `peak_refresh_rate`/`min_refresh_rate` com o máximo real da tela |
+| Perfis Bateria/Equilíbrio/Máximo | Perfis prontos | conjunto de ajustes com um único desfazer |
+| Apps parados dormindo / esquecidos hibernando | Apps parados | `am set-standby-bucket rare/restricted` (acorda ao abrir) |
+| Proibidos em segundo plano | Botão nos apps parados | appop `RUN_ANY_IN_BACKGROUND ignore` |
+| Modo desempenho, Resolução e FPS do jogo | Modo de jogo | `cmd game mode` / `cmd game set --downscale --fps` (Android 12/13+) |
+| Manutenção antecipada, Faxina do ART, Armazenamento rápido, Limpar cache | Manutenção | `bg-dexopt-job`, `pm art cleanup`, `sm idle-maint run`, `pm trim-caches` |
+| Rede de partida | Rede da partida | banda, RSSI, link, ping e oscilação |
+| Editor de configurações | Editor (técnico) | `settings list/put`, chaves que derrubam o ADB bloqueadas |
+| Receita sob medida | Receita | plano montado pela ficha; executa tudo numa tarefa |
+
+Tudo que muda configuração grava o valor anterior na quarentena (Histórico > Desfazer), inclusive `device_config`.
+
+**Ficou de fora (placebo ou arriscado):** limpar pastas de log (sem root não acessa), "sem relatórios de erro"
+e "limpeza de telemetria" (ganho desprezível), localização de fundo econômica (o padrão do Android já é 30 min),
+"clock sustentado" e "bloquear economia" (precisam de app rodando), 5G/Bluetooth/NFC off no jogo (ganho mínimo),
+"sem teste de conexão" (quebra login de Wi-Fi público), opção Samsung "velocidade de processamento" (chave não
+documentada).
+
+**Fase 2 (precisa de app no celular via Shizuku):** detecção automática do jogo, guarda térmica, mira/DPI por
+jogo, contador de FPS na tela, agendamento de otimização e pós-atualização turbo automática.
+
+Testes: `testes/test_turbo.py` (21). Suíte: 330 ok.
+
+## Beta 3.3.0b2 (11/10/2026) — caçada de bugs 2 (sem funções novas)
+
+| Área | Bug | Correção |
+|---|---|---|
+| API Wi-Fi | endereço `-H x` virava opção do adb | valida `host:porta` e código de 6 dígitos (422) |
+| API backup/recuperação | categoria inválida dava 200 e a tarefa falhava depois | recusa na hora (422) |
+| API abrir-pasta | aceitava arquivo (podia executar um .exe) e negava destino personalizado | só pastas; destinos escolhidos liberados |
+| API ações | reiniciar/limpar/corrigir/finalizar rodavam com backup em andamento | 409 enquanto o aparelho está ocupado |
+| API atualização | instalar fechava o programa no meio de uma tarefa | 409 com tarefa rodando |
+| WebSocket | conexão fechada continuava como ouvinte (vazamento) | detecta desconexão e remove o ouvinte |
+| Apps esquecidos / debloat | sem cancelamento, sem histórico, apagava dados | cancela, registra e remove com `-k` |
+| Remoção | `adb uninstall` em app de fábrica | só `pm uninstall --user 0` |
+| Backup | duas pastas do WhatsApp caíam no mesmo lugar; nomes CON/NUL | rótulos únicos; prefixo em nomes reservados |
+| Recuperação | arquivos com mesmo nome/data se sobrescreviam | nome com hash do caminho |
+| MTP | arquivo cortado era pulado para sempre | confere tamanho, recopia e apaga pedaço |
+| Espelho | stderr do scrcpy enchia e congelava a tela | thread drena o log |
+| Agente | erro após instalar deixava o app no celular; downgrade falhava | desinstala no erro; reinstala em downgrade |
+| iPhone | comando travado prendia para sempre; backup decifrado ficava no disco | timeouts; apaga o decifrado (LGPD) |
+| Otimização | debloat que falhava deixava item na quarentena; animação aceitava NaN/-1 | descarta; valida 0–10 |
+| Laudo/evidências | nome do modelo com `/` quebrava o arquivo; pasta repetida | nome seguro; pasta única |
+| Atualização | instalador baixado em pasta fixa | pasta temporária própria |
+| CLI | traceback com pacote/categoria inválidos; restaurar falho saía com 0 | mensagem amigável (código 2); código 1 |
+| Web | tarefas acumulavam sem limite; erros sem aviso em exportar/procurar/calcular/desfazer | limite de 30; avisos; desfazer mantém os que falharam |
+
+Testes: `testes/test_v33_bugs2.py` (14 novos). Suíte: 313 ok, 3 pulados.
+
+## Beta 3.3.0b1 (10/10/2026) — 50 upgrades por nível + caçada de bugs
+
+**Crítico (10):** instalador forjado (diz Play Store, mas foi o adb/outro app) · app que voltou depois
+de removido (só se reinstalado depois da remoção) · dropper ativo (instala + controla a tela) · lê
+códigos do banco · golpe do empréstimo · teclado de fora da loja · padrão espião genérico aciona o modo
+vítima (interface e CLI) · perfis/usuários extras e apps só neles · instaladores .apk guardados com
+checagem de hash · apps sensíveis (2FA, senhas, carteira, banco, mensageiro) exigem confirmação.
+Mais: log mascara pareamento/IMEI/telefone/e-mail/token; coleta lê tempo de tela, bateria por app,
+processos vivos e o relógio do celular.
+
+**Prioridade (10):** hashes incrementais (cache por tamanho+data) · prazo aprendido neste PC · aviso
+de bateria baixa · plano por app na confirmação · "Abrir no celular" · varredura liga sozinha na OS
+aberta · bases offline (`--exportar/--importar`, zip validado) · selos Rodando/Voltou/Dados importantes ·
+Finalizar atendimento · conferência automática depois de remover.
+
+**Alto (10):** golpe do empréstimo e leitura de códigos no plano · tempo de tela por app · bateria por
+app · aba Poderes especiais · plano de ação no laudo PDF · apagar instaladores .apk com desfazer ·
+procurar app em todas as análises (`historico --app`) · ameaças do mês no painel · revisão gratuita
+com lembrete no WhatsApp.
+
+**Médio (10):** lembra o modo · % no título · legenda dos níveis · copiar lista de risco · inicial
+colorida no PDF · filtro do histórico · Ctrl+Enter · CSV com colunas novas · "por que está ok" ·
+prazo da revisão configurável.
+
+**Baixo (10):** `--version` · números pt-BR · ícone da aba na cor da nota · "Celular limpo!" ·
+confirmação ao copiar · atalho VirusTotal pelo hash · +19 redes de anúncio · contato da loja no
+rodapé do laudo · leitor de tela anuncia a etapa · `apps --risco`.
+
+| Bugs achados nesta rodada | |
+|---|---|
+| Remover app espião pela CLI acontecia por padrão (Enter), sem o aviso de que alerta quem instalou | ✅ padrão "não" + aviso |
+| `find /sdcard` não entra no link `/sdcard`: a busca por .apk guardados não acharia nada no aparelho | ✅ `/sdcard/` |
+| App só desativado (não removido) seria marcado como "voltou" na visita seguinte | ✅ compara a data de instalação |
+| App reinstalado pelo dono na Play Store seria marcado como "voltou" (+50) | ✅ só fora da loja |
+| Teclado/leitor de notificações do F-Droid ou copiado pelo Smart Switch virava "suspeito" | ✅ lojas alternativas e transferência fora |
+| Perfil "Apps duplos"/Dual Messenger contava como usuário extra; apps no perfil de trabalho eram ALTO | ✅ ignorados / MÉDIO |
+| Prazo 0 (sem revisão) virava 30 dias | ✅ |
+| Tempo da coleta nunca entrava na média (nº de apps definido tarde) | ✅ |
+| Relógio do celular zerado (1970) estragaria "instalado há X dias" | ✅ ignora relógio inválido |
+| Ranking de ameaças e busca no histórico carregavam o JSON inteiro (com ícones) de cada análise | ✅ JSON1 no SQLite, plano B em Python |
+| `@@USER` sem número derrubava o parser (achado no fuzz) | ✅ |
+| `int()` em dígito sobrescrito ("²") passava pelo `isdigit()` | ✅ `isdecimal()` nos parsers |
+| Zip de bases inválido derrubava a CLI com traceback; caminho `../` no zip | ✅ mensagem / ignorado |
+| APK guardado sem tamanho (stat falhou) nunca podia ser apagado | ✅ |
+| Progresso dos hashes contava apps em dobro no plano B | ✅ |
+| Contato da loja com emoji quebraria o rodapé do PDF | ✅ |
+
 ## Beta 3.1.0b1 (10/10/2026) — versão unificada (GitHub + CelScan 3.0 do chat)
 
 Comparação feita entre esta base (3.0.0b11) e a versão 3.0 gerada no chat. Esta base estava muito à

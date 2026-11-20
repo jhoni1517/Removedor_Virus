@@ -134,13 +134,18 @@ def binario(serial: str, comando: str, timeout: float = 60) -> bytes:
     return dados
 
 
-def linhas(serial: str, comando: str) -> Iterator[str]:
-    """Saída linha a linha (para barra de progresso)."""
-    con = _conexao(serial, f"shell:( {comando} ) 2>/dev/null", None)
+def linhas(serial: str, comando: str, silencio: float | None = 180) -> Iterator[str]:
+    """Saída linha a linha (para barra de progresso). `silencio`: segundos sem dados até desistir."""
+    con = _conexao(serial, f"shell:( {comando} ) 2>/dev/null", silencio)
     resto = b""
     try:
         while True:
-            bloco = con.recv(4096)
+            try:
+                bloco = con.recv(4096)
+            except Exception as e:  # noqa: BLE001 — AdbTimeout (adbutils) ou socket.timeout
+                if type(e).__name__ in ("AdbTimeout", "TimeoutError", "timeout"):
+                    raise Timeout(str(e)) from e
+                raise
             if not bloco:
                 break
             resto += bloco

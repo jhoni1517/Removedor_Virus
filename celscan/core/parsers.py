@@ -89,7 +89,7 @@ def pkgdump(txt: str) -> dict[str, dict]:
         if m:
             # A primeira ocorrência vale (a seção "Hidden system packages" repete nomes).
             cur = pkgs.setdefault(m.group(1), {"perms": set(), "versao": None, "instalado": None,
-                                               "atualizado": None, "origem": None})
+                                               "atualizado": None, "origem": None, "iniciador": None})
             continue
         if re.match(r"^\S", linha):  # nova seção de primeiro nível (ex.: "Hidden system packages:")
             cur = None
@@ -104,6 +104,9 @@ def pkgdump(txt: str) -> dict[str, dict]:
         elif s.startswith("lastUpdateTime=") and not cur["atualizado"]:
             cur["atualizado"] = data(s.split("=", 1)[1])
         elif s.startswith(("installOriginatingPackageName=", "installInitiatingPackageName=")):
+            if s.startswith("installInitiatingPackageName="):
+                ini = s.split("=", 1)[1].strip()
+                cur["iniciador"] = None if ini in ("", "null") else ini
             # quem abriu o instalador: Chrome, WhatsApp, gerenciador de arquivos... (Android 11+)
             v = s.split("=", 1)[1].strip()
             if v and v != "null" and "packageinstaller" not in v and (not cur["origem"] or "Originating" in s):
@@ -233,8 +236,8 @@ def bateria(txt: str) -> dict[str, str | None] | None:
         "nivel": b.get("level"),
         "saude": SAUDE_BATERIA.get(b.get("health", ""), b.get("health")),
         "situacao": STATUS_BATERIA.get(b.get("status", ""), b.get("status")),
-        "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdigit() else None,
-        "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdigit() else None,
+        "temperatura": f"{int(temp) / 10:.1f} °C" if temp.lstrip("-").isdecimal() else None,
+        "tensao": f"{int(volt) / 1000:.2f} V" if volt.isdecimal() else None,
         "ciclos": b.get("cycle count") or b.get("battery cycle count") or b.get("mbatterycyclecount"),
     }
 
@@ -390,20 +393,42 @@ def uso(txt: str) -> tuple[list[tuple[datetime, str, str]], dict[str, datetime],
     return sorted(telas), ultimo, notif
 
 
-def anuncios(telas: list[tuple[datetime, str, str]], sdk_de) -> dict[str, dict]:
-    """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up)."""
+def periodo_eventos(txt: str) -> tuple[datetime, datetime] | None:
+    """Primeiro e último evento do usagestats (telas E notificações): base para 'por dia'.
+
+    Antes o período vinha só das telas; num aparelho com poucas telas registradas e muitas notificações
+    o período virava 1 dia e qualquer app comum parecia mandar notificação em excesso.
+    """
+    ts = [t for m in EVENTO.finditer(txt) if (t := data(m.group(1)[:19]))]
+    return (min(ts), max(ts)) if ts else None
+
+
+def anuncios(telas: list[tuple[datetime, str, str]], sdk_de, janela_s: int = 120) -> dict[str, dict]:
+    """Conta anúncios em tela cheia por app e os que surgiram por cima de outro app (pop-up).
+
+    Pop-up = a tela de anúncio apareceu vindo de OUTRO app (tela inicial, outro app) e a pessoa NÃO entrou no
+    app em seguida. O anúncio de abertura ("app open"), que aparece quando a própria pessoa toca no ícone do
+    jogo e logo depois cai na tela do jogo, não conta: antes isso marcava jogos comuns como adware."""
     res: dict[str, dict] = {}
-    anterior = None
-    for t, pkg, classe in telas:
+    for i, (t, pkg, classe) in enumerate(telas):
         sdk = sdk_de(classe) if classe else None
-        if sdk:
-            r = res.setdefault(pkg, {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": set()})
-            r["tela_cheia"] += 1
-            r["sdks"].add(sdk)
-            r["ultimo"] = max(r["ultimo"], t) if r["ultimo"] else t
-            if anterior and anterior != pkg:
-                r["fora_do_app"] += 1
-        anterior = pkg
+        if not sdk:
+            continue
+        r = res.setdefault(pkg, {"tela_cheia": 0, "fora_do_app": 0, "ultimo": None, "sdks": set(),
+                                 "abertura": 0})
+        r["tela_cheia"] += 1
+        r["sdks"].add(sdk)
+        r["ultimo"] = max(r["ultimo"], t) if r["ultimo"] else t
+        anterior = telas[i - 1][1] if i > 0 else None
+        if not anterior or anterior == pkg:
+            continue
+        seguinte = next(((t2, p2, c2) for t2, p2, c2 in telas[i + 1:] if not (p2 == pkg and sdk_de(c2 or ""))), None)
+        entrou_no_app = (seguinte is not None and seguinte[1] == pkg
+                         and (seguinte[0] - t).total_seconds() <= janela_s)
+        if entrou_no_app:
+            r["abertura"] += 1  # anúncio de abertura: a pessoa abriu o app
+        else:
+            r["fora_do_app"] += 1
     return res
 
 
@@ -412,9 +437,121 @@ def rede(txt: str) -> dict[str, object]:
     linhas = [linha.strip() for linha in txt.splitlines()] + ["", "", "", ""]
     limpo = [("" if v in ("null", "") else v) for v in linhas[:4]]
     return {"dns_modo": limpo[0], "dns_servidor": limpo[1], "vpn_sempre": limpo[2],
-            "vpn_ativa": limpo[3].isdigit() and int(limpo[3]) > 0}
+            "vpn_ativa": limpo[3].isdecimal() and int(limpo[3]) > 0}
 
 
 def home(txt: str) -> str | None:
     achados = re.findall(r"^\s*([\w.]+)/[\w.$]+\s*$", txt, re.M)
     return achados[-1] if achados else None
+
+
+def teclado(txt: str) -> str | None:
+    """'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME' -> pacote do teclado."""
+    v = (txt or "").strip().splitlines()[0].strip() if (txt or "").strip() else ""
+    pkg = v.split("/")[0]
+    return pkg if pkg and pkg != "null" and re.fullmatch(r"[\w.]+", pkg) else None
+
+
+
+# ---------------------------------------------------------------- 3.3: usuários, APKs guardados, uso e bateria
+
+def usuarios(txt: str) -> list[dict[str, object]]:
+    """`pm list users` -> [{id, nome, ativo}] ("UserInfo{10:Trabalho:1030} running")."""
+    res = []
+    for uid, nome, _flags, resto in re.findall(r"UserInfo\{(\d+):([^:}]*):?([0-9a-fA-F]*)\}(.*)", txt):
+        res.append({"id": int(uid), "nome": nome.strip() or f"Usuário {uid}", "ativo": "running" in resto})
+    return res
+
+
+def pacotes_por_usuario(txt: str) -> dict[int, dict[str, str | None]]:
+    """Blocos '@@USER n' + `pm list packages -3 -i --user n` -> {n: {pacote: instalador}}."""
+    res: dict[int, dict[str, str | None]] = {}
+    atual: dict[str, str | None] | None = None
+    for linha in txt.splitlines():
+        if linha.startswith("@@USER "):
+            n = linha[7:].strip()
+            atual = res.setdefault(int(n), {}) if n.isdecimal() else None
+            continue
+        m = re.match(r"^package:([\w.]+)(?:\s+installer=(\S+))?", linha.strip())
+        if m and atual is not None:
+            atual[m.group(1)] = None if m.group(2) in (None, "null") else m.group(2)
+    return res
+
+
+def apks_guardados(txt: str) -> list[dict[str, object]]:
+    """Linhas 'tamanho<TAB>sha256<TAB>caminho' -> [{caminho, tamanho, sha256}]."""
+    res = []
+    for linha in txt.splitlines():
+        partes = linha.split("\t", 2)
+        if len(partes) == 3 and partes[2].startswith("/") and partes[2].lower().endswith(".apk"):
+            sha = partes[1] if re.fullmatch(r"[0-9a-f]{64}", partes[1]) else None
+            res.append({"caminho": re.sub(r"/{2,}", "/", partes[2]),
+                        "tamanho": int(partes[0]) if partes[0].isdecimal() else None,
+                        "sha256": sha})
+    return res
+
+
+def rodando(txt: str) -> set[str]:
+    """`ps -A -o NAME` -> pacotes com processo vivo (processos 'pkg:servico' contam para o pacote)."""
+    res = set()
+    for linha in txt.splitlines():
+        nome = linha.strip().split()[-1] if linha.strip() else ""
+        nome = nome.split(":")[0]
+        if "." in nome and re.fullmatch(r"[A-Za-z0-9_.]+", nome):
+            res.add(nome)
+    return res
+
+
+def relogio(txt: str) -> int | None:
+    """`date +%s` do aparelho (para corrigir 'há X minutos' quando o relógio do PC está diferente)."""
+    v = (txt or "").strip().splitlines()
+    return int(v[0]) if v and v[0].strip().isdecimal() else None
+
+
+def _hms(txt: str) -> int:
+    """'01:02:03', '02:03' ou '1d 02:03:04' -> segundos."""
+    dias = 0
+    m = re.match(r"^\s*(\d+)d\s+(.*)$", txt or "")
+    if m:
+        dias, txt = int(m.group(1)), m.group(2)
+    partes = [int(x) for x in re.findall(r"\d+", txt or "")]
+    seg = 0
+    for x in partes[-3:]:
+        seg = seg * 60 + x
+    return dias * 86400 + seg
+
+
+def tempo_de_uso(txt: str) -> dict[str, int]:
+    """Tempo de tela por app (s) do intervalo semanal do `dumpsys usagestats` (diário se não houver)."""
+    blocos: dict[str, dict[str, int]] = {}
+    atual = "diario"
+    for linha in txt.splitlines():
+        m = re.search(r"In-memory (daily|weekly|monthly|yearly) stats", linha)
+        if m:
+            atual = {"daily": "diario", "weekly": "semanal", "monthly": "mensal", "yearly": "anual"}[m.group(1)]
+            continue
+        m = re.search(r'package=(\S+)\s+totalTimeUsed="([^"]+)"', linha)
+        if m:
+            b = blocos.setdefault(atual, {})
+            b[m.group(1)] = max(b.get(m.group(1), 0), _hms(m.group(2)))
+    return blocos.get("semanal") or blocos.get("diario") or {}
+
+
+def bateria_por_app(txt: str) -> dict[str, float]:
+    """`dumpsys batterystats --checkin`: linhas 'pwi' (uso de energia em mAh por uid) -> {pacote: mAh}."""
+    pacotes: dict[str, list[str]] = {}
+    gasto: dict[str, float] = {}
+    for linha in txt.splitlines():
+        p = linha.strip().split(",")
+        if len(p) >= 6 and p[2] == "i" and p[3] == "uid":
+            pacotes.setdefault(p[4], []).append(p[5])
+        elif len(p) >= 6 and p[2] == "l" and p[3] == "pwi" and p[4] == "uid":
+            try:
+                gasto[p[1]] = gasto.get(p[1], 0.0) + float(p[5])
+            except ValueError:
+                continue
+    res: dict[str, float] = {}
+    for uid, mah in gasto.items():
+        for pkg in pacotes.get(uid, []):
+            res[pkg] = round(mah, 1)
+    return res

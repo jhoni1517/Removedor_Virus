@@ -70,8 +70,15 @@ def pasta_padrao() -> Path:
     return Path(os.getenv("CELSCAN_BACKUPS") or Path.home() / "Documents" / "CelScan Backups")
 
 
+_RESERVADOS = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
 def nome_seguro(texto: str) -> str:
-    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", texto).strip(" .") or "celular"
+    nome = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", texto).strip(" .") or "celular"
+    # o Windows não deixa criar "CON.jpg", "nul.txt", "COM1"... (a cópia falhava sem explicação)
+    if nome.split(".", 1)[0].upper() in _RESERVADOS:
+        nome = "_" + nome
+    return nome
 
 
 def parse_lista(saida: str) -> list[tuple[int, int, str]]:
@@ -122,7 +129,17 @@ def _rotulo_raiz(categoria: str, raiz: str) -> str:
     if len(raizes) == 1:
         return ""
     nomes = [Path(r).name for r in raizes]
-    return Path(raiz).name if nomes.count(Path(raiz).name) == 1 else Path(raiz).parent.name
+    rotulos: list[str] = []
+    for r in raizes:  # nome da pasta; se repetir, o da pasta-mãe; se ainda repetir, numerado
+        base = Path(r).name if nomes.count(Path(r).name) == 1 else Path(r).parent.name
+        rotulo, n = base, 1
+        while rotulo in rotulos:
+            n += 1
+            rotulo = f"{base} ({n})"
+        rotulos.append(rotulo)
+    # antes, /sdcard/Android/media/com.whatsapp/WhatsApp/Media e /sdcard/WhatsApp/Media caíam na MESMA pasta
+    # do PC: arquivos de mesmo nome se sobrescreviam e a retomada pulava fotos que não tinham sido copiadas
+    return rotulos[raizes.index(raiz)] if raiz in raizes else Path(raiz).name
 
 
 def destino_local(raiz: Path, a: Arquivo) -> Path:

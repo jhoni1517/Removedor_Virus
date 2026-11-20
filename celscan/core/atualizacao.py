@@ -84,7 +84,9 @@ def baixar(info: dict[str, Any], destino: Path | None = None) -> Path:
         raise ErroAtualizacao(f"Endereço de download não confiável: {url}")
     if not info.get("sha256"):
         raise ErroAtualizacao("O GitHub não informou o SHA-256 deste arquivo; atualize manualmente pela página.")
-    destino = destino or Path(tempfile.gettempdir()) / f"CelScan-Setup-{info['versao']}.exe"
+    # pasta nova e exclusiva: com o nome fixo em %TEMP%, outro programa podia trocar o .exe entre a
+    # conferência do SHA-256 e a execução
+    destino = destino or Path(tempfile.mkdtemp(prefix="celscan-atualizacao-")) / "CelScan-Setup.exe"
     h = hashlib.sha256()
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()

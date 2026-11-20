@@ -11,7 +11,9 @@ interface Ordem {
 }
 interface Periodo { atendimentos: number; entregues: number; faturamento: number; tempo_medio_min: number | null;
   por_servico: { nome: string; qtd: number; valor: number }[] }
-interface Painel { dia: Periodo; mes: Periodo; por_status: Record<string, number> }
+interface Retorno { id: number; cliente?: string | null; aparelho?: string | null; retorno_em: string; atrasado: boolean; whatsapp: string | null; mensagem: string }
+interface AmeacaMes { pacote: string; nome: string; vezes: number; ameaca: string | null; motivo: string | null }
+interface Painel { dia: Periodo; mes: Periodo; por_status: Record<string, number>; retornos?: Retorno[]; ameacas_mes?: AmeacaMes[] }
 
 const COLUNAS: [string, string][] = [["aguardando", "Aguardando"], ["analisando", "Analisando"], ["pronto", "Pronto"], ["entregue", "Entregue"]];
 const real = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -136,11 +138,14 @@ export default function Balcao() {
     catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
   async function exportar() {
-    const r = await fetch("/api/painel/ordens.csv", { headers: { "X-CelScan-Token": TOKEN } });
-    const url = URL.createObjectURL(await r.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: "ordens_celscan.csv" });
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const r = await fetch("/api/painel/ordens.csv", { headers: { "X-CelScan-Token": TOKEN } });
+      if (!r.ok) throw new Error(`Não consegui exportar (erro ${r.status}).`);
+      const url = URL.createObjectURL(await r.blob());
+      const a = Object.assign(document.createElement("a"), { href: url, download: "ordens_celscan.csv" });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000); // revogar na hora cancelava o download em alguns navegadores
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
 
   return (
@@ -173,6 +178,35 @@ export default function Balcao() {
             <Numeros titulo="Hoje" p={painel.dia} />
             <Numeros titulo="Este mês" p={painel.mes} />
           </div>
+          {(painel.retornos?.length ?? 0) > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-sm font-semibold">Revisões para chamar (próximos 7 dias)</h3>
+              <ul className="divide-y divide-linha text-sm">
+                {painel.retornos!.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-center gap-2 py-2">
+                    <span className="min-w-0 flex-1">OS nº {r.id} · {r.cliente ?? "cliente sem nome"} · {r.aparelho ?? "celular"}
+                      <span className={`block text-xs ${r.atrasado ? "text-atencao" : "text-fraco"}`}>
+                        {r.atrasado ? "Atrasada desde " : "Em "}{new Date(`${r.retorno_em}T12:00:00`).toLocaleDateString("pt-BR")}</span></span>
+                    {r.whatsapp
+                      ? <a className="rounded-md border border-linha px-3 py-1 hover:bg-superficie-2" href={r.whatsapp} target="_blank" rel="noreferrer">Chamar no WhatsApp</a>
+                      : <Botao variante="fantasma" onClick={() => navigator.clipboard?.writeText(r.mensagem)}>Copiar mensagem</Botao>}
+                    <Botao variante="fantasma" onClick={async () => { await api(`/ordens/${r.id}/retorno-feito`, { corpo: {} }).catch(() => undefined); carregar(); }}>Feito</Botao>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(painel.ameacas_mes?.length ?? 0) > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-sm font-semibold">O que mais apareceu nos celulares este mês</h3>
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                {painel.ameacas_mes!.map((a) => (
+                  <li key={a.pacote}><strong>{a.nome}</strong> <span className="font-mono text-xs text-fraco">{a.pacote}</span>
+                    <span className="numeros"> · {a.vezes} celular(es)</span>{a.ameaca ? <span className="text-perigo"> · {a.ameaca}</span> : a.motivo ? <span className="text-fraco"> · {a.motivo}</span> : null}</li>
+                ))}
+              </ol>
+            </div>
+          )}
         </Cartao>
       )}
     </div>

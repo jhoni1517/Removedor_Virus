@@ -12,6 +12,9 @@ export interface Achado {
 }
 
 export interface AppResultado {
+  cert?: { sha256?: string; sha1?: string; debug?: boolean } | null;
+  falso_alarme?: boolean;
+  certeza?: "confirmado" | "provavel" | "conferir" | "nenhuma";
   pacote: string;
   score: number;
   nivel: Nivel;
@@ -35,7 +38,17 @@ export interface AppResultado {
   sensores?: Record<string, number>;
   anuncios?: { tela_cheia: number; fora_do_app: number; ultimo: string | null; sdks: string[]; gatilhos: string[] };
   notificacoes?: number;
+  notificacoes_dia?: number;
   enviado_mb?: number | null;
+  tempo_uso_s?: number | null;
+  bateria_mah?: number | null;
+  rodando?: boolean;
+  removido_antes?: string | null;
+  vigilancia?: boolean;
+  sensivel?: boolean;
+  poderes?: string[];
+  seguro_porque?: string[];
+  essencial?: boolean;
   sobreposicao?: boolean;
 }
 
@@ -66,6 +79,7 @@ export interface Varredura {
   avisos: string[];
   duracao_s: number;
   data?: string;
+  decomposicao?: { texto: string; pontos: number }[];
 }
 
 export interface Dispositivo {
@@ -95,6 +109,7 @@ export interface Tarefa<R = unknown> {
   progresso: Partial<Evento>;
   resultado: R | null;
   erro: string | null;
+  criada?: number;
 }
 
 export interface Estado {
@@ -112,6 +127,7 @@ export interface Remocao {
   ok: boolean;
   mensagem: string;
   quarentena_id: string | null;
+  parcial?: boolean;
 }
 
 const CHAVE = "celscan-token";
@@ -152,7 +168,12 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
     let msg = `Erro ${r.status}`;
     try {
       const j = await r.json();
-      msg = typeof j.detail === "string" ? j.detail : msg;
+      if (typeof j.detail === "string") msg = j.detail;
+      // erro de validação (422) vem como lista: mostra o primeiro motivo em vez de só "Erro 422"
+      else if (Array.isArray(j.detail) && j.detail[0]?.msg) {
+        const campo = (j.detail[0].loc ?? []).slice(-1)[0];
+        msg = `Dado inválido${campo ? ` (${campo})` : ""}: ${String(j.detail[0].msg).replace(/^Value error, /, "")}`;
+      }
     } catch {
       /* resposta sem JSON */
     }
@@ -163,6 +184,11 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
 
 export function urlLaudo(varreduraId: number, versao: "cliente" | "tecnico" | "seminovo"): string {
   return `/api/varreduras/${varreduraId}/laudo.pdf?versao=${versao}&t=${encodeURIComponent(TOKEN)}`;
+}
+
+/** Link de arquivo da API (PDF etc.) com o token, para abrir/baixar direto pelo navegador. */
+export function urlApi(caminho: string): string {
+  return `/api${caminho}${caminho.includes("?") ? "&" : "?"}t=${encodeURIComponent(TOKEN)}`;
 }
 
 export function urlWebSocket(): string {
@@ -184,5 +210,6 @@ export async function obterVarredura(id: number): Promise<Varredura> {
     avisos: v.avisos ?? [],
     duracao_s: v.duracao_s ?? 0,
     data: v.data,
+    decomposicao: v.decomposicao ?? [],
   };
 }

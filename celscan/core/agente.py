@@ -82,6 +82,19 @@ def _data(ms: str) -> str | None:
         return None
 
 
+def explicar_falha(erro: str, fabricante: str = "") -> str:
+    """Aviso em linguagem simples quando o Agente não instala (nomes e ícones ficam aproximados)."""
+    fab = fabricante.lower()
+    if "INSTALL_FAILED_USER_RESTRICTED" in erro or "USER_RESTRICTED" in erro or any(
+            m in fab for m in ("xiaomi", "redmi", "poco")):
+        return ("Nomes e ícones aproximados: o celular bloqueou o CelScan Agente. Na Xiaomi/Redmi/POCO, ligue "
+                "'Instalar via USB' em Opções do desenvolvedor (precisa de chip e conta Mi) e varra de novo.")
+    if "INSTALL_FAILED_VERIFICATION_FAILURE" in erro or "verif" in erro.lower():
+        return ("Nomes e ícones aproximados: o Play Protect barrou o CelScan Agente. Desligue 'Verificar apps "
+                "instalados por USB' em Opções do desenvolvedor e varra de novo.")
+    return f"Nomes e ícones aproximados: CelScan Agente indisponível ({erro[-120:]})."
+
+
 class Agente:
     def __init__(self, ap: Aparelho, manter: bool = False):
         self.ap, self.manter = ap, manter
@@ -91,12 +104,21 @@ class Agente:
         caminho = apk()
         if not caminho:
             raise AgenteIndisponivel("O CelScan Agente não veio nesta instalação.")
-        out = self.ap.adb("install", "-r", str(caminho), timeout=120, erro=True)
+        out = self.ap.adb("install", "-r", "-d", str(caminho), timeout=120, erro=True)
+        if "INSTALL_FAILED_UPDATE_INCOMPATIBLE" in out or "INSTALL_FAILED_VERSION_DOWNGRADE" in out:
+            # sobra de uma versão antiga do Agente (outra assinatura): tira e instala de novo
+            self.ap.adb("uninstall", PACOTE, timeout=60)
+            out = self.ap.adb("install", "-r", "-d", str(caminho), timeout=120, erro=True)
         if "Success" not in out:
             raise AgenteIndisponivel(f"Não consegui instalar o Agente: {out[-200:]}")
         self.instalado = True
-        self.ap.sh(f"appops set {PACOTE} GET_USAGE_STATS allow")
-        v = parse_linhas(self.ap.sh(f"content query --uri {URI}/versao"))
+        try:
+            self.ap.sh(f"appops set {PACOTE} GET_USAGE_STATS allow")
+            v = parse_linhas(self.ap.sh(f"content query --uri {URI}/versao"))
+        except BaseException:
+            # erro aqui (cabo caiu, cancelamento) deixava o Agente instalado no celular do cliente
+            self.__exit__(None, None, None)
+            raise
         if not v or v[0].get("versao") != VERSAO:
             self.__exit__(None, None, None)
             raise AgenteIndisponivel("O Agente não respondeu (versão inesperada).")
@@ -132,8 +154,9 @@ class Agente:
         res = {}
         for d in parse_linhas(saida):
             if d.get("pacote"):
+                ms = d.get("frente_ms") or "0"
                 res[d["pacote"]] = {"ultimo_uso": _data(d.get("ultimo_uso", "")),
-                                    "frente_min": round(int(d.get("frente_ms") or 0) / 60000)}
+                                    "frente_min": round(int(ms) / 60000) if ms.isdecimal() else 0}
         return res
 
 

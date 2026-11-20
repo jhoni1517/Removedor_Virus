@@ -1,3 +1,5 @@
+import { num } from "../nomes";
+import { BateriaBaixa } from "../bateria";
 import { FolderOpen, HardDriveDownload, Monitor, MousePointer2, ShieldAlert, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type Dispositivo, type Tarefa } from "../api";
@@ -15,8 +17,8 @@ interface ResumoBackup { destino: string; copiados: number; pulados: number; fal
 const ORDEM = ["autorizado", "toque", "imagem", "morto"];
 
 export function tamanho(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024 ** 3) return `${num(bytes / 1024 ** 3, 1)} GB`;
+  if (bytes >= 1024 ** 2) return `${num(bytes / 1024 ** 2, 1)} MB`;
   if (bytes <= 0) return "0 KB";
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
@@ -155,9 +157,11 @@ export function PainelBackup({ d }: { d: Dispositivo | undefined }) {
 
   async function calcular() {
     setLista(null);
-    const t = await esperar(await api<Tarefa<Listagem>>("/backup/listar", { corpo }));
-    if (t.estado === "concluida" && t.resultado) setLista(t.resultado);
-    else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui listar os arquivos." });
+    try {
+      const t = await esperar(await api<Tarefa<Listagem>>("/backup/listar", { corpo }));
+      if (t.estado === "concluida" && t.resultado) setLista(t.resultado);
+      else avisar({ tipo: "erro", texto: t.erro ?? "Não consegui listar os arquivos." });
+    } catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
   }
   async function copiar() {
     setResumo(null);
@@ -217,6 +221,7 @@ export function PainelBackup({ d }: { d: Dispositivo | undefined }) {
           </p>
         </div>
       )}
+      {pronto && <BateriaBaixa serial={d?.serial} />}
       <div className="mt-4 flex flex-wrap gap-2">
         {!tarefa && <Botao onClick={calcular} disabled={!pronto || escolhidas.size === 0}>Calcular tamanho</Botao>}
         {!tarefa && <Botao variante="primario" onClick={copiar} disabled={!pronto || escolhidas.size === 0}><HardDriveDownload size={15} aria-hidden /> Copiar para o PC</Botao>}

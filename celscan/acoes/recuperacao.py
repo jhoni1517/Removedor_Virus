@@ -79,8 +79,13 @@ def procurar(ap: Aparelho, categorias: list[str] | None = None) -> list[Arquivo]
 
 def destino_recuperado(raiz: Path, a: Arquivo) -> Path:
     """Tudo vai para 'Recuperados/<categoria>/', achatando o caminho e evitando repetir nome."""
+    import hashlib
+
     nome = nome_seguro(Path(a.caminho).name)
-    return raiz / "Recuperados" / nome_seguro(nome_categoria(a.categoria)) / f"{a.mtime}_{nome}"
+    # miniaturas de pastas diferentes repetem nome e data ("1.jpg"): sem a marca do caminho, uma sobrescrevia
+    # a outra (ou era pulada como "já copiada")
+    marca = hashlib.sha1(a.caminho.encode("utf-8"), usedforsecurity=False).hexdigest()[:6]
+    return raiz / "Recuperados" / nome_seguro(nome_categoria(a.categoria)) / f"{a.mtime}_{marca}_{nome}"
 
 
 def nome_categoria(cat: str) -> str:

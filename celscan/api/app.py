@@ -8,31 +8,49 @@ consegue mandar comandos para o celular pela porta local.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 import secrets
 import subprocess
 import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from celscan import __version__, config, servicos
-from celscan.acoes import backup, evidencias, navegacao, otimizacao, quarentena, recuperacao
+from celscan.acoes import (
+    atendimento,
+    backup,
+    blindagem,
+    destravar,
+    evidencias,
+    faxina,
+    flagrante,
+    gastos,
+    navegacao,
+    otimizacao,
+    quarentena,
+    recuperacao,
+    turbo,
+)
 from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
-from celscan.api.tarefas import Gerenciador
-from celscan.core import adb, agente, balcao, db, log, preferencias
+from celscan.api.tarefas import Gerenciador, Ocupado
+from celscan.api.tarefas import nome as nome_tarefa
+from celscan.core import adb, agente, balcao, bases, db, log, preferencias, seguranca
 
 WEB = config.PACOTE / "web" / "dist"
-HOSTS = ("127.0.0.1", "localhost", "testserver")
+HOSTS = ("127.0.0.1", "localhost", "::1")
+HOSTS_TESTE = ("testserver",)  # nome usado pelo TestClient; só vale quando o app é criado para testes
 MARCAS: dict[str, Any] = yaml.safe_load((config.DADOS / "conexao.yaml").read_text(encoding="utf-8"))
 RESGATE: dict[str, Any] = yaml.safe_load((config.DADOS / "resgate.yaml").read_text(encoding="utf-8"))
 
@@ -46,6 +64,43 @@ def marca_de(fabricante: str | None) -> str:
 
 
 # ---------------------------------------------------------------- modelos de entrada
+
+def _pacote(v: str) -> str:
+    if not seguranca.pacote_valido(v):
+        raise ValueError("nome de pacote inválido")
+    return v
+
+
+def _id_quarentena(v: str) -> str:
+    if not seguranca.id_quarentena_valido(v):
+        raise ValueError("ID da quarentena inválido")
+    return v
+
+
+Pacote = Annotated[str, AfterValidator(_pacote)]
+
+
+def _endereco(v: str) -> str:
+    """host:porta do pareamento Wi-Fi. Sem isso, um texto começando com '-' virava opção do adb."""
+    if not re.fullmatch(r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9][A-Za-z0-9.\-]{0,252}):\d{1,5}", v.strip()):
+        raise ValueError("endereço inválido: use IP:porta, como 192.168.0.10:37123")
+    return v.strip()
+
+
+def _codigo(v: str | None) -> str | None:
+    if v is not None and not re.fullmatch(r"\d{6}", v.strip()):
+        raise ValueError("o código de pareamento tem 6 dígitos")
+    return v.strip() if v else v
+
+
+def _categorias(validas):
+    def checar(v: list[str]) -> list[str]:
+        ruins = [c for c in v if c not in validas]
+        if ruins:
+            raise ValueError(f"categoria desconhecida: {', '.join(ruins)}")
+        return list(dict.fromkeys(v))
+    return AfterValidator(checar)
+
 
 class PedidoVarredura(BaseModel):
     serial: str
@@ -79,7 +134,7 @@ class PedidoOrdem(BaseModel):
     aparelho: str | None = None
     imei: str | None = None
     observacoes: str | None = None
-    valor: float | None = None
+    valor: float | None = Field(default=None, ge=0, le=1_000_000, allow_inf_nan=False)
     cliente_nome: str | None = None
     cliente_telefone: str | None = None
     consentimento: bool = False  # LGPD: só guarda nome/telefone com consentimento
@@ -101,7 +156,7 @@ class PedidoEsquecidos(BaseModel):
 
 class PedidoDebloat(BaseModel):
     serial: str
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
 
 
 class PedidoLimpeza(BaseModel):
@@ -112,28 +167,34 @@ class PedidoLimpeza(BaseModel):
 class PedidoRemocao(BaseModel):
     serial: str
     varredura_id: int
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
     ciente_vitima: bool = False  # a pessoa leu o aviso de que remover app espião pode alertar quem instalou
+    confirmar_sistema: bool = False  # apps de fábrica só saem com confirmação explícita
+    confirmar_sensivel: bool = False  # autenticador, senhas, banco, mensageiro: o dono confirmou que tem acesso
 
 
 class PedidoEvidencias(BaseModel):
     serial: str
     varredura_id: int
-    pacotes: list[str] = Field(min_length=1)
+    pacotes: list[Pacote] = Field(min_length=1)
     print_tela: bool = True
 
 
 class PedidoDesfazer(BaseModel):
     serial: str
-    quarentena_id: str
+    quarentena_id: Annotated[str, AfterValidator(_id_quarentena)]
 
 
 class PedidoConfig(BaseModel):
-    chave_virustotal: str | None = None
+    chave_virustotal: str | None = Field(default=None, max_length=128)  # o cofre do Windows limita o tamanho
+    abusech_chave: str | None = Field(default=None, max_length=128)
     offline: bool | None = None
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
     usar_agente: bool | None = None
+    auto_otimizar: bool | None = None  # otimiza sozinho ao conectar (no máximo 1x por dia por celular)
+    dias_retorno: int | None = Field(default=None, ge=0, le=365)  # 0 = sem lembrete de revisão
+    contato_loja: str | None = Field(default=None, max_length=90)  # sai no rodapé do laudo
 
 
 class PedidoEspelho(BaseModel):
@@ -151,6 +212,26 @@ class PedidoEspelho(BaseModel):
     sem_audio: bool = False
 
 
+class PedidoApp(BaseModel):
+    serial: str
+    pacote: Pacote
+
+
+class PedidoConferir(BaseModel):
+    serial: str
+    pacotes: list[Pacote] = Field(min_length=1, max_length=200)
+
+
+class PedidoFinalizar(BaseModel):
+    serial: str
+    desligar_depuracao: bool = True
+
+
+class PedidoApagarApks(BaseModel):
+    serial: str
+    caminhos: list[Annotated[str, Field(max_length=512)]] = Field(min_length=1, max_length=50)
+
+
 class PedidoAjuste(BaseModel):
     serial: str | None = None
     ajuste: str
@@ -158,21 +239,23 @@ class PedidoAjuste(BaseModel):
 
 class PedidoRecuperacao(BaseModel):
     serial: str
-    categorias: list[str] = Field(default_factory=lambda: list(recuperacao.PADRAO))
+    categorias: Annotated[list[str], _categorias({*recuperacao.FONTES, *recuperacao.PASTAS_APP})] = Field(
+        default_factory=lambda: list(recuperacao.PADRAO))
     destino: str | None = None
     verificar: bool = False
 
 
 class PedidoBackup(BaseModel):
     serial: str
-    categorias: list[str] = Field(default_factory=lambda: list(backup.PADRAO))
+    categorias: Annotated[list[str], _categorias(backup.CATEGORIAS)] = Field(
+        default_factory=lambda: list(backup.PADRAO))
     destino: str | None = None
     verificar: bool = False
 
 
 class PedidoPermissoes(BaseModel):
     serial: str
-    pacote: str
+    pacote: Pacote
     acoes: list[str] = Field(default_factory=list)
     revogar: list[str] = Field(default_factory=list)
 
@@ -182,8 +265,123 @@ class PedidoPasta(BaseModel):
 
 
 class PedidoWifi(BaseModel):
-    endereco: str
-    codigo: str | None = None
+    endereco: Annotated[str, AfterValidator(_endereco)]
+    codigo: Annotated[str | None, AfterValidator(_codigo)] = None
+
+
+# ---------------------------------------------------------------- Turbo (otimização avançada)
+ListaPacotes = Annotated[list[Pacote], Field(min_length=1, max_length=500)]
+
+
+class PedidoTurboAjustes(BaseModel):
+    serial: str
+    ids: Annotated[list[str], _categorias(turbo.POR_ID), Field(min_length=1)]
+
+
+class PedidoTurboPerfil(BaseModel):
+    serial: str
+    perfil: Literal["bateria", "equilibrio", "maximo"]
+
+
+class PedidoTurboRam(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    modo: Literal["leve", "soneca", "forte"] = "leve"
+
+
+class PedidoTurboCompilar(BaseModel):
+    serial: str
+    modo: Literal["rapida", "completa", "extrema"] = "rapida"
+    escopo: Literal["usuario", "mais_usados", "sistema", "google", "webview", "todos", "escolhidos"] = "usuario"
+    pacotes: list[Pacote] = Field(default_factory=list, max_length=2000)
+    excluir: list[Pacote] = Field(default_factory=list, max_length=2000)
+
+
+class PedidoTurboPacotes(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+
+
+class PedidoTurboDormir(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    nivel: Literal["rare", "restricted"] = "rare"
+
+
+class PedidoTurboSegundoPlano(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+    permitir: bool = False
+
+
+class PedidoTurboJogo(BaseModel):
+    serial: str
+    pacote: Pacote
+    modo: Literal["padrao", "desempenho", "bateria"] = "desempenho"
+    escala: float | None = None
+    fps: int | None = None
+
+
+class PedidoTurboManutencao(BaseModel):
+    serial: str
+    id: Literal["dexopt", "art_cleanup", "armazenamento", "cache"]
+
+
+class PedidoTurboReceita(BaseModel):
+    serial: str
+    etapas: Annotated[list[str], _categorias(turbo.ETAPAS), Field(min_length=1)]
+    medir: bool = True  # nota antes e depois, com o ganho em %
+
+
+class PedidoTurboConfig(BaseModel):
+    serial: str
+    ns: Literal["system", "secure", "global"]
+    chave: str = Field(min_length=1, max_length=120)
+    valor: str | None = Field(default=None, max_length=500)
+
+
+class PedidoFaxinaApps(BaseModel):
+    serial: str
+    pacotes: ListaPacotes
+
+
+class PedidoDns(BaseModel):
+    serial: str
+    provedor: Literal["adguard", "adguard_familia", "mullvad", "cloudflare_seguro"] | None = None
+    servidor: str | None = Field(default=None, max_length=253)
+
+
+class PedidoConfiavel(BaseModel):
+    pacote: Pacote
+    cert: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{64}$")
+    nome: str | None = Field(default=None, max_length=120)
+
+
+class PedidoBlindagem(BaseModel):
+    serial: str
+    itens: list[Literal["play_protect", "instaladores", "dns"]] = Field(min_length=1, max_length=3)
+
+
+class PedidoFlagrante(BaseModel):
+    serial: str
+    duracao_s: int = Field(default=120, ge=15, le=900)
+
+
+class PedidoApagar(BaseModel):
+    serial: str
+    caminhos: list[Annotated[str, Field(min_length=9, max_length=1024)]] = Field(default=[], max_length=5000)
+    pasta_velha: Literal["whatsapp", "whatsapp_antigo", "downloads", "telegram"] | None = None
+    backup: bool = True
+
+
+class PedidoPacoteSerial(BaseModel):
+    serial: str
+    pacote: Pacote
+
+
+class PedidoAssinaturas(BaseModel):
+    nome: str = Field(min_length=1, max_length=60)
+    conteudo: str = Field(min_length=64, max_length=20_000_000)
 
 
 # ---------------------------------------------------------------- aparelhos conectados
@@ -197,18 +395,24 @@ class Aparelhos:
         self._info: dict[str, dict[str, str]] = {}
         self.parar = threading.Event()
         self.pausa = threading.Event()  # modo mouse OTG: deixa a porta USB livre para o scrcpy
+        self.ao_conectar: Any = None  # chamado (em outra thread) quando um aparelho fica pronto
 
     def atualizar(self, pares: list[tuple[str, str]]) -> None:
         novos = {}
         for serial, estado in pares:
             item: dict[str, Any] = {"serial": serial, "estado": estado, "wifi": ":" in serial}
             if estado == "device":
-                if serial not in self._info:
+                if not self._info.get(serial):  # leitura que falhou ({}) tenta de novo, em vez de ficar sem nome
                     self._info[serial] = self._ler_info(serial)
                 item.update(self._info[serial])
             novos[serial] = item
         if novos != self.lista:
+            chegaram = [s for s, i in novos.items() if i["estado"] == "device"
+                        and (self.lista.get(s) or {}).get("estado") != "device"]
             self.lista = novos
+            if self.ao_conectar:
+                for s in chegaram:
+                    threading.Thread(target=self.ao_conectar, args=(s,), daemon=True).start()
             self.gerenciador.publicar({"tipo": "dispositivos", "dispositivos": list(novos.values())})
 
     @staticmethod
@@ -283,22 +487,49 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     app = FastAPI(title="CelScan", version=__version__, lifespan=ciclo, docs_url=None, redoc_url=None)
     app.state.token, app.state.tarefas, app.state.aparelhos = token, tarefas, aparelhos
+    app.state.testes = "PYTEST_CURRENT_TEST" in os.environ  # libera o host "testserver" só no pytest
 
     @app.middleware("http")
     async def proteger(request: Request, chamar):
-        host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
-        if host not in HOSTS:
+        bruto = (request.headers.get("host") or "").strip()
+        host = bruto[1:bruto.index("]")] if bruto.startswith("[") and "]" in bruto else bruto.rsplit(":", 1)[0]
+        if host not in HOSTS and not (app.state.testes and host in HOSTS_TESTE):
             return JSONResponse({"detail": "host não permitido"}, status_code=403)
         if request.url.path.startswith("/api/"):
             recebido = request.headers.get("x-celscan-token") or request.query_params.get("t")
-            if not recebido or not secrets.compare_digest(recebido, token):
+            # bytes: compare_digest com texto não-ASCII levantava TypeError (erro 500)
+            if not recebido or not secrets.compare_digest(recebido.encode(), token.encode()):
                 return JSONResponse({"detail": "token inválido"}, status_code=401)
         return await chamar(request)
 
+    def livre(serial: str) -> adb.Aparelho:
+        """Aparelho pronto E sem operação em andamento: reiniciar ou limpar no meio de um backup/remoção
+        cortava o que estava sendo feito."""
+        ap = aparelhos.pronto(serial)
+        rodando = tarefas.ocupado(serial)
+        if rodando:
+            raise HTTPException(409, f"Espere terminar: {nome_tarefa(rodando.tipo)} em andamento neste celular "
+                                     "(o andamento aparece no topo da tela).")
+        return ap
+
+    def retrato_do_aparelho(varredura_id: int, serial: str) -> dict[str, Any]:
+        """Retrato da varredura, conferindo que ela é DESTE aparelho. Sem isso, com dois celulares no PC, abrir
+        uma análise antiga do celular A e clicar em Remover agia no celular B conectado."""
+        con = db.conectar()
+        retrato = db.retrato(con, varredura_id)
+        if retrato is None:
+            raise HTTPException(404, "Varredura não encontrada")
+        dono = db.serial_da_varredura(con, varredura_id)
+        if dono and dono != serial:
+            raise HTTPException(409, "Esta análise é de outro celular. Abra a análise do aparelho conectado "
+                                     "ou faça uma nova varredura.")
+        return retrato
+
     def nova_tarefa(tipo: str, serial: str | None, funcao) -> dict[str, Any]:
-        if serial and (ocupada := tarefas.ocupado(serial)):
-            raise HTTPException(409, f"Já existe uma operação em andamento neste aparelho ({ocupada.tipo}).")
-        return tarefas.criar(tipo, serial, funcao, erros).publico()
+        try:
+            return tarefas.criar(tipo, serial, funcao, erros).publico()
+        except Ocupado as e:
+            raise HTTPException(409, str(e)) from e
 
     # ---- estado geral
     @app.get("/api/estado")
@@ -348,7 +579,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.get("/api/varreduras")
     def listar_varreduras(serial: str | None = None, limite: int = 50) -> list[dict[str, Any]]:
-        return [dict(v) for v in db.varreduras(db.conectar(), serial, limite)]
+        # no SQLite, LIMIT negativo = sem limite: devolvia o histórico inteiro
+        return [dict(v) for v in db.varreduras(db.conectar(), serial, max(1, min(limite, 500)))]
 
     @app.get("/api/varreduras/{vid}")
     def obter_varredura(vid: int) -> dict[str, Any]:
@@ -358,7 +590,9 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(404, "Varredura não encontrada")
         meta = con.execute("SELECT id, serial, data, modo, nota, veredito, duracao_s FROM varreduras WHERE id=?",
                            (vid,)).fetchone()
-        return {**dict(meta), **retrato}
+        from celscan.analise import pontuacao
+        decomposicao = pontuacao.decompor(retrato.get("achados_aparelho", []), retrato.get("apps", []))
+        return {**dict(meta), **retrato, "decomposicao": decomposicao}
 
     @app.get("/api/varreduras/{vid}/diferencas")
     def diferencas_varredura(vid: int) -> dict[str, Any]:
@@ -382,14 +616,26 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/remover")
     def remover(p: PedidoRemocao) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)
-        retrato = db.retrato(db.conectar(), p.varredura_id)
-        if retrato is None:
-            raise HTTPException(404, "Varredura não encontrada")
+        retrato = retrato_do_aparelho(p.varredura_id, p.serial)
         por_pacote = {r["pacote"]: r for r in retrato["apps"]}
         faltando = [x for x in p.pacotes if x not in por_pacote]
         if faltando:
             raise HTTPException(422, f"Apps fora desta varredura: {', '.join(faltando)}")
         alvos = [dict(por_pacote[x]) for x in p.pacotes]
+        bloqueados = [a["pacote"] for a in alvos if seguranca.essencial(a["pacote"]) or a.get("essencial")]
+        if bloqueados:
+            raise HTTPException(422, "Estes apps são essenciais do Android e não podem ser removidos (o celular "
+                                     "pode travar ou ficar sem tela inicial/teclado): " + ", ".join(bloqueados))
+        de_fabrica = [a["pacote"] for a in alvos if a.get("sistema")]
+        if de_fabrica and not p.confirmar_sistema:
+            raise HTTPException(409, "SISTEMA: estes apps vieram de fábrica. Remover pode tirar funções do aparelho; "
+                                     "confirme (confirmar_sistema) para continuar: " + ", ".join(de_fabrica))
+        from celscan.analise.pontuacao import sensivel
+        sensiveis = [a["pacote"] for a in alvos if a.get("sensivel") or sensivel(a["pacote"])]
+        if sensiveis and not p.confirmar_sensivel:
+            raise HTTPException(409, "SENSIVEL: estes apps guardam senhas, códigos de 2 etapas, carteira ou "
+                                     "conversas. Confirme com o dono (confirmar_sensivel) antes de remover: "
+                                     + ", ".join(sensiveis))
         espioes = [a["pacote"] for a in alvos if evidencias.eh_vigilancia(a)]
         if espioes and not p.ciente_vitima:
             raise HTTPException(409, "MODO_VITIMA: remover app espião pode alertar quem instalou. "
@@ -407,9 +653,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/evidencias")
     def documentar(p: PedidoEvidencias) -> dict[str, Any]:
         ap = aparelhos.pronto(p.serial)
-        retrato = db.retrato(db.conectar(), p.varredura_id)
-        if retrato is None:
-            raise HTTPException(404, "Varredura não encontrada")
+        retrato = retrato_do_aparelho(p.varredura_id, p.serial)
         por_pacote = {r["pacote"]: r for r in retrato["apps"]}
         achados = [dict(por_pacote[x]) for x in p.pacotes if x in por_pacote]
         if not achados:
@@ -514,7 +758,11 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         return {"chave_virustotal": f"…{chave[-4:]}" if chave else None, "offline": config.OFFLINE,
                 "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
                 "canal_atualizacao": c.get("canal_atualizacao", "beta"),
-                "usar_agente": bool(c.get("usar_agente", False)), "agente_disponivel": agente.disponivel()}
+                "usar_agente": preferencias.usar_agente(), "agente_disponivel": agente.disponivel(),
+                "auto_otimizar": bool(c.get("auto_otimizar")),
+                "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO)),
+                "contato_loja": c.get("contato_loja") or "",
+                "abusech_chave": f"…{ab[-4:]}" if (ab := preferencias.chave_abusech()) else None}
 
     @app.put("/api/config")
     def salvar_config(p: PedidoConfig) -> dict[str, Any]:
@@ -618,6 +866,24 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         except ValueError as e:
             raise HTTPException(422, str(e))
 
+    # ---- atendimento: bateria antes, conferência depois, finalizar
+    @app.get("/api/bateria")
+    def bateria(serial: str) -> dict[str, Any]:
+        return atendimento.bateria(aparelhos.pronto(serial))
+
+    @app.post("/api/abrir-app")
+    def abrir_app(p: PedidoApp) -> dict[str, str]:
+        return {"aberto": atendimento.abrir_app(aparelhos.pronto(p.serial), p.pacote)}
+
+    @app.post("/api/conferir")
+    def conferir(p: PedidoConferir) -> list[dict[str, Any]]:
+        return atendimento.conferir(aparelhos.pronto(p.serial), list(p.pacotes))
+
+    @app.post("/api/finalizar")
+    def finalizar(p: PedidoFinalizar) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return {"feito": atendimento.finalizar(ap, p.desligar_depuracao)}
+
     # ---- balcão: ordens de serviço, pacotes e painel da loja
     @app.get("/api/servicos")
     def servicos_catalogo() -> dict[str, Any]:
@@ -662,6 +928,36 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(422, str(e))
         return balcao.ordem(con, oid) or {}
 
+    @app.post("/api/ordens/{oid}/retorno-feito")
+    def retorno_feito(oid: int) -> dict[str, bool]:
+        if not balcao.concluir_retorno(db.conectar(), oid):
+            raise HTTPException(404, "Ordem não encontrada")
+        return {"ok": True}
+
+    @app.get("/api/historico/apps")
+    def buscar_no_historico(q: str = Query(min_length=3, max_length=80)) -> list[dict[str, Any]]:
+        return db.buscar_app(db.conectar(), q)
+
+    @app.get("/api/apks-guardados")
+    def listar_apks(serial: str) -> list[dict[str, Any]]:
+        from celscan.acoes import apks
+        from celscan.analise import iocs as iocs_mod
+        return apks.listar(aparelhos.pronto(serial), iocs_mod.carregar(avisar=lambda m: None))
+
+    @app.post("/api/apks-guardados/apagar")
+    def apagar_apks(p: PedidoApagarApks) -> dict[str, Any]:
+        from celscan.acoes import apks
+        ap = livre(p.serial)
+        try:
+            res = apks.apagar(ap, p.caminhos)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        except OSError as e:
+            raise HTTPException(409, str(e))
+        db.registrar_acao(db.conectar(), p.serial, "apks_apagados", None, ", ".join(res["apagados"]),
+                          res["quarentena_id"])
+        return res
+
     @app.get("/api/ordens/{oid}/mensagem")
     def mensagem_ordem(oid: int, loja: str | None = None) -> dict[str, str]:
         o = balcao.ordem(db.conectar(), oid)
@@ -694,6 +990,10 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         from celscan.core import atualizacao
 
         canal = preferencias.ler().get("canal_atualizacao", "beta")
+        em_andamento = [t for t in tarefas.listar() if t.estado == "executando"]
+        if em_andamento:  # o CelScan fecha para instalar: não pode derrubar um backup ou remoção no meio
+            raise HTTPException(409, "Espere terminar o que está em andamento (varredura, backup, remoção) "
+                                     "antes de atualizar.")
         info = atualizacao.verificar(canal)
         if not info.get("disponivel"):
             raise HTTPException(409, "Você já está na versão mais nova.")
@@ -792,13 +1092,401 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def correcoes_aplicar(p: PedidoCorrecoes) -> dict[str, Any]:
         from celscan.acoes import correcoes
 
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         if not p.ids:
             raise HTTPException(422, "Escolha ao menos uma correção.")
         try:
             return correcoes.corrigir(ap, p.ids)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
+
+    # ---- Turbo: otimização avançada pelo PC (tudo reversível pelo Histórico)
+    def _turbo(funcao, *args, **kw):
+        try:
+            return funcao(*args, **kw)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        except adb.AdbErro as e:
+            raise HTTPException(502, f"O celular não respondeu: {e}") from e
+
+    def _registrar_turbo(serial: str, texto: str, desfazer_id: str | None = None) -> None:
+        db.registrar_acao(db.conectar(), serial, "otimizacao", None, texto, desfazer_id)
+
+    @app.get("/api/turbo/ficha")
+    def turbo_ficha(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.ficha, aparelhos.pronto(serial))
+
+    @app.get("/api/turbo/calor")
+    def turbo_calor(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.calor, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/nota")
+    def turbo_nota(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_nota", p.serial, lambda progresso, _c: turbo.nota(ap, progresso))
+
+    @app.get("/api/turbo/rede")
+    def turbo_rede(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.rede, aparelhos.pronto(serial))
+
+    @app.get("/api/turbo/ajustes")
+    def turbo_ajustes(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.listar_ajustes, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/ajustes")
+    def turbo_aplicar(p: PedidoTurboAjustes) -> dict[str, Any]:
+        r = _turbo(turbo.aplicar_ajustes, livre(p.serial), p.ids)
+        ok = [x["titulo"] for x in r["resultado"] if x["ok"]]
+        if ok:
+            _registrar_turbo(p.serial, f"Turbo: {', '.join(ok)}", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/perfil")
+    def turbo_perfil(p: PedidoTurboPerfil) -> dict[str, Any]:
+        r = _turbo(turbo.aplicar_perfil, livre(p.serial), p.perfil)
+        _registrar_turbo(p.serial, f"Perfil {turbo.PERFIS[p.perfil]['titulo']} aplicado", r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/ram")
+    def turbo_ram(serial: str) -> dict[str, Any]:
+        return {**_turbo(turbo.comiloes, aparelhos.pronto(serial)), "modos": turbo.MODOS_RAM}
+
+    @app.post("/api/turbo/ram/liberar")
+    def turbo_ram_liberar(p: PedidoTurboRam) -> dict[str, Any]:
+        r = _turbo(turbo.liberar_ram, livre(p.serial), p.pacotes, p.modo)
+        _registrar_turbo(p.serial, f"RAM ({p.modo}): {len(p.pacotes)} app(s), liberou {r['liberou_mb'] or 0} MB",
+                         r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/compilacao")
+    def turbo_compilacao_info(serial: str) -> dict[str, Any]:
+        aparelhos.pronto(serial)
+        return {"modos": {k: v[1] for k, v in turbo.MODOS_COMPILACAO.items()}, "escopos": turbo.ESCOPOS}
+
+    @app.post("/api/turbo/compilar")
+    def turbo_compilar(p: PedidoTurboCompilar) -> dict[str, Any]:
+        ap = livre(p.serial)
+        if p.escopo == "escolhidos":
+            if not p.pacotes:
+                raise HTTPException(422, "Escolha ao menos um app.")
+            alvos = list(dict.fromkeys(p.pacotes))
+        else:
+            alvos = _turbo(turbo.alvos_compilacao, ap, p.escopo)
+        alvos = [a for a in alvos if a not in set(p.excluir)]
+        if not alvos:
+            raise HTTPException(422, "Nenhum app para otimizar nesse grupo.")
+
+        def rodar(progresso, cancelar):
+            r = turbo.compilar_apps(ap, p.modo, alvos, progresso, cancelar)
+            _registrar_turbo(p.serial, f"Otimização {p.modo}: {len(r['ok'])} de {r['total']} app(s) compilados")
+            return r
+        return nova_tarefa("turbo_compilar", p.serial, rodar)
+
+    @app.post("/api/turbo/compilar/reset")
+    def turbo_compilar_reset(p: PedidoTurboPacotes) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_reset", p.serial, lambda _p, _c: turbo.resetar_compilacao(ap, p.pacotes))
+
+    @app.get("/api/turbo/esquecidos")
+    def turbo_esquecidos(serial: str, dias: int = Query(30, ge=3, le=365)) -> dict[str, Any]:
+        return {"apps": _turbo(turbo.esquecidos, aparelhos.pronto(serial), dias), "dias": dias}
+
+    @app.post("/api/turbo/dormir")
+    def turbo_dormir(p: PedidoTurboDormir) -> dict[str, Any]:
+        r = _turbo(turbo.dormir, livre(p.serial), p.pacotes, p.nivel)
+        _registrar_turbo(p.serial, f"{sum(x['ok'] for x in r['apps'])} app(s) dormindo", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/segundo-plano")
+    def turbo_segundo_plano(p: PedidoTurboSegundoPlano) -> dict[str, Any]:
+        r = _turbo(turbo.segundo_plano, livre(p.serial), p.pacotes, p.permitir)
+        acao = "liberados" if p.permitir else "proibidos"
+        _registrar_turbo(p.serial, f"{len(p.pacotes)} app(s) {acao} em segundo plano", r["desfazer_id"])
+        return r
+
+    @app.get("/api/turbo/monitor")
+    def turbo_monitor(serial: str, pacote: str | None = Query(None, max_length=200)) -> dict[str, Any]:
+        return _turbo(turbo.monitor, aparelhos.pronto(serial), pacote or None)
+
+    @app.get("/api/turbo/jogo")
+    def turbo_jogo_info(serial: str, pacote: str) -> dict[str, Any]:
+        return _turbo(turbo.jogo_info, aparelhos.pronto(serial), pacote)
+
+    @app.post("/api/turbo/jogo")
+    def turbo_jogo(p: PedidoTurboJogo) -> dict[str, Any]:
+        r = _turbo(turbo.ajustar_jogo, livre(p.serial), p.pacote, p.modo, p.escala, p.fps)
+        _registrar_turbo(p.serial, f"Modo de jogo ({p.modo}) em {p.pacote}", r["desfazer_id"])
+        return r
+
+    @app.post("/api/turbo/manutencao")
+    def turbo_manutencao(p: PedidoTurboManutencao) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _cancelar):
+            titulo, desc, *_ = turbo.MANUTENCOES[p.id]
+            progresso({"etapa": "manutencao", "descricao": titulo, "detalhe": desc, "atual": None, "total": None,
+                       "estimativa_s": 120})
+            r = turbo.manutencao(ap, p.id)
+            if r["ok"]:
+                _registrar_turbo(p.serial, titulo)
+            return r
+        return nova_tarefa("turbo_manutencao", p.serial, rodar)
+
+    @app.get("/api/turbo/receita")
+    def turbo_receita(serial: str) -> dict[str, Any]:
+        return _turbo(turbo.receita, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/receita/analisar")
+    def turbo_analisar(p: PedidoSerial) -> dict[str, Any]:
+        """Mesma análise do GET, mas como tarefa: o andamento aparece em tempo real e não se perde ao trocar de
+        tela (a análise lê a compilação de todos os apps e pode levar 1 minuto)."""
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_analise", p.serial, lambda progresso, _c: turbo.receita(ap, progresso))
+
+    @app.post("/api/turbo/receita")
+    def turbo_aplicar_receita(p: PedidoTurboReceita) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, cancelar):
+            r = turbo.aplicar_receita(ap, p.etapas, progresso, cancelar, medir=p.medir)
+            ad = (r.get("antes_depois") or {}).get("total")
+            ganho = f" · nota {ad['antes']} → {ad['depois']}" if ad else ""
+            _registrar_turbo(p.serial, f"Receita sob medida: {sum(e['ok'] for e in r['etapas'])} etapa(s){ganho}")
+            return r
+        return nova_tarefa("turbo_receita", p.serial, rodar)
+
+    @app.get("/api/turbo/config")
+    def turbo_config(serial: str, ns: Literal["system", "secure", "global"] = "global",
+                     filtro: str = Query("", max_length=60)) -> dict[str, Any]:
+        return {"itens": _turbo(turbo.listar_config, aparelhos.pronto(serial), ns, filtro), "ns": ns}
+
+    @app.post("/api/turbo/config")
+    def turbo_config_editar(p: PedidoTurboConfig) -> dict[str, Any]:
+        r = _turbo(turbo.editar_config, livre(p.serial), p.ns, p.chave, p.valor)
+        _registrar_turbo(p.serial, f"Configuração {p.ns}/{p.chave}: {r['anterior']} → {r['atual']}", r["desfazer_id"])
+        return r
+
+    # ---- Faxina geral: apps inúteis da marca, anúncios, DNS e câmera
+    @app.get("/api/faxina/apps")
+    def faxina_apps(serial: str) -> dict[str, Any]:
+        return _turbo(faxina.apps_da_marca, aparelhos.pronto(serial))
+
+    @app.post("/api/faxina/apps")
+    def faxina_remover(p: PedidoFaxinaApps) -> dict[str, Any]:
+        ap = livre(p.serial)
+        conhecidos = {a.pacote for lista in faxina.LISTAS.values() for a in lista}
+        fora = [x for x in p.pacotes if x not in conhecidos]
+        if fora:
+            raise HTTPException(422, f"Fora da lista de apps seguros: {', '.join(fora[:5])}")
+
+        def rodar(progresso, cancelar):
+            r = faxina.remover_apps(ap, p.pacotes, progresso, cancelar)
+            ok = sum(x["ok"] for x in r["apps"])
+            if ok:
+                _registrar_turbo(p.serial, f"Faxina: {ok} app(s) inúteis desativados")
+            return r
+        return nova_tarefa("faxina_apps", p.serial, rodar)
+
+    @app.get("/api/faxina/dns")
+    def faxina_dns(serial: str) -> dict[str, Any]:
+        return _turbo(faxina.dns_atual, aparelhos.pronto(serial))
+
+    @app.post("/api/faxina/dns")
+    def faxina_definir_dns(p: PedidoDns) -> dict[str, Any]:
+        if p.provedor and p.servidor:
+            raise HTTPException(422, "Escolha um provedor da lista OU digite um servidor, não os dois.")
+        r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
+        _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
+        return r
+
+    def auto_otimizar(serial: str) -> None:
+        """Opcional (Configurações): otimiza sozinho quando o celular conecta, no máximo 1x a cada 20 h."""
+        if not preferencias.ler().get("auto_otimizar"):
+            return
+        arq = config.DIR / "auto_otimizar.json"
+        try:
+            ultimos = json.loads(arq.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            ultimos = {}
+        if time.time() - float(ultimos.get(serial, 0)) < 20 * 3600:
+            return
+        time.sleep(4)  # deixa o aparelho terminar de subir a conexão
+        if tarefas.ocupado(serial):
+            return
+        ap = adb.Aparelho(serial)
+
+        def rodar(progresso, cancelar):
+            rec = turbo.receita(ap, progresso)
+            ids = [e["id"] for e in rec["etapas"] if e["marcada"] and e["id"] != "aviso_calor"]
+            r = turbo.aplicar_receita(ap, ids, progresso, cancelar, medir=False)
+            r["titulos"] = {e["id"]: e["titulo"] for e in rec["etapas"]}
+            r["automatica"] = True
+            ok = sum(e["ok"] for e in r["etapas"])
+            _registrar_turbo(serial, f"Otimização automática ao conectar: {ok} de {len(r['etapas'])} etapa(s)")
+            return r
+        try:
+            nova_tarefa("turbo_receita", serial, rodar)
+        except HTTPException:
+            return
+        ultimos[serial] = time.time()
+        try:
+            arq.write_text(json.dumps(ultimos), encoding="utf-8")
+        except OSError:
+            pass
+
+    aparelhos.ao_conectar = auto_otimizar
+
+    # ---- memória por modelo, relatórios da otimização e otimizar ao conectar
+    @app.get("/api/compatibilidade")
+    def compatibilidade() -> dict[str, Any]:
+        from celscan.acoes import compat
+        return {"modelos": compat.tabela()}
+
+    @app.get("/api/turbo/relatorios")
+    def turbo_relatorios(serial: str | None = None) -> dict[str, Any]:
+        from celscan.relatorio import otimizacao_pdf
+        return {"relatorios": otimizacao_pdf.listar(serial)}
+
+    @app.get("/api/turbo/relatorio/{ident}.pdf")
+    def turbo_relatorio_pdf(ident: str) -> Response:
+        from celscan.relatorio import otimizacao_pdf
+        try:
+            d = otimizacao_pdf.ler(ident)
+        except (ValueError, OSError) as e:
+            raise HTTPException(404, "Relatório não encontrado.") from e
+        return Response(otimizacao_pdf.gerar(d), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="otimizacao_{ident}.pdf"'})
+
+    # ---- destravar app / reiniciar / devolver app de fábrica
+    @app.post("/api/turbo/destravar-app")
+    def turbo_destravar_app(p: PedidoPacoteSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _c):
+            progresso({"etapa": "destravar", "descricao": "Destravando o app", "detalhe": p.pacote, "atual": None,
+                       "total": None, "estimativa_s": 90})
+            r = destravar.destravar_app(ap, p.pacote)
+            if r["desfazer_id"]:
+                _registrar_turbo(p.serial, f"Destravar {p.pacote}", r["desfazer_id"])
+            return r
+        return nova_tarefa("destravar", p.serial, rodar)
+
+    @app.post("/api/turbo/reiniciar")
+    def turbo_reiniciar(p: PedidoSerial) -> dict[str, Any]:
+        _turbo(destravar.reiniciar, livre(p.serial))
+        return {"ok": True}
+
+    @app.post("/api/faxina/devolver")
+    def faxina_devolver(p: PedidoPacoteSerial) -> dict[str, Any]:
+        return _turbo(faxina.devolver, livre(p.serial), p.pacote)
+
+    # ---- quem gasta a bateria / quem ocupa o espaço
+    @app.get("/api/gastos/bateria")
+    def gastos_bateria(serial: str) -> dict[str, Any]:
+        return _turbo(gastos.bateria, aparelhos.pronto(serial))
+
+    @app.post("/api/gastos/espaco")
+    def gastos_espaco(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+        return nova_tarefa("espaco", p.serial, lambda progresso, _c: gastos.espaco(ap, progresso))
+
+    @app.post("/api/gastos/apagar")
+    def gastos_apagar(p: PedidoApagar) -> dict[str, Any]:
+        ap = livre(p.serial)
+        if not p.caminhos and not p.pasta_velha:
+            raise HTTPException(422, "Nada escolhido para apagar.")
+        if any(not gastos.seguro(c) for c in p.caminhos):
+            raise HTTPException(422, "Só dá para apagar arquivos das pastas do usuário.")
+
+        def rodar(progresso, _c):
+            caminhos = list(p.caminhos) + (gastos.listar_velhos(ap, p.pasta_velha) if p.pasta_velha else [])
+            destino = None
+            if p.backup:
+                from celscan.acoes import backup as bk
+                destino = bk.pasta_padrao() / f"{p.serial}-espaco-{time.strftime('%Y%m%d-%H%M%S')}"
+            r = gastos.apagar(ap, caminhos, destino, progresso)
+            _registrar_turbo(p.serial, f"Espaço: {len(r['apagados'])} arquivo(s) apagado(s)"
+                             + (f", cópia em {destino}" if destino else ""))
+            return r
+        return nova_tarefa("apagar", p.serial, rodar)
+
+    # ---- modo flagrante (observa o celular em uso e pega quem age escondido)
+    @app.post("/api/flagrante")
+    def flagrante_iniciar(p: PedidoFlagrante) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, cancelar):
+            r = flagrante.observar(ap, p.duracao_s, progresso, cancelar)
+            _registrar_turbo(p.serial, f"Modo flagrante: {len(r['apps'])} app(s) apontado(s)")
+            return r
+        return nova_tarefa("flagrante", p.serial, rodar)
+
+    # ---- blindagem pós-limpeza
+    @app.get("/api/blindagem")
+    def blindagem_estado(serial: str) -> dict[str, Any]:
+        return _turbo(blindagem.estado, aparelhos.pronto(serial))
+
+    @app.post("/api/blindagem")
+    def blindagem_aplicar(p: PedidoBlindagem) -> dict[str, Any]:
+        r = _turbo(blindagem.aplicar, livre(p.serial), p.itens)
+        if r["desfazer_id"]:
+            _registrar_turbo(p.serial, "Blindagem pós-limpeza", r["desfazer_id"])
+        if r.get("desfazer_dns_id"):
+            _registrar_turbo(p.serial, "DNS contra golpes", r["desfazer_dns_id"])
+        return r
+
+    @app.post("/api/faxina/camera")
+    def faxina_camera(p: PedidoSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _cancelar):
+            progresso({"etapa": "camera", "descricao": "Deixando a câmera mais rápida",
+                       "detalhe": "compilando câmera e galeria", "atual": None, "total": None, "estimativa_s": 90})
+            r = faxina.camera_rapida(ap)
+            _registrar_turbo(p.serial, f"Câmera mais rápida ({len(r['apps'])} app(s))")
+            return r
+        return nova_tarefa("faxina_camera", p.serial, rodar)
+
+    # ---- "é falso alarme": apps confiáveis marcados pelo técnico (presos à assinatura do app)
+    @app.get("/api/confiaveis")
+    def confiaveis_listar() -> dict[str, Any]:
+        from celscan.analise import confianca
+        return {"apps": [{"pacote": k, **v} for k, v in sorted(confianca.ler().items())]}
+
+    @app.post("/api/confiaveis")
+    def confiaveis_marcar(p: PedidoConfiavel) -> dict[str, Any]:
+        from celscan.analise import confianca
+        return {"pacote": p.pacote, **confianca.marcar(p.pacote, p.cert, p.nome)}
+
+    @app.delete("/api/confiaveis/{pacote}")
+    def confiaveis_desmarcar(pacote: str) -> dict[str, Any]:
+        from celscan.analise import confianca
+        if not confianca.desmarcar(pacote):
+            raise HTTPException(404, "Esse app não estava marcado.")
+        return {"ok": True}
+
+    # ---- assinaturas de vírus offline (MalwareBazaar + listas próprias)
+    @app.get("/api/assinaturas")
+    def assinaturas_resumo() -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        return assinaturas.resumo()
+
+    @app.post("/api/assinaturas/atualizar")
+    def assinaturas_atualizar() -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        if not preferencias.chave_abusech():
+            raise HTTPException(409, "Cadastre a chave gratuita do abuse.ch primeiro.")
+        ok, msg = bases.atualizar("assinaturas", forcar=True)
+        return {"ok": ok, "mensagem": msg, **assinaturas.resumo()}
+
+    @app.post("/api/assinaturas/importar")
+    def assinaturas_importar(p: PedidoAssinaturas) -> dict[str, Any]:
+        from celscan.analise import assinaturas
+        try:
+            n = assinaturas.importar(p.nome, p.conteudo)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        return {"importadas": n, **assinaturas.resumo()}
 
     @app.post("/api/otimizar-apps")
     def otimizar_apps(p: PedidoSerial) -> dict[str, Any]:
@@ -822,7 +1510,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     def energia_reiniciar(p: PedidoReinicio) -> dict[str, Any]:
         from celscan.acoes import energia
 
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         try:
             return energia.reiniciar(ap, p.modo)
         except ValueError as e:
@@ -839,6 +1527,14 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
             raise HTTPException(422, str(e)) from e
         except adb.AdbErro as e:
             raise HTTPException(502, f"Não foi possível tirar o print: {e}") from e
+
+    @app.get("/api/autodiagnostico")
+    def autodiagnostico() -> dict[str, Any]:
+        """Confere a instalação do CelScan (ADB, componentes, pasta, banco, bases)."""
+        from celscan.core import autodiagnostico as ad
+
+        itens = ad.verificar()
+        return {"itens": itens, "resumo": ad.resumo(itens)}
 
     @app.post("/api/na-tela")
     def app_na_tela(p: PedidoSerial) -> dict[str, Any]:
@@ -867,7 +1563,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.post("/api/limpeza/cache")
     def limpar_cache(p: PedidoSerial) -> dict[str, Any]:
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
 
         def rodar(progresso, cancelar):
             progresso({"etapa": "limpeza", "descricao": "Limpando o cache dos apps", "detalhe": "",
@@ -898,13 +1594,26 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         ap = aparelhos.pronto(p.serial)
 
         def rodar(progresso, cancelar):
+            from celscan.config import LOJAS
+            from celscan.core import parsers
+
+            # quem instalou cada app: antes ia tudo como "de fora da loja" e o WhatsApp esquecido era
+            # desinstalado DE VEZ, apagando as conversas. Agora app esquecido sai sempre mantendo os dados.
+            instaladores = parsers.pacotes(ap.sh("pm list packages -i -3", timeout=60))
+            con = db.conectar()
             feitos = []
             for i, pkg in enumerate(p.pacotes, 1):
+                if cancelar.is_set():
+                    break
                 progresso({"etapa": "remocao", "descricao": "Removendo apps esquecidos (cópia na quarentena)",
                            "detalhe": pkg, "atual": i, "total": len(p.pacotes),
                            "estimativa_s": 5 * (len(p.pacotes) - i)})
-                r = {"pacote": pkg, "motivos": ["app esquecido (não usado há muito tempo)"]}
+                inst = (instaladores.get(pkg) or ("", None))[1]
+                r = {"pacote": pkg, "motivos": ["app esquecido (não usado há muito tempo)"],
+                     "loja": LOJAS.get(inst or ""), "manter_dados": True, "admins": []}
                 ok, msg = remocao.remover(ap, r)
+                if ok:
+                    db.registrar_acao(con, p.serial, "remocao", pkg, f"app esquecido: {msg}", r.get("quarentena_id"))
                 feitos.append({"pacote": pkg, "ok": ok, "mensagem": msg, "quarentena_id": r.get("quarentena_id")})
             return feitos
         return nova_tarefa("remocao", p.serial, rodar)
@@ -925,9 +1634,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def rodar(progresso, cancelar):
             feitos = []
             for i, pkg in enumerate(p.pacotes, 1):
+                if cancelar.is_set():
+                    break
                 progresso({"etapa": "debloat", "descricao": "Desativando apps pré-instalados", "detalhe": pkg,
                            "atual": i, "total": len(p.pacotes), "estimativa_s": 2 * (len(p.pacotes) - i)})
-                feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
+                ok_, motivo = otimizacao.desativar_detalhado(ap, pkg)
+                feitos.append({"pacote": pkg, "ok": ok_, "motivo": motivo})
             con = db.conectar()
             ok = [f["pacote"] for f in feitos if f["ok"]]
             if ok:
@@ -943,7 +1655,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
 
     @app.post("/api/limpeza/lixo/apagar")
     def apagar_lixo(p: PedidoLimpeza) -> dict[str, Any]:
-        ap = aparelhos.pronto(p.serial)
+        ap = livre(p.serial)
         try:
             return {"liberado_mb": otimizacao.limpar_lixo(ap, p.categorias)}
         except ValueError as e:
@@ -987,9 +1699,13 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                                         destino_de=recuperacao.destino_recuperado))
         return nova_tarefa("recuperacao", p.serial, rodar)
 
+    pastas_liberadas: set[Path] = set()  # destinos escolhidos pelo técnico nesta sessão (para "Abrir pasta")
+
     def destino_backup(serial: str, destino: str | None) -> Path:
         if destino:
-            return Path(destino).expanduser()
+            escolhido = Path(destino).expanduser()
+            pastas_liberadas.add(escolhido.resolve())
+            return escolhido
         d = aparelhos.lista.get(serial, {})
         nome = backup.nome_seguro(f"{d.get('fabricante', '')} {d.get('modelo', '')} ({serial})".strip())
         return backup.pasta_padrao() / nome  # mesmo nome sempre: rodar de novo continua de onde parou
@@ -1032,9 +1748,12 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.post("/api/abrir-pasta")
     def abrir_pasta(p: PedidoPasta) -> dict[str, bool]:
         alvo = Path(p.caminho).expanduser().resolve()
-        permitidas = [backup.pasta_padrao().resolve(), config.DIR.resolve()]
+        permitidas = [backup.pasta_padrao().resolve(), config.DIR.resolve(), *pastas_liberadas]
         if not any(alvo == r or r in alvo.parents for r in permitidas):
             raise HTTPException(403, "Só abro pastas do CelScan")
+        if alvo.exists() and not alvo.is_dir():
+            # nunca "abrir" um arquivo: no Windows isso EXECUTA (ex.: um .exe vindo do backup da pasta Download)
+            raise HTTPException(422, "Isso é um arquivo, não uma pasta")
         alvo.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             os.startfile(alvo)  # type: ignore[attr-defined]
@@ -1046,7 +1765,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.websocket("/api/ws")
     async def tempo_real(ws: WebSocket) -> None:
         recebido = ws.query_params.get("t") or ""
-        if not secrets.compare_digest(recebido, token):
+        if not secrets.compare_digest(recebido.encode(), token.encode()):
             await ws.close(code=4401)
             return
         await ws.accept()
@@ -1056,14 +1775,30 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         def ouvinte(msg: dict[str, Any]) -> None:
             loop.call_soon_threadsafe(fila.put_nowait, msg)
 
+        async def receber() -> None:  # percebe na hora quando a aba fecha
+            try:
+                while True:
+                    await ws.receive_text()
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+
         tarefas.ouvir(ouvinte)
+        rx = asyncio.create_task(receber())
         try:
             await ws.send_json({"tipo": "estado", **estado()})
-            while True:
-                await ws.send_json(await fila.get())
+            # antes o laço só notava a desconexão na PRÓXIMA mensagem: abas fechadas ficavam penduradas
+            # (ouvinte + fila crescendo) até alguma tarefa publicar algo
+            while not rx.done():
+                pegar = asyncio.ensure_future(fila.get())
+                feito, _ = await asyncio.wait({pegar, rx}, return_when=asyncio.FIRST_COMPLETED)
+                if pegar in feito:
+                    await ws.send_json(pegar.result())
+                else:
+                    pegar.cancel()
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
+            rx.cancel()
             tarefas.parar_de_ouvir(ouvinte)
 
     # ---- interface (arquivos do React já compilados)

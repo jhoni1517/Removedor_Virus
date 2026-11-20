@@ -4,7 +4,140 @@ import { useApp } from "../estado";
 import { Botao, Cartao, Titulo } from "../ui";
 import { aplicarTema, coresDoLogo, lerCoresLoja, MODELOS, salvarCoresLoja, TEMAS } from "../tema";
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean }
+interface ItemDiag { item: string; ok: boolean | null; detalhe: string; dica: string }
+
+/** "Verificar o CelScan": confere a instalação (ADB, componentes, banco, bases) antes de culpar o celular. */
+function Autodiagnostico() {
+  const [itens, setItens] = useState<ItemDiag[] | null>(null);
+  const [lendo, setLendo] = useState(false);
+  const [erro, setErro] = useState("");
+  async function verificar() {
+    setLendo(true); setErro("");
+    try { setItens((await api<{ itens: ItemDiag[] }>("/autodiagnostico")).itens); }
+    catch (e) { setErro((e as Error).message); }
+    finally { setLendo(false); }
+  }
+  const falhas = itens?.filter((i) => i.ok === false).length ?? 0;
+  return (
+    <Cartao className="p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Verificar o CelScan</h2>
+          <p className="mt-1 text-sm text-fraco">Confere se a instalação está inteira: ADB, componentes, banco do histórico e listas de ameaças.</p>
+        </div>
+        <Botao onClick={verificar} disabled={lendo}>{lendo ? "Verificando..." : itens ? "Verificar de novo" : "Verificar agora"}</Botao>
+      </div>
+      {erro && <p className="mt-3 text-sm text-perigo" role="alert">{erro}</p>}
+      {itens && (
+        <>
+          <p className={`mt-3 text-sm font-semibold ${falhas ? "text-perigo" : "text-ok"}`} role="status">
+            {falhas ? `${falhas} problema(s) na instalação.` : "Tudo certo com o CelScan."}
+          </p>
+          <ul className="mt-2 divide-y divide-linha text-sm">
+            {itens.map((i) => (
+              <li key={i.item} className="py-1.5">
+                <span className={`mr-2 font-mono ${i.ok === false ? "text-perigo" : i.ok ? "text-ok" : "text-fraco"}`} aria-hidden>{i.ok === false ? "✗" : i.ok ? "✓" : "•"}</span>
+                <span className="font-medium">{i.item}</span> <span className="text-fraco">— {i.detalhe}</span>
+                {i.dica && <span className="block pl-6 text-xs text-atencao">{i.dica}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Cartao>
+  );
+}
+
+function SomAoTerminar() {
+  const [ligado, setLigado] = useState(() => { try { return localStorage.getItem("celscan-som") === "1"; } catch { return false; } });
+  function trocar(v: boolean) {
+    setLigado(v);
+    try { localStorage.setItem("celscan-som", v ? "1" : "0"); } catch { /* sem storage */ }
+  }
+  return (
+    <Cartao className="p-5">
+      <label className="flex cursor-pointer items-center justify-between gap-4">
+        <span><span className="block font-semibold">Bipe ao terminar a análise</span>
+          <span className="text-sm text-fraco">Útil quando você deixa o celular analisando e vai atender outro cliente.</span></span>
+        <input type="checkbox" className="h-5 w-5" checked={ligado} onChange={(e) => trocar(e.target.checked)} />
+      </label>
+    </Cartao>
+  );
+}
+
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; auto_otimizar?: boolean; dias_retorno: number; contato_loja: string; abusech_chave?: string | null }
+
+
+interface ResumoAssin { baixadas: number; proprias: number; idade_h: number | null; tem_chave: boolean }
+
+function Assinaturas() {
+  const { avisar } = useApp();
+  const [r, setR] = useState<ResumoAssin | null>(null);
+  const [chave, setChave] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const carregar = () => api<ResumoAssin>("/assinaturas").then(setR).catch(() => undefined);
+  useEffect(() => { carregar(); }, []);
+  async function rodar(f: () => Promise<unknown>, ok: string) {
+    setOcupado(true);
+    try { await f(); avisar({ tipo: "ok", texto: ok }); await carregar(); }
+    catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+    finally { setOcupado(false); }
+  }
+  async function importar(arq: File) {
+    const conteudo = await arq.text();
+    await rodar(() => api("/assinaturas/importar", { corpo: { nome: arq.name.replace(/\.[^.]+$/, ""), conteudo } }), "Lista importada.");
+  }
+  return (
+    <Cartao className="p-5 text-sm">
+      <h2 className="font-semibold">Assinaturas de vírus (offline)</h2>
+      <p className="mt-1 text-fraco">
+        Impressões digitais de APKs maliciosos já conhecidos. A verificação compara sem internet; quando bate, o app vira ameaça confirmada.
+      </p>
+      {r && <p className="mt-2">
+        <b>{r.baixadas.toLocaleString("pt-BR")}</b> do MalwareBazaar{r.idade_h != null ? ` (atualizado há ${r.idade_h} h)` : ""} · <b>{r.proprias.toLocaleString("pt-BR")}</b> de listas próprias
+      </p>}
+      <p className="mt-3 text-fraco">Chave gratuita do abuse.ch (auth.abuse.ch): baixa as novas assinaturas 1x por dia.{r?.tem_chave ? " Chave cadastrada." : ""}</p>
+      <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); rodar(() => api("/config", { metodo: "PUT", corpo: { abusech_chave: chave.trim() } }), "Chave salva."); setChave(""); }}>
+        <input type="password" autoComplete="off" className="w-80 max-w-full rounded-md border border-linha bg-superficie-2 px-3 py-2 font-mono text-sm"
+          placeholder="Chave do abuse.ch" value={chave} onChange={(e) => setChave(e.target.value)} aria-label="Chave do abuse.ch" />
+        <Botao type="submit" disabled={!chave.trim() || ocupado}>Salvar chave</Botao>
+        {r?.tem_chave && <Botao disabled={ocupado} onClick={() => rodar(() => api("/assinaturas/atualizar", { corpo: {} }), "Assinaturas atualizadas.")}>Atualizar agora</Botao>}
+      </form>
+      <label className="mt-3 inline-block cursor-pointer text-destaque">
+        Importar lista (.txt/.csv, um SHA-256 por linha)
+        <input type="file" accept=".txt,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importar(f); e.target.value = ""; }} />
+      </label>
+    </Cartao>
+  );
+}
+
+function Confiaveis() {
+  const { avisar } = useApp();
+  const [apps, setApps] = useState<{ pacote: string; nome?: string | null; cert?: string | null }[] | null>(null);
+  const carregar = () => api<{ apps: { pacote: string; nome?: string | null; cert?: string | null }[] }>("/confiaveis").then((r) => setApps(r.apps)).catch(() => setApps([]));
+  useEffect(() => { carregar(); }, []);
+  async function tirar(pacote: string) {
+    try { await api(`/confiaveis/${encodeURIComponent(pacote)}`, { metodo: "DELETE" }); avisar({ tipo: "ok", texto: "Marcação removida: o app volta a ser analisado normalmente." }); carregar(); }
+    catch (e) { avisar({ tipo: "erro", texto: (e as Error).message }); }
+  }
+  return (
+    <Cartao className="p-5 text-sm">
+      <h2 className="font-semibold">Apps marcados como falso alarme</h2>
+      <p className="mt-1 text-fraco">Não aparecem mais como suspeitos enquanto a assinatura do app for a mesma. Ameaça com prova (lista pública, antivírus, código de trojan) aparece sempre.</p>
+      {apps && apps.length === 0 && <p className="mt-2 text-fraco">Nenhum app marcado.</p>}
+      {apps && apps.length > 0 && (
+        <ul className="mt-2 divide-y divide-linha">
+          {apps.map((a) => (
+            <li key={a.pacote} className="flex items-center justify-between gap-3 py-2">
+              <span><b>{a.nome || a.pacote}</b> <span className="font-mono text-xs text-fraco">{a.pacote}</span></span>
+              <button className="text-destaque" onClick={() => tirar(a.pacote)}>Desmarcar</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Cartao>
+  );
+}
 
 export default function Configuracoes() {
   const { avisar, recarregar, tema, mudarTema, escala, mudarEscala, estado, dispositivos, esperar, modelo, mudarModelo } = useApp();
@@ -40,6 +173,9 @@ export default function Configuracoes() {
     <div className="max-w-3xl space-y-6">
       <Titulo sub={`CelScan ${estado?.versao ?? ""}`}>Configurações</Titulo>
 
+      <Autodiagnostico />
+      <SomAoTerminar />
+
       <Cartao className="p-5">
         <h2 className="font-semibold">VirusTotal</h2>
         <p className="mt-1 text-sm text-fraco">
@@ -53,6 +189,8 @@ export default function Configuracoes() {
           {cfg?.chave_virustotal && <Botao onClick={() => salvar({ chave_virustotal: "" })}>Remover chave</Botao>}
         </form>
       </Cartao>
+
+      <Assinaturas />
 
       <Cartao className="p-5">
         <h2 className="font-semibold">Proteção Pix</h2>
@@ -144,6 +282,45 @@ export default function Configuracoes() {
         </Cartao>
       )}
 
+      {cfg && (
+        <Cartao className="p-5">
+          <h2 className="font-semibold">Otimizar sozinho ao conectar</h2>
+          <label className="mt-2 flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--destaque)]" checked={!!cfg.auto_otimizar}
+              onChange={(e) => salvar({ auto_otimizar: e.target.checked })} />
+            <span>Quando um celular conectar ao PC, o CelScan analisa e aplica as etapas recomendadas sozinho (no máximo
+              1 vez por dia por celular). O resultado e o relatório ficam na aba Otimizar e tudo desfaz no Histórico.</span>
+          </label>
+        </Cartao>
+      )}
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Contato da loja no laudo</h2>
+        <p className="mt-1 text-sm text-fraco">Sai no rodapé de cada página do laudo em PDF (ex.: nome, WhatsApp e endereço).</p>
+        <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => {
+          e.preventDefault();
+          const campo = (e.currentTarget.elements.namedItem("contato") as HTMLInputElement);
+          salvar({ contato_loja: campo.value.trim() });
+        }}>
+          <input name="contato" maxLength={90} defaultValue={cfg?.contato_loja ?? ""} key={cfg?.contato_loja ?? ""}
+            placeholder="Cell Center · (11) 99999-0000 · Rua X, 100" aria-label="Contato da loja"
+            className="min-w-[260px] flex-1 rounded-md border border-linha bg-superficie-2 px-3 py-2 text-sm" />
+          <Botao type="submit">Salvar</Botao>
+        </form>
+      </Cartao>
+
+      <Cartao className="p-5">
+        <h2 className="font-semibold">Revisão gratuita</h2>
+        <p className="mt-1 text-sm text-fraco">Ao entregar uma ordem de serviço, o painel da loja lembra de chamar o cliente para uma revisão
+          depois deste prazo. Use 0 para não lembrar.</p>
+        <label className="mt-3 flex items-center gap-2 text-sm">Lembrar depois de
+          <select className="rounded-md border border-linha bg-superficie px-2 py-1" value={cfg?.dias_retorno ?? 30}
+            onChange={(e) => salvar({ dias_retorno: Number(e.target.value) })} aria-label="Dias até a revisão">
+            {[0, 15, 30, 60, 90, 180].map((d) => <option key={d} value={d}>{d === 0 ? "nunca" : `${d} dias`}</option>)}
+          </select>
+        </label>
+      </Cartao>
+
       <Cartao className="p-5">
         <h2 className="font-semibold">Atualizações</h2>
         <p className="mt-1 text-sm text-fraco">O CelScan avisa quando sai versão nova e confere o arquivo (SHA-256) antes de instalar.</p>
@@ -154,6 +331,8 @@ export default function Configuracoes() {
           ))}
         </div>
       </Cartao>
+
+      <Confiaveis />
 
       <Cartao className="p-5 text-sm">
         <h2 className="font-semibold">Dados</h2>

@@ -34,6 +34,47 @@ class Tarefa:
                 "criada": self.criada, "terminada": self.terminada}
 
 
+NOMES = {
+    "varredura": "verificação de vírus",
+    "remocao": "remoção de vírus",
+    "turbo_analise": "análise do celular",
+    "turbo_receita": "otimização",
+    "turbo_compilar": "compilação de apps",
+    "turbo_manutencao": "manutenção",
+    "turbo_nota": "medição da nota",
+    "turbo_reset": "desfazer compilação",
+    "faxina_apps": "remoção de apps do sistema",
+    "faxina_camera": "otimização da câmera",
+    "destravar": "destravar app",
+    "espaco": "análise de espaço",
+    "apagar": "limpeza de arquivos",
+    "flagrante": "modo flagrante",
+    "backup": "backup",
+    "recuperacao": "recuperação de arquivos",
+    "desfazer": "desfazer",
+    "limpeza_cache": "limpeza de cache",
+    "debloat": "remoção de apps",
+    "diagnostico": "diagnóstico",
+}
+
+
+def nome(tipo: str) -> str:
+    return NOMES.get(tipo, "outra operação")
+
+
+class Ocupado(Exception):
+    """Já existe uma operação em andamento neste aparelho."""
+
+    def __init__(self, tarefa: Tarefa):
+        super().__init__(f"Espere terminar: {nome(tarefa.tipo)} em andamento neste celular (o andamento aparece "
+                         "no topo da tela).")
+        self.tarefa = tarefa
+
+
+GUARDAR_S = 1800  # tarefas terminadas ficam 30 min para a interface buscar o resultado
+GUARDAR_MAX = 40
+
+
 class Gerenciador:
     def __init__(self) -> None:
         self._tarefas: dict[str, Tarefa] = {}
@@ -66,11 +107,29 @@ class Gerenciador:
             return next((t for t in self._tarefas.values() if t.serial == serial and t.estado == "executando"),
                         None)
 
+    def _limpar(self) -> None:
+        """Esquece tarefas terminadas antigas. Antes ficavam todas na memória (cada varredura guarda o resultado
+        inteiro, com ícones): com o programa aberto o dia todo no balcão, a memória só crescia. Chamar com a trava."""
+        agora = time.time()
+        terminadas = sorted((t for t in self._tarefas.values() if t.estado != "executando"),
+                            key=lambda t: t.terminada or t.criada, reverse=True)
+        for i, t in enumerate(terminadas):
+            if i >= GUARDAR_MAX or agora - (t.terminada or t.criada) > GUARDAR_S:
+                self._tarefas.pop(t.id, None)
+
     def criar(self, tipo: str, serial: str | None,
               funcao: Callable[[Callable[[dict[str, Any]], None], threading.Event], Any],
-              erros_esperados: tuple[type[BaseException], ...] = ()) -> Tarefa:
+              erros_esperados: tuple[type[BaseException], ...] = (), exclusiva: bool = True) -> Tarefa:
+        """Cria e inicia a tarefa. Com `exclusiva`, confere e reserva o aparelho na mesma operação: dois cliques
+        rápidos não disparam duas operações brigando pelo mesmo celular."""
         tarefa = Tarefa(id=uuid.uuid4().hex[:12], tipo=tipo, serial=serial)
         with self._trava:
+            if exclusiva and serial:
+                ocupada = next((t for t in self._tarefas.values() if t.serial == serial and t.estado == "executando"),
+                               None)
+                if ocupada:
+                    raise Ocupado(ocupada)
+            self._limpar()
             self._tarefas[tarefa.id] = tarefa
 
         def progresso(evento: dict[str, Any]) -> None:
@@ -98,10 +157,12 @@ class Gerenciador:
         return tarefa
 
     def obter(self, ident: str) -> Tarefa | None:
-        return self._tarefas.get(ident)
+        with self._trava:
+            return self._tarefas.get(ident)
 
     def listar(self) -> list[Tarefa]:
-        return sorted(self._tarefas.values(), key=lambda t: t.criada, reverse=True)
+        with self._trava:  # cópia sob a trava: outra thread pode criar tarefa durante a iteração
+            return sorted(list(self._tarefas.values()), key=lambda t: t.criada, reverse=True)
 
     def cancelar(self, ident: str) -> bool:
         t = self._tarefas.get(ident)

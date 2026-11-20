@@ -8,9 +8,9 @@ from pathlib import Path
 from conftest import RAIZ
 
 
-def rodar(env, *args):
+def rodar(env, *args, entrada=None):
     return subprocess.run([sys.executable, str(RAIZ / "celscan.py"), *args], env=env, capture_output=True,
-                          encoding="utf-8", stdin=subprocess.DEVNULL, timeout=120)
+                          encoding="utf-8", input=entrada, stdin=None if entrada else subprocess.DEVNULL, timeout=120)
 
 
 def test_android_sem_teclado_gera_laudo(ambiente_fake, tmp_path):
@@ -27,8 +27,10 @@ def test_android_sem_teclado_gera_laudo(ambiente_fake, tmp_path):
 
 
 def test_android_remover_tira_admin(ambiente_fake, tmp_path):
-    r = rodar(ambiente_fake, "android", "--nao-abrir", "--sem-iocs", "--remover", "--saida", str(tmp_path / "l"))
+    r = rodar(ambiente_fake, "android", "--nao-abrir", "--sem-iocs", "--remover", "--saida", str(tmp_path / "l"),
+              entrada="s\n" * 10)
     assert r.returncode == 0, r.stdout + r.stderr
+    assert "parece app espião" in r.stdout  # espião: o padrão é NÃO remover sem a pessoa decidir
     assert "removido" in r.stdout
     log = Path(ambiente_fake["CELSCAN_FAKE_ESTADO"], "comandos.log").read_text(encoding="utf-8")
     assert "dpm remove-active-admin --user 0 com.systemservice/com.systemservice.AdminRcv" in log
@@ -36,7 +38,8 @@ def test_android_remover_tira_admin(ambiente_fake, tmp_path):
 
 
 def test_historico_registra_varredura_e_remocao(ambiente_fake, tmp_path):
-    rodar(ambiente_fake, "android", "--nao-abrir", "--sem-iocs", "--remover", "--saida", str(tmp_path / "l"))
+    rodar(ambiente_fake, "android", "--nao-abrir", "--sem-iocs", "--remover", "--saida", str(tmp_path / "l"),
+          entrada="s\n" * 10)
     r = rodar(ambiente_fake, "historico")
     assert "moto g54 5G" in r.stdout and "remocao" in r.stdout, r.stdout
 

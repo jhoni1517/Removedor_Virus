@@ -1,6 +1,26 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urlWebSocket, type Dispositivo, type Estado, type Tarefa } from "./api";
-import { aplicarModelo, aplicarTema } from "./tema";
+import { aplicarModelo, modeloValido, aplicarTema } from "./tema";
+import { ErroApi } from "./api";
+
+// localStorage pode lançar exceção (WebView com armazenamento bloqueado): antes isso deixava a tela em branco
+/** Guarda só as últimas tarefas: cada varredura traz o retrato inteiro (com ícones) e, num dia de balcão,
+ * a memória da aba crescia sem parar. As que ainda estão rodando nunca saem. */
+const MAX_TAREFAS = 30;
+function limitar(t: Record<string, Tarefa>): Record<string, Tarefa> {
+  const ids = Object.keys(t);
+  if (ids.length <= MAX_TAREFAS) return t;
+  const sobra = ids.length - MAX_TAREFAS;
+  const fora = new Set(ids.filter((id) => t[id].estado !== "executando").slice(0, sobra));
+  return Object.fromEntries(Object.entries(t).filter(([id]) => !fora.has(id)));
+}
+
+export function lerLocal(chave: string): string | null {
+  try { return localStorage.getItem(chave); } catch { return null; }
+}
+export function gravarLocal(chave: string, valor: string): void {
+  try { localStorage.setItem(chave, valor); } catch { /* sem armazenamento: só não lembra */ }
+}
 
 export interface Toast {
   id: number;
@@ -43,20 +63,37 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [dispositivos, setDispositivos] = useState<Dispositivo[]>([]);
   const [tarefas, setTarefas] = useState<Record<string, Tarefa>>({});
   const [avisos, setAvisos] = useState<Toast[]>([]);
-  const [tema, setTema] = useState(() => localStorage.getItem("celscan-tema") ?? "sistema");
-  const [escala, setEscala] = useState(() => Number(localStorage.getItem("celscan-escala")) || 1);
-  const [modelo, setModelo] = useState(() => localStorage.getItem("celscan-modelo") ?? "estudio");
+  const [tema, setTema] = useState(() => lerLocal("celscan-tema") ?? "sistema");
+  const [escala, setEscala] = useState(() => Number(lerLocal("celscan-escala")) || 1);
+  const [modelo, setModelo] = useState(() => modeloValido(lerLocal("celscan-modelo")));
   const proximo = useRef(1);
 
   const [erroBackend, setErroBackend] = useState<string | null>(null);
 
   const wsAberto = useRef(false);
+  const buscando = useRef<Set<string>>(new Set());
 
   const recarregar = useCallback(async () => {
     try {
       const e = await api<Estado>("/estado");
       setEstado(e);
       setDispositivos(e.dispositivos);
+      // tarefas em andamento continuam visíveis em qualquer tela (e depois de recarregar a janela); a que saiu
+      // da lista "executando" é buscada uma vez para pegar o resultado final
+      const rodando = new Set((e.tarefas ?? []).map((t) => t.id));
+      setTarefas((ts) => {
+        const n = { ...ts };
+        for (const t of e.tarefas ?? []) n[t.id] = { ...(ts[t.id] ?? {}), ...t, progresso: t.progresso ?? ts[t.id]?.progresso ?? {} };
+        for (const t of Object.values(ts)) {
+          if (t.estado === "executando" && !rodando.has(t.id) && !buscando.current.has(t.id)) {
+            buscando.current.add(t.id);
+            api<Tarefa>(`/tarefas/${t.id}`).then((f) => setTarefas((x) => ({ ...x, [f.id]: f })))
+              .catch(() => setTarefas((x) => ({ ...x, [t.id]: { ...t, estado: "erro", erro: "A operação foi interrompida." } })))
+              .finally(() => buscando.current.delete(t.id));
+          }
+        }
+        return limitar(n);
+      });
       setErroBackend(null);
       // O WebSocket é só um atalho de tempo real; se o polling responde, o programa está conectado.
       setOnline(true);
@@ -74,6 +111,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
     let parar = false;
     let espera = 500;
     const conectar = () => {
+      if (parar) return; // a reconexão agendada podia abrir um WebSocket novo depois de a tela fechar
       try {
         ws = new WebSocket(urlWebSocket());
       } catch {
@@ -92,7 +130,7 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
         } else if (msg.tipo === "dispositivos") {
           setDispositivos(msg.dispositivos);
         } else if (msg.tipo === "tarefa") {
-          setTarefas((t) => ({ ...t, [msg.tarefa.id]: msg.tarefa }));
+          setTarefas((t) => limitar({ ...t, [msg.tarefa.id]: msg.tarefa }));
         } else if (msg.tipo === "progresso") {
           setTarefas((t) => (t[msg.tarefa] ? { ...t, [msg.tarefa]: { ...t[msg.tarefa], progresso: msg.evento } } : t));
         }
@@ -115,8 +153,8 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     aplicarTema(tema, escala);
-    localStorage.setItem("celscan-tema", tema);
-    localStorage.setItem("celscan-escala", String(escala));
+    gravarLocal("celscan-tema", tema);
+    gravarLocal("celscan-escala", String(escala));
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const ouvir = () => aplicarTema(tema, escala);
     mq.addEventListener("change", ouvir);
@@ -125,25 +163,33 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     aplicarModelo(modelo);
-    localStorage.setItem("celscan-modelo", modelo);
+    gravarLocal("celscan-modelo", modelo);
   }, [modelo]);
 
   const esperar = useCallback(<R,>(t: Tarefa<R>) => {
-    setTarefas((ts) => ({ ...ts, [t.id]: t as Tarefa }));
+    setTarefas((ts) => limitar({ ...ts, [t.id]: t as Tarefa }));
     // Consulta periódica como garantia, caso alguma mensagem do WebSocket se perca.
     return new Promise<Tarefa<R>>((resolver) => {
       const checar = async () => {
         try {
           const atual = await api<Tarefa<R>>(`/tarefas/${t.id}`);
+          // guarda o andamento também por aqui: em alguns WebView2 o WebSocket não entrega o progresso e a
+          // tela de verificação ficava parada nas bolinhas cinzas
+          setTarefas((ts) => ({ ...ts, [t.id]: { ...(ts[t.id] ?? {}), ...(atual as Tarefa) } }));
           if (atual.estado !== "executando") {
             setTarefas((ts) => ({ ...ts, [t.id]: atual as Tarefa }));
             resolver(atual);
             return;
           }
-        } catch {
-          /* tenta de novo */
+        } catch (e) {
+          // tarefa sumiu (o CelScan foi reiniciado): antes a tela ficava em "Removendo..." para sempre
+          if (e instanceof ErroApi && e.status === 404) {
+            resolver({ ...t, estado: "erro", erro: "A operação foi interrompida (o CelScan foi reiniciado). "
+              + "Confira o Histórico antes de repetir." });
+            return;
+          }
         }
-        setTimeout(checar, 800);
+        setTimeout(checar, 700);
       };
       setTimeout(checar, 400);
     });
