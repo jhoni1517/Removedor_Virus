@@ -534,3 +534,16 @@ h3 { font-stretch: 108%; }
 .abas-detalhes button { font-size: 0.8rem; padding: 3px 10px; border: 1px solid var(--linha); border-radius: 999px; color: var(--fraco); background: transparent; }
 .abas-detalhes button:hover { color: inherit; }
 .abas-detalhes button[aria-selected="true"] { color: inherit; border-color: currentColor; font-weight: 600; }
+
+/* ---- andamento em tempo real (análise, otimização, remoção...) */
+.andamento { border: 1px solid var(--linha); border-radius: 12px; padding: 16px 18px; background: var(--superficie);
+  animation: entrar .25s ease-out; }
+.andamento-trilho { position: relative; height: 10px; border-radius: 999px; background: var(--linha); overflow: hidden; }
+.andamento-cheio { position: relative; height: 100%; border-radius: 999px; background: var(--grad-destaque, var(--destaque));
+  transition: width .6s ease; overflow: hidden; }
+.andamento-cheio::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: brilho 1.6s linear infinite; }
+.andamento-indeterminado { width: 35%; animation: deslizar 1.4s ease-in-out infinite; }
+@keyframes brilho { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes deslizar { 0% { transform: translateX(-110%); } 100% { transform: translateX(310%); } }
+@media (prefers-reduced-motion: reduce) { .andamento-cheio::after, .andamento-indeterminado { animation: none; } }

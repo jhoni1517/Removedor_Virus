@@ -111,6 +111,8 @@ if a[0] == "shell":
         if "sec features" in script:  # Turbo: ficha
             fim(fixture("turbo_ficha.txt"))
         if "sec dexopt" in script:  # Otimizar: por que trava
+            import time as _t
+            _t.sleep(float(os.environ.get("CELSCAN_FAKE_DEMORA", "0")))
             fim("@@SEC df\n/dev/block/dm-50 115000000 106000000 9000000 93% /data\n@@SEC lowpower\n1\n"
                 "@@SEC anim\n1.0\n1.0\n1.0\n@@SEC dexopt\n[com.netflix.mediaclient]\n  arm64: [status=verify]\n"
                 "[com.android.systemui]\n  arm64: [status=verify]\n[com.whatsapp]\n  arm64: [status=speed-profile]\n"

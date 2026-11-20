@@ -9,6 +9,17 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b3 (20/11/2026) — andamento em tempo real que não some
+
+- A análise da Otimização virou tarefa do programa (POST /api/turbo/receita/analisar) com 5 etapas e progresso:
+  trocar de aba ou de menu não cancela nem esconde mais — ao voltar, a barra continua de onde estava e o
+  resultado aparece quando terminar.
+- Barra de andamento nova (etapa, detalhe, %, tempo decorrido e quanto falta, trilha de etapas) em todas as abas
+  do Otimizar para qualquer operação rodando no celular (otimizar, remover apps, destravar, espaço, flagrante...).
+- O estado das tarefas em andamento é sincronizado pelo /api/estado: sobrevive a recarregar a janela; a tarefa
+  que terminou com a tela fechada tem o resultado buscado sozinho.
+- "Há uma operação em andamento" agora diz QUAL operação ("Espere terminar: otimização em andamento...").
+
 ## Beta 3.7.0b2 (20/11/2026) — por que trava, destravar app e Apps do sistema (foco Xiaomi)
 
 - **Por que está travando** (aba Otimizar): antes do plano, o CelScan mede e mostra cada causa com a prova —

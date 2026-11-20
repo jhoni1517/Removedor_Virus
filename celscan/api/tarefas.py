@@ -34,11 +34,40 @@ class Tarefa:
                 "criada": self.criada, "terminada": self.terminada}
 
 
+NOMES = {
+    "varredura": "verificação de vírus",
+    "remocao": "remoção de vírus",
+    "turbo_analise": "análise do celular",
+    "turbo_receita": "otimização",
+    "turbo_compilar": "compilação de apps",
+    "turbo_manutencao": "manutenção",
+    "turbo_nota": "medição da nota",
+    "turbo_reset": "desfazer compilação",
+    "faxina_apps": "remoção de apps do sistema",
+    "faxina_camera": "otimização da câmera",
+    "destravar": "destravar app",
+    "espaco": "análise de espaço",
+    "apagar": "limpeza de arquivos",
+    "flagrante": "modo flagrante",
+    "backup": "backup",
+    "recuperacao": "recuperação de arquivos",
+    "desfazer": "desfazer",
+    "limpeza_cache": "limpeza de cache",
+    "debloat": "remoção de apps",
+    "diagnostico": "diagnóstico",
+}
+
+
+def nome(tipo: str) -> str:
+    return NOMES.get(tipo, "outra operação")
+
+
 class Ocupado(Exception):
     """Já existe uma operação em andamento neste aparelho."""
 
     def __init__(self, tarefa: Tarefa):
-        super().__init__(f"Já existe uma operação em andamento neste aparelho ({tarefa.tipo}).")
+        super().__init__(f"Espere terminar: {nome(tarefa.tipo)} em andamento neste celular (o andamento aparece "
+                         "no topo da tela).")
         self.tarefa = tarefa
 
 

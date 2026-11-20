@@ -7,6 +7,7 @@ import { PainelBlindagem } from "./Blindagem";
 import { PainelFlagrante } from "./Flagrante";
 import { PainelBateria, PainelEspaco } from "./Gastos";
 import { MonitorJogo } from "./Monitor";
+import { EmAndamento, ProgressoTarefa, useUltimaTarefa } from "./Andamento";
 import { num } from "../nomes";
 import { Barra, Botao, Cartao, corNota, Miniatura, nomeApp, Titulo } from "../ui";
 
@@ -356,6 +357,7 @@ function PainelCalor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- receita */
+interface Analise { etapas: Etapa[]; problemas?: Problema[]; reiniciar?: boolean }
 interface Problema { id: string; gravidade: "alta" | "media" | "baixa"; titulo: string; prova: string; conserto: string; etapas: string[]; marcar: boolean }
 interface Diferenca { antes: number; depois: number; pontos: number; ganho_pct: number | null }
 interface AntesDepois { total: Diferenca | null; categorias: Record<string, Diferenca>; obs: string }
@@ -363,19 +365,23 @@ interface AntesDepois { total: Diferenca | null; categorias: Record<string, Dife
 function PainelReceita({ d }: { d: Dispositivo }) {
   const { esperar, avisar } = useApp();
   const { ocupado, rodar } = useAcao();
-  const [etapas, setEtapas] = useState<Etapa[] | null>(null);
+  // análise e otimização são tarefas do programa: continuam rodando e o resultado aparece mesmo trocando de tela
+  const analise = useUltimaTarefa<Analise>(d.serial, "turbo_analise");
+  const aplicacao = useUltimaTarefa<{ etapas: { id: string; ok: boolean }[]; antes_depois?: AntesDepois }>(d.serial, "turbo_receita");
+  const res = analise?.estado === "concluida" ? analise.resultado : null;
+  const etapas = res?.etapas ?? null;
+  const problemas = res?.problemas ?? [];
+  const reiniciar = !!res?.reiniciar;
+  const analisando = analise?.estado === "executando";
+  const otimizando = aplicacao?.estado === "executando";
+  const aplicado = aplicacao?.estado === "concluida" && (aplicacao.criada ?? 0) > (analise?.criada ?? 0);
+  const ad = aplicado ? aplicacao?.resultado?.antes_depois ?? null : null;
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
-  const [ad, setAd] = useState<AntesDepois | null>(null);
-  const [problemas, setProblemas] = useState<Problema[]>([]);
-  const [reiniciar, setReiniciar] = useState(false);
-  const [aplicado, setAplicado] = useState(false);
+  useEffect(() => { if (res) setMarcadas(new Set(res.etapas.filter((e) => e.marcada).map((e) => e.id))); }, [analise?.id, res]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (analise?.estado === "erro") avisar({ tipo: "erro", texto: analise.erro ?? "A análise falhou." }); }, [analise?.id, analise?.estado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function montar() {
-    await rodar("montar", async () => {
-      const r = await api<{ etapas: Etapa[]; problemas?: Problema[]; reiniciar?: boolean }>(`/turbo/receita?serial=${q(d.serial)}`);
-      setEtapas(r.etapas); setMarcadas(new Set(r.etapas.filter((e) => e.marcada).map((e) => e.id)));
-      setProblemas(r.problemas ?? []); setReiniciar(!!r.reiniciar); setAplicado(false);
-    });
+    await rodar("montar", async () => { await api<Tarefa<Analise>>("/turbo/receita/analisar", { corpo: { serial: d.serial } }).then(esperar); });
   }
   async function reiniciarAgora() {
     if (!window.confirm("Reiniciar o celular agora? Vários ajustes só valem depois disso.")) return;
@@ -383,19 +389,18 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   }
   async function aplicar() {
     await rodar("aplicar", async () => {
-      setAd(null);
       const t = await esperar(await api<Tarefa<{ etapas: { id: string; ok: boolean }[]; antes_depois?: AntesDepois }>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
       const ok = (t.resultado?.etapas ?? []).filter((e) => e.ok).length;
-      if (t.resultado?.antes_depois?.total) setAd(t.resultado.antes_depois);
-      avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
-      setAplicado(true);
+      if (t.estado === "concluida") avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
     });
   }
 
   return (
     <Cartao className="p-5">
-      <Cabeca icone={<Sparkles size={18} aria-hidden />} titulo="Otimização completa">Um plano feito para este celular (versão do Android, RAM, calor e apps mais usados). Confira as etapas e aplique tudo de uma vez.</Cabeca>
-      <Botao className="mt-3" variante={etapas ? "secundario" : "primario"} onClick={montar} disabled={!!ocupado}>{ocupado === "montar" ? "Analisando o celular..." : etapas ? "Analisar de novo" : "Ver o que dá para otimizar"}</Botao>
+      <Cabeca icone={<Sparkles size={18} aria-hidden />} titulo="Otimização completa">Mede por que este celular trava e monta o conserto de cada causa. Confira as etapas e aplique tudo de uma vez.</Cabeca>
+      {!analisando && !otimizando && <Botao className="mt-3" variante={etapas ? "secundario" : "primario"} onClick={montar} disabled={!!ocupado}>{etapas ? "Analisar de novo" : "Ver o que dá para otimizar"}</Botao>}
+      {analisando && analise && <div className="mt-4"><ProgressoTarefa tarefa={analise} /></div>}
+      {otimizando && aplicacao && <div className="mt-4"><ProgressoTarefa tarefa={aplicacao} /></div>}
       {etapas && problemas.length > 0 && (
         <div className="mt-4">
           <p className="text-sm font-semibold">Por que está travando</p>
@@ -420,8 +425,8 @@ function PainelReceita({ d }: { d: Dispositivo }) {
               <span className="font-medium">{e.titulo}</span><span className="block text-fraco">{e.detalhe}</span>
             </Marcador>
           ))}
-          <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || marcadas.size === 0}>
-            <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Otimizando (mede antes e depois, leva alguns minutos)..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
+          <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || otimizando || analisando || marcadas.size === 0}>
+            <Rocket size={15} aria-hidden /> {otimizando ? "Otimizando..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
           </Botao>
         </div>
       )}
@@ -882,6 +887,7 @@ export default function Turbo() {
           </div>
           <p className="mt-3 text-sm text-fraco">{atual[2]}</p>
         </div>
+        <EmAndamento serial={d.serial} ignorar={secao === "otimizar" ? ["turbo_analise", "turbo_receita"] : []} />
         {secao === "otimizar" && (<>
           <PainelReceita d={d} />
           <PainelDestravar d={d} />

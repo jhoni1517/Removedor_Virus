@@ -44,6 +44,7 @@ from celscan.acoes.espelho import EspelhoErro, Espelhos, OpcoesEspelho
 from celscan.acoes.espelho import localizar as localizar_scrcpy
 from celscan.api import wifi
 from celscan.api.tarefas import Gerenciador, Ocupado
+from celscan.api.tarefas import nome as nome_tarefa
 from celscan.core import adb, agente, balcao, bases, db, log, preferencias, seguranca
 
 WEB = config.PACOTE / "web" / "dist"
@@ -497,8 +498,10 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         """Aparelho pronto E sem operação em andamento: reiniciar ou limpar no meio de um backup/remoção
         cortava o que estava sendo feito."""
         ap = aparelhos.pronto(serial)
-        if tarefas.ocupado(serial):
-            raise HTTPException(409, "Há uma operação em andamento neste celular. Espere terminar.")
+        rodando = tarefas.ocupado(serial)
+        if rodando:
+            raise HTTPException(409, f"Espere terminar: {nome_tarefa(rodando.tipo)} em andamento neste celular "
+                                     "(o andamento aparece no topo da tela).")
         return ap
 
     def retrato_do_aparelho(varredura_id: int, serial: str) -> dict[str, Any]:
@@ -1223,6 +1226,13 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
     @app.get("/api/turbo/receita")
     def turbo_receita(serial: str) -> dict[str, Any]:
         return _turbo(turbo.receita, aparelhos.pronto(serial))
+
+    @app.post("/api/turbo/receita/analisar")
+    def turbo_analisar(p: PedidoSerial) -> dict[str, Any]:
+        """Mesma análise do GET, mas como tarefa: o andamento aparece em tempo real e não se perde ao trocar de
+        tela (a análise lê a compilação de todos os apps e pode levar 1 minuto)."""
+        ap = livre(p.serial)
+        return nova_tarefa("turbo_analise", p.serial, lambda progresso, _c: turbo.receita(ap, progresso))
 
     @app.post("/api/turbo/receita")
     def turbo_aplicar_receita(p: PedidoTurboReceita) -> dict[str, Any]:

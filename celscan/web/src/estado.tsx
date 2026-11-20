@@ -71,12 +71,29 @@ export function ProvedorApp({ children }: { children: ReactNode }) {
   const [erroBackend, setErroBackend] = useState<string | null>(null);
 
   const wsAberto = useRef(false);
+  const buscando = useRef<Set<string>>(new Set());
 
   const recarregar = useCallback(async () => {
     try {
       const e = await api<Estado>("/estado");
       setEstado(e);
       setDispositivos(e.dispositivos);
+      // tarefas em andamento continuam visíveis em qualquer tela (e depois de recarregar a janela); a que saiu
+      // da lista "executando" é buscada uma vez para pegar o resultado final
+      const rodando = new Set((e.tarefas ?? []).map((t) => t.id));
+      setTarefas((ts) => {
+        const n = { ...ts };
+        for (const t of e.tarefas ?? []) n[t.id] = { ...(ts[t.id] ?? {}), ...t, progresso: t.progresso ?? ts[t.id]?.progresso ?? {} };
+        for (const t of Object.values(ts)) {
+          if (t.estado === "executando" && !rodando.has(t.id) && !buscando.current.has(t.id)) {
+            buscando.current.add(t.id);
+            api<Tarefa>(`/tarefas/${t.id}`).then((f) => setTarefas((x) => ({ ...x, [f.id]: f })))
+              .catch(() => setTarefas((x) => ({ ...x, [t.id]: { ...t, estado: "erro", erro: "A operação foi interrompida." } })))
+              .finally(() => buscando.current.delete(t.id));
+          }
+        }
+        return limitar(n);
+      });
       setErroBackend(null);
       // O WebSocket é só um atalho de tempo real; se o polling responde, o programa está conectado.
       setOnline(true);

@@ -1033,8 +1033,19 @@ def editar_config(ap, ns: str, chave: str, valor: str | None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------------------------- receita sob medida
 
 
-def receita(ap) -> dict[str, Any]:
+PASSOS_ANALISE = ("Lendo o celular", "Medindo a compilação dos apps", "Conferindo armazenamento e memória",
+                  "Procurando apps inúteis da marca", "Montando o plano")
+
+
+def _passo(progresso: Progresso, n: int, detalhe: str = "") -> None:
+    if progresso:
+        progresso({"etapa": "analise", "descricao": PASSOS_ANALISE[n], "detalhe": detalhe, "atual": n,
+                   "total": len(PASSOS_ANALISE), "estimativa_s": max(5, 50 - n * 12)})
+
+
+def receita(ap, progresso: Progresso = None) -> dict[str, Any]:
     """Plano de otimização feito para ESTE celular, a partir do que foi medido agora."""
+    _passo(progresso, 0, "modelo, Android, RAM e temperatura")
     f = ficha(ap)
     sdk = f.get("sdk") or 0
     etapas: list[dict[str, Any]] = []
@@ -1081,7 +1092,7 @@ def receita(ap) -> dict[str, Any]:
     from celscan.acoes import destravar
 
     try:
-        diag = destravar.diagnostico(ap, f)
+        diag = destravar.diagnostico(ap, f, progresso=lambda n, det: _passo(progresso, n, det))
     except AdbErro:
         diag = {"problemas": []}
     por_id = {e["id"]: e for e in etapas}
@@ -1092,6 +1103,7 @@ def receita(ap) -> dict[str, Any]:
             elif ident in TITULOS_EXTRA:
                 etapa(ident, *TITULOS_EXTRA[ident], marcada=p["marcar"])
                 por_id[ident] = etapas[-1]
+    _passo(progresso, 4)
     return {"ficha": f, "etapas": etapas, "problemas": diag["problemas"],
             "reiniciar": any(e["marcada"] and e["id"] in REINICIAR for e in etapas)}
 

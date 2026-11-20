@@ -168,11 +168,16 @@ def _float(x: str) -> float:
         return 0.0
 
 
-def diagnostico(ap, f: dict[str, Any] | None = None) -> dict[str, Any]:
+def diagnostico(ap, f: dict[str, Any] | None = None, progresso=None) -> dict[str, Any]:
     from celscan.acoes import faxina, turbo
 
     f = f or turbo.ficha(ap)
+    if progresso:
+        progresso(1, "estado de otimização de cada app (pode levar até 1 min)")
     s = ap.script(DIAG, timeout=180)
+    if progresso:
+        progresso(2, "espaço livre, modo economia e animações")
+        progresso(3, "propaganda e apps de fábrica")
     try:
         marca = faxina.apps_da_marca(ap)["apps"]
     except Exception:  # noqa: BLE001 - diagnóstico nunca para por causa da lista
