@@ -1077,12 +1077,43 @@ def receita(ap) -> dict[str, Any]:
         etapa("xiaomi_interface_leve", "Interface leve (Xiaomi)", "Tira o desfoque pesado e simplifica as animações "
               "(vale após reiniciar).", marcada=False)
     etapa("animacoes_rapidas", "Animações mais rápidas", "Telas abrem na metade do tempo.", marcada=False)
-    return {"ficha": f, "etapas": etapas}
+    # o diagnóstico de travamento acrescenta (ou marca) as etapas que resolvem o que foi achado AGORA
+    from celscan.acoes import destravar
+
+    try:
+        diag = destravar.diagnostico(ap, f)
+    except AdbErro:
+        diag = {"problemas": []}
+    por_id = {e["id"]: e for e in etapas}
+    for p in diag["problemas"]:
+        for ident in p["etapas"]:
+            if ident in por_id:
+                por_id[ident]["marcada"] = por_id[ident]["marcada"] or p["marcar"]
+            elif ident in TITULOS_EXTRA:
+                etapa(ident, *TITULOS_EXTRA[ident], marcada=p["marcar"])
+                por_id[ident] = etapas[-1]
+    return {"ficha": f, "etapas": etapas, "problemas": diag["problemas"],
+            "reiniciar": any(e["marcada"] and e["id"] in REINICIAR for e in etapas)}
+
+
+TITULOS_EXTRA = {
+    "economia_off": ("Desligar o modo economia", "O modo economia segura o processador e a tela."),
+    "joyose": ("Desativar o Joyose (limitador da Xiaomi)", "Libera CPU/GPU em jogos; o celular pode esquentar mais."),
+    "destravar_video": ("Destravar apps de vídeo", "Netflix, YouTube e outros: compilação completa, fora da "
+                        "economia de bateria e cache limpo."),
+    "mais_processos": ("Mais apps abertos ao mesmo tempo", "Os apps voltam de onde pararam em vez de recomeçar."),
+    "menos_processos": ("Menos apps escondidos", "Pouca RAM: o que está aberto fica mais liso."),
+    "xiaomi_interface_leve": ("Interface leve (Xiaomi)", "Tira o desfoque pesado (vale após reiniciar)."),
+    "fantasmas": ("Fim dos processos fantasmas", "Para de matar apps em segundo plano."),
+}
+REINICIAR = {"xiaomi_interface_leve", "congelador", "fantasmas", "mais_processos", "menos_processos", "faxina_marca",
+             "joyose"}
 
 
 ETAPAS = {"compilar_mais_usados", "dexopt", "art_cleanup", "fantasmas", "congelador", "esquecidos",
           "sistema_leve", "armazenamento", "menos_processos", "mais_processos", "animacoes_rapidas", "aviso_calor",
-          "faxina_marca", "camera", "dns_anuncios", "xiaomi_interface_leve"}
+          "faxina_marca", "camera", "dns_anuncios", "xiaomi_interface_leve", "economia_off", "joyose",
+          "destravar_video"}
 
 
 def comparar_notas(antes: dict[str, Any], depois: dict[str, Any]) -> dict[str, Any]:
@@ -1156,6 +1187,28 @@ def _aplicar_etapas(ap, ids: list[str], progresso: Progresso, cancelar) -> dict[
                 from celscan.acoes import faxina
 
                 ok = bool(faxina.camera_rapida(ap)["apps"])
+            elif ident == "economia_off":
+                ant = quarentena.ler_setting(ap, "global", "low_power")
+                pasta = quarentena.criar_ajuste(ap, "economia_off", "Modo economia desligado", [
+                    {"tipo": "settings", "ns": "global", "chave": "low_power", "anterior": ant}])
+                ap.sh("settings put global low_power 0")
+                ok = quarentena.ler_setting(ap, "global", "low_power") in ("0", None)
+                desfazer_ids.append(pasta.name)
+            elif ident == "joyose":
+                from celscan.acoes import faxina
+
+                ok = all(x["ok"] for x in faxina.remover_apps(ap, ["com.xiaomi.joyose"])["apps"])
+            elif ident == "destravar_video":
+                from celscan.acoes import destravar
+
+                ativos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e"), re.M))
+                ok = True
+                for pkg in [p for p in destravar.VIDEO if p in ativos]:
+                    if cancelar is not None and cancelar.is_set():
+                        break
+                    r = destravar.destravar_app(ap, pkg)
+                    if r["desfazer_id"]:
+                        desfazer_ids.append(r["desfazer_id"])
             elif ident == "dns_anuncios":
                 from celscan.acoes import faxina
 

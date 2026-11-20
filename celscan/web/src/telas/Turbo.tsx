@@ -170,30 +170,11 @@ interface Dns { modo: string; servidor: string | null; provedor: string | null; 
 function PainelFaxina({ d }: { d: Dispositivo }) {
   const { esperar, avisar } = useApp();
   const { ocupado, rodar } = useAcao();
-  const [dados, setDados] = useState<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] } | null>(null);
-  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [dns, setDns] = useState<Dns | null>(null);
   const [proprio, setProprio] = useState("");
 
-  async function carregar() {
-    await rodar("carregar", async () => {
-      const [a, n] = await Promise.all([
-        api<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] }>(`/faxina/apps?serial=${q(d.serial)}`),
-        api<Dns>(`/faxina/dns?serial=${q(d.serial)}`),
-      ]);
-      setDados(a); setDns(n); setEscolhidos(new Set(a.apps.filter((x) => x.marcado && x.ativo).map((x) => x.pacote)));
-    });
-  }
-  useEffect(() => { setDados(null); setDns(null); carregar(); }, [d.serial]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setDns(null); api<Dns>(`/faxina/dns?serial=${q(d.serial)}`).then(setDns).catch(() => undefined); }, [d.serial]);
 
-  async function remover() {
-    await rodar("remover", async () => {
-      const t = await esperar(await api<Tarefa<{ apps: { ok: boolean }[] }>>("/faxina/apps", { corpo: { serial: d.serial, pacotes: [...escolhidos] } }));
-      const ok = (t.resultado?.apps ?? []).filter((x) => x.ok).length;
-      avisar({ tipo: "ok", texto: `${ok} app(s) desativados. Reinicie o celular para os anúncios sumirem de vez. Volta pelo Histórico.` });
-    });
-    await carregar();
-  }
   async function mudarDns(provedor: string | null, servidor?: string) {
     await rodar("dns", async () => {
       const r = await api<{ ok: boolean; servidor: string | null; obs: string }>("/faxina/dns", { corpo: { serial: d.serial, provedor, servidor: servidor ?? null } });
@@ -209,34 +190,13 @@ function PainelFaxina({ d }: { d: Dispositivo }) {
     });
   }
 
-  const grupos = dados ? Object.keys(dados.grupos).filter((g) => dados.apps.some((a) => a.grupo === g)) : [];
   return (
     <Cartao className="p-5">
-      <Cabeca icone={<Trash2 size={18} aria-hidden />} titulo="Faxina geral: anúncios e apps inúteis">
-        Tira os serviços de propaganda e os apps duplicados da marca, liga o bloqueio de anúncios e acelera a câmera. Nada é apagado do aparelho: tudo volta pelo Histórico.
+      <Cabeca icone={<Trash2 size={18} aria-hidden />} titulo="Anúncios e câmera">
+        Bloqueio de propaganda em todos os apps (sem instalar nada) e conserto da câmera travando. Os apps de fábrica ficam na aba Apps do sistema.
       </Cabeca>
-      {!dados && <p className="mt-3 text-sm text-fraco">{ocupado ? "Procurando os apps da marca..." : "Não foi possível ler os apps."}</p>}
-      {dados && (<>
-        {dados.apps.length === 0 && <p className="mt-3 text-sm text-fraco">Nenhum app inútil conhecido neste aparelho.</p>}
-        {grupos.map((g) => (
-          <div key={g} className="mt-4">
-            <p className="mb-2 text-sm font-semibold">{dados.grupos[g]}</p>
-            <div className="space-y-2">
-              {dados.apps.filter((a) => a.grupo === g).map((a) => (
-                <Marcador key={a.pacote} marcado={escolhidos.has(a.pacote)} mudar={() => setEscolhidos(alternar(escolhidos, a.pacote))} desativado={!a.ativo}>
-                  <span className="font-medium">{a.nome}</span>{!a.ativo && <span className="ml-2 rounded-full bg-ok-suave px-2 text-xs text-ok">já desativado</span>}
-                  <span className="block text-fraco">{a.explicacao}</span>
-                  {a.perde && <span className="block text-xs text-atencao">Você perde: {a.perde}</span>}
-                  <span className="block font-mono text-xs text-fraco">{a.pacote}</span>
-                </Marcador>
-              ))}
-            </div>
-          </div>
-        ))}
-        {dados.apps.length > 0 && <Botao className="mt-3" variante="perigo" onClick={remover} disabled={!!ocupado || escolhidos.size === 0}>{ocupado === "remover" ? "Desativando..." : `Desativar ${escolhidos.size} app(s)`}</Botao>}
-      </>)}
       {dns && (
-        <div className="mt-6">
+        <div className="mt-4">
           <p className="text-sm font-semibold">Bloqueio de anúncios (DNS privado, sem app e sem VPN)</p>
           <p className="text-sm text-fraco">Agora: {dns.servidor ? <b>{dns.servidor}</b> : "automático (sem bloqueio)"}. Vale no Wi-Fi e nos dados móveis, não gasta bateria. Não bloqueia anúncio do YouTube.</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -260,6 +220,105 @@ function PainelFaxina({ d }: { d: Dispositivo }) {
         <p className="text-sm text-fraco">Compila câmera e galeria por completo, limpa o cache delas e reinicia a câmera. Também avisa se o armazenamento cheio é a causa.</p>
         <Botao className="mt-2" onClick={camera} disabled={!!ocupado}><Camera size={15} aria-hidden /> {ocupado === "camera" ? "Otimizando a câmera..." : "Deixar a câmera mais rápida"}</Botao>
       </div>
+    </Cartao>
+  );
+}
+
+/* ---------------------------------------------------------------- apps do sistema (debloat) */
+function PainelAppsSistema({ d }: { d: Dispositivo }) {
+  const { esperar, avisar } = useApp();
+  const { ocupado, rodar } = useAcao();
+  const [dados, setDados] = useState<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] } | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [feito, setFeito] = useState(false);
+
+  async function carregar() {
+    await rodar("carregar", async () => {
+      const a = await api<{ marca: string; grupos: Record<string, string>; apps: AppMarca[] }>(`/faxina/apps?serial=${q(d.serial)}`);
+      setDados(a); setEscolhidos(new Set(a.apps.filter((x) => x.marcado && x.ativo).map((x) => x.pacote)));
+    });
+  }
+  useEffect(() => { setDados(null); setFeito(false); carregar(); }, [d.serial]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function remover() {
+    await rodar("remover", async () => {
+      const t = await esperar(await api<Tarefa<{ apps: { ok: boolean }[] }>>("/faxina/apps", { corpo: { serial: d.serial, pacotes: [...escolhidos] } }));
+      const ok = (t.resultado?.apps ?? []).filter((x) => x.ok).length;
+      avisar({ tipo: "ok", texto: `${ok} app(s) removidos. Reinicie para a propaganda sumir de vez.` });
+      setFeito(true);
+    });
+    await carregar();
+  }
+  async function devolver(a: AppMarca) {
+    await rodar(a.pacote, async () => {
+      const r = await api<{ ok: boolean }>("/faxina/devolver", { corpo: { serial: d.serial, pacote: a.pacote } });
+      avisar({ tipo: r.ok ? "ok" : "erro", texto: r.ok ? `${a.nome} voltou.` : `O Android não devolveu ${a.nome}. Tente pelo Histórico.` });
+    });
+    await carregar();
+  }
+  async function reiniciar() {
+    if (!window.confirm("Reiniciar o celular agora?")) return;
+    await rodar("reiniciar", async () => { await api("/turbo/reiniciar", { corpo: { serial: d.serial } }); avisar({ tipo: "ok", texto: "Reiniciando. Ele volta para a lista em cerca de 1 minuto." }); });
+  }
+
+  const ativos = dados?.apps.filter((a) => a.ativo) ?? [];
+  const fora = dados?.apps.filter((a) => !a.ativo) ?? [];
+  const grupos = dados ? Object.keys(dados.grupos).filter((g) => ativos.some((a) => a.grupo === g)) : [];
+  const marcarGrupo = (g: string, sim: boolean) => setEscolhidos((s) => {
+    const n = new Set(s);
+    ativos.filter((a) => a.grupo === g).forEach((a) => (sim ? n.add(a.pacote) : n.delete(a.pacote)));
+    return n;
+  });
+  return (
+    <Cartao className="p-5">
+      <Cabeca icone={<Trash2 size={18} aria-hidden />} titulo="Apps do sistema">
+        Tira a propaganda e os apps que vieram de fábrica. Nada é apagado de verdade: cada app volta com um clique aqui embaixo.
+      </Cabeca>
+      {!dados && <p className="mt-3 text-sm text-fraco">{ocupado ? "Lendo os apps do celular..." : "Não foi possível ler os apps."}</p>}
+      {dados && (<>
+        <p className="mt-3 text-sm"><b>{ativos.length}</b> app(s) de fábrica podem sair{fora.length ? ` · ${fora.length} já removido(s)` : ""}.</p>
+        {ativos.length === 0 && <p className="mt-2 text-sm text-ok">A interface já está limpa.</p>}
+        {grupos.map((g) => {
+          const doGrupo = ativos.filter((a) => a.grupo === g);
+          const todos = doGrupo.every((a) => escolhidos.has(a.pacote));
+          return (
+            <div key={g} className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">{dados.grupos[g]} <span className="font-normal text-fraco">({doGrupo.length})</span></p>
+                <button className="text-sm text-destaque" onClick={() => marcarGrupo(g, !todos)}>{todos ? "Desmarcar" : "Marcar todos"}</button>
+              </div>
+              <div className="space-y-2">
+                {doGrupo.map((a) => (
+                  <Marcador key={a.pacote} marcado={escolhidos.has(a.pacote)} mudar={() => setEscolhidos(alternar(escolhidos, a.pacote))}>
+                    <span className="font-medium">{a.nome}</span>
+                    <span className="block text-fraco">{a.explicacao}</span>
+                    {a.perde && <span className="block text-xs text-atencao">Você perde: {a.perde}</span>}
+                  </Marcador>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {ativos.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Botao variante="primario" onClick={remover} disabled={!!ocupado || escolhidos.size === 0}>{ocupado === "remover" ? "Removendo..." : `Remover ${escolhidos.size} app(s)`}</Botao>
+            {feito && <Botao onClick={reiniciar} disabled={!!ocupado}>Reiniciar o celular</Botao>}
+          </div>
+        )}
+        {fora.length > 0 && (
+          <div className="mt-6">
+            <p className="mb-2 text-sm font-semibold">Já removidos</p>
+            <ul className="divide-y divide-linha text-sm">
+              {fora.map((a) => (
+                <li key={a.pacote} className="flex items-center justify-between gap-3 py-1.5">
+                  <span>{a.nome}</span>
+                  <Botao variante="fantasma" onClick={() => devolver(a)} disabled={!!ocupado}>{ocupado === a.pacote ? "..." : "Devolver"}</Botao>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>)}
     </Cartao>
   );
 }
@@ -297,6 +356,7 @@ function PainelCalor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- receita */
+interface Problema { id: string; gravidade: "alta" | "media" | "baixa"; titulo: string; prova: string; conserto: string; etapas: string[]; marcar: boolean }
 interface Diferenca { antes: number; depois: number; pontos: number; ganho_pct: number | null }
 interface AntesDepois { total: Diferenca | null; categorias: Record<string, Diferenca>; obs: string }
 
@@ -306,12 +366,20 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   const [etapas, setEtapas] = useState<Etapa[] | null>(null);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [ad, setAd] = useState<AntesDepois | null>(null);
+  const [problemas, setProblemas] = useState<Problema[]>([]);
+  const [reiniciar, setReiniciar] = useState(false);
+  const [aplicado, setAplicado] = useState(false);
 
   async function montar() {
     await rodar("montar", async () => {
-      const r = await api<{ etapas: Etapa[] }>(`/turbo/receita?serial=${q(d.serial)}`);
+      const r = await api<{ etapas: Etapa[]; problemas?: Problema[]; reiniciar?: boolean }>(`/turbo/receita?serial=${q(d.serial)}`);
       setEtapas(r.etapas); setMarcadas(new Set(r.etapas.filter((e) => e.marcada).map((e) => e.id)));
+      setProblemas(r.problemas ?? []); setReiniciar(!!r.reiniciar); setAplicado(false);
     });
+  }
+  async function reiniciarAgora() {
+    if (!window.confirm("Reiniciar o celular agora? Vários ajustes só valem depois disso.")) return;
+    await rodar("reiniciar", async () => { await api("/turbo/reiniciar", { corpo: { serial: d.serial } }); avisar({ tipo: "ok", texto: "Reiniciando. Ele volta para a lista em cerca de 1 minuto." }); });
   }
   async function aplicar() {
     await rodar("aplicar", async () => {
@@ -320,6 +388,7 @@ function PainelReceita({ d }: { d: Dispositivo }) {
       const ok = (t.resultado?.etapas ?? []).filter((e) => e.ok).length;
       if (t.resultado?.antes_depois?.total) setAd(t.resultado.antes_depois);
       avisar({ tipo: "ok", texto: `Otimização concluída: ${ok} etapa(s). Os ajustes podem ser desfeitos no Histórico.` });
+      setAplicado(true);
     });
   }
 
@@ -327,8 +396,25 @@ function PainelReceita({ d }: { d: Dispositivo }) {
     <Cartao className="p-5">
       <Cabeca icone={<Sparkles size={18} aria-hidden />} titulo="Otimização completa">Um plano feito para este celular (versão do Android, RAM, calor e apps mais usados). Confira as etapas e aplique tudo de uma vez.</Cabeca>
       <Botao className="mt-3" variante={etapas ? "secundario" : "primario"} onClick={montar} disabled={!!ocupado}>{ocupado === "montar" ? "Analisando o celular..." : etapas ? "Analisar de novo" : "Ver o que dá para otimizar"}</Botao>
+      {etapas && problemas.length > 0 && (
+        <div className="mt-4">
+          <p className="text-sm font-semibold">Por que está travando</p>
+          <ul className="mt-2 space-y-2">
+            {problemas.map((p) => (
+              <li key={p.id} className="rounded-md border border-linha p-3 text-sm">
+                <span className={`mr-2 text-xs font-semibold uppercase ${p.gravidade === "alta" ? "text-perigo" : p.gravidade === "media" ? "text-atencao" : "text-fraco"}`}>{p.gravidade === "media" ? "média" : p.gravidade}</span>
+                <span className="font-medium">{p.titulo}</span>
+                <span className="block numeros text-fraco">{p.prova}</span>
+                <span className="block">{p.conserto}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm font-semibold">O que vai ser feito</p>
+        </div>
+      )}
+      {etapas && problemas.length === 0 && <p className="mt-4 text-sm text-ok">Nenhuma causa de travamento encontrada. Dá para aplicar a manutenção abaixo mesmo assim.</p>}
       {etapas && (
-        <div className="mt-4 space-y-2">
+        <div className="mt-3 space-y-2">
           {etapas.map((e) => (
             <Marcador key={e.id} marcado={marcadas.has(e.id)} mudar={() => setMarcadas(alternar(marcadas, e.id))} desativado={e.id === "aviso_calor"}>
               <span className="font-medium">{e.titulo}</span><span className="block text-fraco">{e.detalhe}</span>
@@ -337,6 +423,12 @@ function PainelReceita({ d }: { d: Dispositivo }) {
           <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || marcadas.size === 0}>
             <Rocket size={15} aria-hidden /> {ocupado === "aplicar" ? "Otimizando (mede antes e depois, leva alguns minutos)..." : `Otimizar agora (${[...marcadas].filter((x) => x !== "aviso_calor").length} etapas)`}
           </Botao>
+        </div>
+      )}
+      {aplicado && reiniciar && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-linha p-3 text-sm">
+          <span>Alguns ajustes só valem depois de reiniciar.</span>
+          <Botao onClick={reiniciarAgora} disabled={!!ocupado}>Reiniciar o celular</Botao>
         </div>
       )}
       {ad?.total && (
@@ -696,10 +788,50 @@ function PainelEditor({ d }: { d: Dispositivo }) {
 }
 
 /* ---------------------------------------------------------------- tela */
-type Secao = "otimizar" | "limpeza" | "saude" | "desempenho" | "tecnico";
+
+/* ---------------------------------------------------------------- destravar um app */
+const APPS_TRAVANDO: [string, string][] = [
+  ["com.netflix.mediaclient", "Netflix"], ["com.google.android.youtube", "YouTube"], ["com.android.camera", "Câmera Xiaomi"],
+  ["com.miui.gallery", "Galeria Xiaomi"], ["com.sec.android.app.camera", "Câmera Samsung"], ["com.amazon.avod.thirdpartyclient", "Prime Video"],
+  ["com.disney.disneyplus", "Disney+"], ["com.globo.globotv", "Globoplay"], ["com.zhiliaoapp.musically", "TikTok"], ["com.instagram.android", "Instagram"],
+];
+
+function PainelDestravar({ d }: { d: Dispositivo }) {
+  const { esperar, avisar } = useApp();
+  const { ocupado, rodar } = useAcao();
+  const [outro, setOutro] = useState("");
+  async function destravar(pacote: string, nome: string) {
+    await rodar(pacote, async () => {
+      const t = await esperar(await api<Tarefa<{ feitos: string[] }>>("/turbo/destravar-app", { corpo: { serial: d.serial, pacote } }));
+      if (t.estado === "erro") throw new Error(t.erro?.includes("não está instalado") ? `${nome} não está instalado neste celular.` : t.erro ?? "Falhou.");
+      avisar({ tipo: "ok", duracao: 9000, texto: `${nome}: ${(t.resultado?.feitos ?? []).join(", ")}. Desfaz no Histórico.` });
+    });
+  }
+  const valido = /^[\w.]+\.[\w.]+$/.test(outro.trim());
+  return (
+    <Cartao className="p-5">
+      <Cabeca icone={<Wrench size={18} aria-hidden />} titulo="Um app específico travando?">
+        Netflix engasgando, câmera demorando: compila o app por completo, tira ele da economia de bateria da marca, limpa o cache e reabre do zero.
+      </Cabeca>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {APPS_TRAVANDO.map(([p, n]) => (
+          <Botao key={p} onClick={() => destravar(p, n)} disabled={!!ocupado}>{ocupado === p ? "Destravando..." : n}</Botao>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input value={outro} onChange={(e) => setOutro(e.target.value)} placeholder="outro app (ex.: com.spotify.music)" aria-label="Pacote do app"
+          className="min-w-56 flex-1 rounded-md border border-linha bg-superficie px-3 py-1.5 font-mono text-sm" />
+        <Botao onClick={() => destravar(outro.trim(), outro.trim())} disabled={!!ocupado || !valido}>Destravar</Botao>
+      </div>
+    </Cartao>
+  );
+}
+
+type Secao = "otimizar" | "apps" | "limpeza" | "saude" | "desempenho" | "tecnico";
 const SECOES: [Secao, string, string][] = [
-  ["otimizar", "Otimizar", "Nota do celular e a otimização completa feita para ele."],
-  ["limpeza", "Limpeza", "Anúncios, apps inúteis da marca, câmera, apps parados e memória."],
+  ["otimizar", "Otimizar", "Por que o celular trava e o conserto de cada causa, feito para ele."],
+  ["apps", "Apps do sistema", "Tire propaganda e apps de fábrica (Xiaomi, Samsung, Motorola). Tudo volta com um clique."],
+  ["limpeza", "Limpeza", "Bloqueio de anúncios, câmera, espaço, apps parados, memória e segurança."],
   ["saude", "Bateria e espaço", "Saúde da bateria, o que ocupa espaço, limpeza de cache e lixo."],
   ["desempenho", "Desempenho", "Perfis prontos, ajustes, jogos, calor e rede."],
   ["tecnico", "Técnico", "Compilação manual, lista completa de apps de fábrica, manutenção e editor de configurações."],
@@ -752,8 +884,10 @@ export default function Turbo() {
         </div>
         {secao === "otimizar" && (<>
           <PainelReceita d={d} />
+          <PainelDestravar d={d} />
           <PainelFicha d={d} />
         </>)}
+        {secao === "apps" && <PainelAppsSistema d={d} />}
         {secao === "limpeza" && (<>
           <PainelFaxina d={d} />
           <PainelEsquecidosTurbo d={d} />

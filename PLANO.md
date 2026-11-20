@@ -9,6 +9,23 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b2 (20/11/2026) — por que trava, destravar app e Apps do sistema (foco Xiaomi)
+
+- **Por que está travando** (aba Otimizar): antes do plano, o CelScan mede e mostra cada causa com a prova —
+  apps sem compilar (% medido no dexopt; causa nº 1 depois de atualização do HyperOS), armazenamento quase cheio,
+  modo economia ligado, calor, memória apertada / Xiaomi fechando apps, dias sem reiniciar, apps da marca ativos,
+  interface pesada, Joyose ligado, animações lentas, apps de vídeo e câmera sem compilar. Cada causa já marca a
+  etapa que a resolve no plano; no fim aparece "Reiniciar o celular" quando algum ajuste precisa.
+- **Etapas novas**: desligar modo economia, destravar apps de vídeo (Netflix, YouTube, Prime, Disney+,
+  Globoplay...), desativar o Joyose (opcional, avisa do calor).
+- **Um app específico travando?**: Netflix, câmera, galeria ou qualquer pacote: compilação completa, sai do balde
+  "raro/restrito", fica fora da economia de bateria da marca, cache limpo e reaberto do zero. Desfaz no Histórico.
+- **Apps do sistema** (aba própria): lista curada maior — Xiaomi 44 apps (anúncios, duplicados, inúteis no Brasil,
+  opcionais, avançados), Samsung 16, Google pouco usados 7, parceiros. Grupos com "marcar todos", o que se perde
+  em cada app, lista "Já removidos" com botão Devolver e Reiniciar no fim. Nada é apagado: some só para o
+  usuário.
+- Limpeza: o card de faxina virou "Anúncios e câmera" (DNS + câmera).
+
 ## Beta 3.7.0b1 (19/11/2026) — antivírus mais forte e otimização que mostra resultado
 
 Remoção de vírus

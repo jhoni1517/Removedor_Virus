@@ -35,9 +35,12 @@ XIAOMI = ("xiaomi", "redmi", "poco")
 GRUPOS = {
     "anuncios": "Anúncios e coleta de dados",
     "duplicado": "Duplicados (já existe um app do Google igual)",
-    "inutil": "Pouco usados",
+    "inutil": "Inúteis no Brasil ou quase ninguém usa",
+    "google": "Apps do Google pouco usados",
+    "opcional": "Só tire se você não usa",
     "avancado": "Avançado (leia antes)",
 }
+MARCADOS = ("anuncios", "duplicado", "inutil")  # já vêm marcados: tirar não faz falta a ninguém
 
 LISTAS: dict[str, tuple[AppMarca, ...]] = {
     "xiaomi": (
@@ -70,6 +73,53 @@ LISTAS: dict[str, tuple[AppMarca, ...]] = {
         AppMarca("com.miui.miservice", "Serviços e feedback", "inutil", "Atendimento e feedback da Xiaomi."),
         AppMarca("com.miui.yellowpage", "Páginas amarelas", "inutil", "Identificador de empresas (pouco usado no "
                  "Brasil)."),
+        AppMarca("com.mi.globalminusscreen", "App Vault (tela à esquerda)", "anuncios",
+                 "Tela de atalhos com notícias e propaganda à esquerda da tela inicial.",
+                 "A tela à esquerda da tela inicial."),
+        AppMarca("com.miui.personalassistant", "Assistente pessoal (tela à esquerda)", "anuncios",
+                 "Versão chinesa da tela de notícias à esquerda."),
+        AppMarca("com.miui.systemAdSolution", "Anúncios do sistema (ROM chinesa)", "anuncios",
+                 "O serviço de propaganda das ROMs chinesas e de importação."),
+        AppMarca("com.miui.cleaner", "Limpeza (Cleaner)", "duplicado",
+                 "Limpador com propaganda e 'acelerador' que não acelera. O CelScan e o Segurança fazem isso.",
+                 "O atalho 'Limpeza'."),
+        AppMarca("com.miui.contentextension", "Taplus", "inutil",
+                 "Lê o texto da tela para sugerir buscas (fica rodando escondido)."),
+        AppMarca("com.miui.huanji", "Mi Mover", "inutil", "Só serve para passar dados de outro celular no "
+                 "primeiro uso.", "Passar dados de outro celular pelo app da Xiaomi."),
+        AppMarca("com.miui.touchassistant", "Bola rápida", "inutil", "Botão flutuante de atalhos (quase ninguém "
+                 "liga)."),
+        AppMarca("com.miui.virtualsim", "Mi SIM virtual", "inutil", "Chip virtual de viagem, não funciona no "
+                 "Brasil."),
+        AppMarca("com.miui.vsimcore", "Mi SIM virtual (serviço)", "inutil", "Serviço do chip virtual."),
+        AppMarca("com.xiaomi.payment", "Mi Pay", "inutil", "Pagamento da Xiaomi, não funciona no Brasil."),
+        AppMarca("com.mipay.wallet.in", "Mi Pay (Índia)", "inutil", "Carteira da Xiaomi para a Índia."),
+        AppMarca("com.miui.voiceassist", "XiaoAi (assistente chinês)", "inutil", "Assistente de voz em chinês."),
+        AppMarca("com.xiaomi.discover", "Atualizador de apps do sistema", "inutil",
+                 "Fica oferecendo atualização de apps da Xiaomi e mandando notificação.",
+                 "Atualizações dos apps da Xiaomi fora da Play Store (o sistema continua atualizando)."),
+        AppMarca("com.mi.android.globalFileexplorer", "Gerenciador de arquivos Mi", "opcional",
+                 "Tem propaganda. Antes, instale o Files do Google pela Play Store.", "O app Arquivos da Xiaomi."),
+        AppMarca("com.xiaomi.midrop", "ShareMe", "opcional", "Envio de arquivos entre celulares (o Quick Share do "
+                 "Android faz igual).", "O ShareMe."),
+        AppMarca("com.miui.notes", "Notas", "opcional", "Bloco de notas da Xiaomi.", "Suas notas ficam "
+                 "escondidas até devolver o app."),
+        AppMarca("com.miui.weather2", "Clima", "opcional", "App de clima.", "O widget de clima da tela inicial."),
+        AppMarca("com.miui.compass", "Bússola", "opcional", "Bússola e nível."),
+        AppMarca("com.miui.fm", "Rádio FM", "opcional", "Rádio FM (precisa de fone com fio)."),
+        AppMarca("com.duokan.phone.remotecontroller", "Mi Controle remoto", "opcional",
+                 "Controle de TV pelo infravermelho.", "Usar o celular como controle remoto."),
+        AppMarca("com.xiaomi.scanner", "Scanner", "opcional", "Leitor de QR code e documentos (a câmera já lê "
+                 "QR code)."),
+        AppMarca("com.miui.screenrecorder", "Gravador de tela", "opcional", "Grava a tela.",
+                 "O botão de gravar a tela."),
+        AppMarca("com.miui.backup", "Backup local", "opcional", "Backup da Xiaomi no próprio celular."),
+        AppMarca("com.android.thememanager", "Temas", "avancado",
+                 "Loja de temas com propaganda.", "Trocar tema, ícones e fontes; o celular fica no tema padrão."),
+        AppMarca("com.xiaomi.mi_connect_service", "Mi Connect", "avancado",
+                 "Conexão com outros aparelhos Xiaomi.", "Espelhar e compartilhar com TV/tablet/notebook Xiaomi."),
+        AppMarca("com.miui.cloudbackup", "Backup na nuvem Xiaomi", "avancado",
+                 "Backup automático na Xiaomi Cloud.", "O backup na nuvem da Xiaomi (o do Google continua)."),
         AppMarca("com.xiaomi.joyose", "Joyose (limitador de jogos)", "avancado",
                  "Controla perfis de jogo e segura a CPU/GPU para não esquentar. Desativar libera desempenho em "
                  "jogos.", "O celular pode esquentar mais em jogo pesado; vigie a temperatura no Turbo."),
@@ -84,12 +134,35 @@ LISTAS: dict[str, tuple[AppMarca, ...]] = {
                  "O botão/comando do Bixby."),
         AppMarca("com.samsung.android.game.gametools", "Ferramentas de jogo", "inutil",
                  "Painel flutuante dentro dos jogos."),
+        AppMarca("com.samsung.android.game.gamehome", "Game Launcher", "inutil", "Central de jogos com "
+                 "recomendações."),
+        AppMarca("com.samsung.android.app.tips", "Dicas", "inutil", "Notificações de dicas."),
+        AppMarca("com.samsung.android.arzone", "AR Zone", "inutil", "Efeitos de realidade aumentada."),
+        AppMarca("com.samsung.android.aremoji", "AR Emoji", "inutil", "Emoji 3D do rosto."),
+        AppMarca("com.samsung.android.tvplus", "Samsung TV Plus", "inutil", "Canais de TV com propaganda."),
+        AppMarca("com.samsung.android.kidsinstaller", "Samsung Kids", "inutil", "Modo criança."),
+        AppMarca("com.samsung.android.bixby.wakeup", "Bixby (ouvir 'Oi Bixby')", "inutil", "Microfone esperando "
+                 "o comando de voz do Bixby."),
+        AppMarca("com.samsung.android.visionintelligence", "Bixby Vision", "inutil", "Busca pela câmera."),
+        AppMarca("com.sec.android.easyMover", "Smart Switch", "opcional", "Passar dados de outro celular.",
+                 "Passar dados de outro celular pelo app da Samsung."),
+        AppMarca("com.microsoft.skydrive", "OneDrive", "opcional", "Nuvem da Microsoft."),
+        AppMarca("com.linkedin.android", "LinkedIn", "opcional", "Pré-instalado de parceiro."),
     ),
     "motorola": (
         AppMarca("com.motorola.genie", "Ajuda Motorola", "inutil", "App de ajuda e dicas."),
         AppMarca("com.motorola.demo", "Modo demonstração", "inutil", "Usado só em loja."),
     ),
     "todas": (
+        AppMarca("com.google.android.apps.youtube.music", "YouTube Music", "google", "Música do YouTube.",
+                 "O YouTube Music (o YouTube continua)."),
+        AppMarca("com.google.android.videos", "Google TV (filmes)", "google", "Loja de filmes do Google."),
+        AppMarca("com.google.android.apps.tachyon", "Google Meet", "google", "Chamadas de vídeo do Google."),
+        AppMarca("com.google.android.apps.podcasts", "Google Podcasts", "google", "App de podcasts."),
+        AppMarca("com.google.android.apps.magazines", "Google Notícias", "google", "Notícias."),
+        AppMarca("com.google.android.apps.subscriptions.red", "Google One", "google", "Assinatura de espaço do "
+                 "Google.", "O app (o backup do Google continua funcionando)."),
+        AppMarca("com.google.android.feedback", "Feedback do Google", "google", "Envio de relatórios ao Google."),
         AppMarca("com.facebook.appmanager", "Facebook App Manager", "anuncios",
                  "Serviço do Facebook pré-instalado que roda escondido (mesmo sem o app do Facebook)."),
         AppMarca("com.facebook.services", "Facebook Services", "anuncios", "Serviço de fundo do Facebook."),
@@ -114,14 +187,14 @@ def _marca(ap) -> str:
 
 def apps_da_marca(ap) -> dict[str, Any]:
     marca = _marca(ap)
-    todos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages"), re.M))
+    todos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -u"), re.M))
     ativos = set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e"), re.M))
     itens = []
     for a in (*LISTAS.get(marca, ()), *LISTAS["todas"]):
         if a.pacote not in todos or essencial(a.pacote):
             continue
         itens.append({"pacote": a.pacote, "nome": a.nome, "grupo": a.grupo, "explicacao": a.explicacao,
-                      "perde": a.perde, "ativo": a.pacote in ativos, "marcado": a.grupo in ("anuncios", "duplicado")})
+                      "perde": a.perde, "ativo": a.pacote in ativos, "marcado": a.grupo in MARCADOS})
     return {"marca": marca, "grupos": GRUPOS, "apps": itens}
 
 
@@ -140,6 +213,15 @@ def remover_apps(ap, pacotes: list[str], progresso=None, cancelar=None) -> dict[
                        "total": len(pacotes), "estimativa_s": 2 * (len(pacotes) - i)})
         feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
     return {"apps": feitos}
+
+
+def devolver(ap, pkg: str) -> dict[str, Any]:
+    """Traz de volta um app de fábrica que foi desativado ou removido só para o usuário."""
+    exigir_pacote(pkg)
+    ap.sh(f"pm enable --user 0 {pkg}", erro=True)
+    ap.sh(f"cmd package install-existing --user 0 {pkg}", erro=True)
+    ok = pkg in set(re.findall(r"^package:([\w.]+)", ap.sh("pm list packages -e"), re.M))
+    return {"pacote": pkg, "ok": ok}
 
 
 # ---------------------------------------------------------------------------------------------- DNS

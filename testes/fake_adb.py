@@ -110,6 +110,11 @@ if a[0] == "shell":
                 "@@SEC fim")
         if "sec features" in script:  # Turbo: ficha
             fim(fixture("turbo_ficha.txt"))
+        if "sec dexopt" in script:  # Otimizar: por que trava
+            fim("@@SEC df\n/dev/block/dm-50 115000000 106000000 9000000 93% /data\n@@SEC lowpower\n1\n"
+                "@@SEC anim\n1.0\n1.0\n1.0\n@@SEC dexopt\n[com.netflix.mediaclient]\n  arm64: [status=verify]\n"
+                "[com.android.systemui]\n  arm64: [status=verify]\n[com.whatsapp]\n  arm64: [status=speed-profile]\n"
+                "@@SEC ativos\npackage:com.netflix.mediaclient\npackage:com.whatsapp\n@@SEC idle\n@@SEC fim")
         if "policy*" in script:  # Turbo: calor e lentidão
             fim(fixture("turbo_calor.txt"))
         fim(fixture("coleta.txt" if "pkgdump" in script else "diag.txt"))

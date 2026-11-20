@@ -29,6 +29,7 @@ from celscan.acoes import (
     atendimento,
     backup,
     blindagem,
+    destravar,
     evidencias,
     faxina,
     flagrante,
@@ -368,6 +369,11 @@ class PedidoApagar(BaseModel):
     caminhos: list[Annotated[str, Field(min_length=9, max_length=1024)]] = Field(default=[], max_length=5000)
     pasta_velha: Literal["whatsapp", "whatsapp_antigo", "downloads", "telegram"] | None = None
     backup: bool = True
+
+
+class PedidoPacoteSerial(BaseModel):
+    serial: str
+    pacote: Pacote
 
 
 class PedidoAssinaturas(BaseModel):
@@ -1273,6 +1279,29 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         r = _turbo(faxina.definir_dns, livre(p.serial), p.provedor, p.servidor)
         _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
         return r
+
+    # ---- destravar app / reiniciar / devolver app de fábrica
+    @app.post("/api/turbo/destravar-app")
+    def turbo_destravar_app(p: PedidoPacoteSerial) -> dict[str, Any]:
+        ap = livre(p.serial)
+
+        def rodar(progresso, _c):
+            progresso({"etapa": "destravar", "descricao": "Destravando o app", "detalhe": p.pacote, "atual": None,
+                       "total": None, "estimativa_s": 90})
+            r = destravar.destravar_app(ap, p.pacote)
+            if r["desfazer_id"]:
+                _registrar_turbo(p.serial, f"Destravar {p.pacote}", r["desfazer_id"])
+            return r
+        return nova_tarefa("destravar", p.serial, rodar)
+
+    @app.post("/api/turbo/reiniciar")
+    def turbo_reiniciar(p: PedidoSerial) -> dict[str, Any]:
+        _turbo(destravar.reiniciar, livre(p.serial))
+        return {"ok": True}
+
+    @app.post("/api/faxina/devolver")
+    def faxina_devolver(p: PedidoPacoteSerial) -> dict[str, Any]:
+        return _turbo(faxina.devolver, livre(p.serial), p.pacote)
 
     # ---- quem gasta a bateria / quem ocupa o espaço
     @app.get("/api/gastos/bateria")
