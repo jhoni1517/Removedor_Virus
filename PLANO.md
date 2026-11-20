@@ -9,6 +9,29 @@ Base: a v3 está sólida e testada (ver `AUDITORIA.md`). O salto para o Studio �
 (funções ❌ da auditoria). **Nada do que existe será jogado fora**: `core/analise/acoes` viram os
 plugins do motor; as telas React migram de pywebview para Tauri.
 
+## Beta 3.7.0b5 (20/11/2026) — recomendados e opcionais da 3.7.0b4
+
+RECOMENDADO
+- [feito] **Memória por modelo** (compatibilidade.json): cada otimização grava, por fabricante + modelo + Android, o
+  que funcionou e o que foi recusado (com o motivo). No próximo celular igual, a etapa que o modelo sempre recusa
+  vem desmarcada com o aviso. Tabela "O que cada modelo aceita" na aba Técnico — a tabela por marca agora é
+  montada com aparelhos reais.
+- [feito] **Reanalisa sozinho depois do reinício** (o botão Reiniciar marca; quando o celular volta, a análise roda).
+- [feito] **Outros apps de fábrica** na aba Apps do sistema: apps pré-instalados fora da lista curada, pela lista
+  pública UAD (seguros / + avançados), com remoção conferida e motivo de cada falha.
+
+OPCIONAL
+- [feito] **Relatório da otimização em PDF**: o que estava errado (medido antes), o que foi feito etapa por etapa e
+  o que foi medido depois, com a nota. Botão "Baixar relatório (PDF)" no resultado.
+- [feito] **Otimizar sozinho ao conectar** (Configurações, desligado por padrão): ao conectar, analisa e aplica as
+  etapas recomendadas, no máximo 1x a cada 20 h por celular. É a versão "agendada" possível pelo PC.
+- [pendente] App companheiro via Shizuku (perfis por horário rodando no próprio celular): exige um app Android
+  separado; fica para uma fase própria.
+
+CRÍTICO/ALTO aplicados de novo
+- "Destravar app" confere no Android se a compilação ficou mesmo completa (antes confiava no "Success").
+- Aba Técnico (debloat UAD) também mostra o motivo real de cada app que não saiu.
+
 ## Beta 3.7.0b4 (20/11/2026) — o que o CelScan diz que fez, ele fez (e prova)
 
 Relato do Jhoni (Redmi Note 14 Pro 5G): "mandei remover, disse que fez, o Google TV continua lá"; "otimizei e a

@@ -186,6 +186,11 @@ export function urlLaudo(varreduraId: number, versao: "cliente" | "tecnico" | "s
   return `/api/varreduras/${varreduraId}/laudo.pdf?versao=${versao}&t=${encodeURIComponent(TOKEN)}`;
 }
 
+/** Link de arquivo da API (PDF etc.) com o token, para abrir/baixar direto pelo navegador. */
+export function urlApi(caminho: string): string {
+  return `/api${caminho}${caminho.includes("?") ? "&" : "?"}t=${encodeURIComponent(TOKEN)}`;
+}
+
 export function urlWebSocket(): string {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}/api/ws?t=${encodeURIComponent(TOKEN)}`;

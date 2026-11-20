@@ -273,7 +273,12 @@ def destravar_app(ap, pkg: str, compilar: bool = True) -> dict[str, Any]:
         feitos.append("cache limpo")
     if compilar:
         out = ap.sh(f"cmd package compile -m speed -f {pkg}", timeout=900, erro=True)
-        feitos.append("compilado por completo" if "Success" in out else "compilação recusada pelo Android")
+        # confere no próprio Android em vez de confiar no "Success"
+        st = ler_dexopt(ap.sh(f"dumpsys package dexopt | grep -A6 '\\[{pkg}\\]'", timeout=60, erro=True)).get(pkg)
+        if st in COMPLETOS or (st is None and "Success" in out):
+            feitos.append("compilado por completo")
+        else:
+            feitos.append(f"compilação recusada pelo Android ({_estado(st) if st else 'sem resposta'})")
     feitos.append("reaberto do zero")
     return {"pacote": pkg, "feitos": feitos, "desfazer_id": pasta.name if pasta else None}
 

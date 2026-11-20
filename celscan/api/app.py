@@ -8,6 +8,7 @@ consegue mandar comandos para o celular pela porta local.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import secrets
@@ -191,6 +192,7 @@ class PedidoConfig(BaseModel):
     tema: str | None = None
     canal_atualizacao: Literal["estavel", "beta"] | None = None
     usar_agente: bool | None = None
+    auto_otimizar: bool | None = None  # otimiza sozinho ao conectar (no máximo 1x por dia por celular)
     dias_retorno: int | None = Field(default=None, ge=0, le=365)  # 0 = sem lembrete de revisão
     contato_loja: str | None = Field(default=None, max_length=90)  # sai no rodapé do laudo
 
@@ -393,6 +395,7 @@ class Aparelhos:
         self._info: dict[str, dict[str, str]] = {}
         self.parar = threading.Event()
         self.pausa = threading.Event()  # modo mouse OTG: deixa a porta USB livre para o scrcpy
+        self.ao_conectar: Any = None  # chamado (em outra thread) quando um aparelho fica pronto
 
     def atualizar(self, pares: list[tuple[str, str]]) -> None:
         novos = {}
@@ -404,7 +407,12 @@ class Aparelhos:
                 item.update(self._info[serial])
             novos[serial] = item
         if novos != self.lista:
+            chegaram = [s for s, i in novos.items() if i["estado"] == "device"
+                        and (self.lista.get(s) or {}).get("estado") != "device"]
             self.lista = novos
+            if self.ao_conectar:
+                for s in chegaram:
+                    threading.Thread(target=self.ao_conectar, args=(s,), daemon=True).start()
             self.gerenciador.publicar({"tipo": "dispositivos", "dispositivos": list(novos.values())})
 
     @staticmethod
@@ -751,6 +759,7 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                 "tema": c.get("tema", "sistema"), "pasta_dados": str(config.DIR),
                 "canal_atualizacao": c.get("canal_atualizacao", "beta"),
                 "usar_agente": preferencias.usar_agente(), "agente_disponivel": agente.disponivel(),
+                "auto_otimizar": bool(c.get("auto_otimizar")),
                 "dias_retorno": int(c.get("dias_retorno", balcao.DIAS_RETORNO)),
                 "contato_loja": c.get("contato_loja") or "",
                 "abusech_chave": f"…{ab[-4:]}" if (ab := preferencias.chave_abusech()) else None}
@@ -1290,6 +1299,64 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
         _registrar_turbo(p.serial, f"DNS privado: {r['servidor'] or 'automático'}", r["desfazer_id"])
         return r
 
+    def auto_otimizar(serial: str) -> None:
+        """Opcional (Configurações): otimiza sozinho quando o celular conecta, no máximo 1x a cada 20 h."""
+        if not preferencias.ler().get("auto_otimizar"):
+            return
+        arq = config.DIR / "auto_otimizar.json"
+        try:
+            ultimos = json.loads(arq.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            ultimos = {}
+        if time.time() - float(ultimos.get(serial, 0)) < 20 * 3600:
+            return
+        time.sleep(4)  # deixa o aparelho terminar de subir a conexão
+        if tarefas.ocupado(serial):
+            return
+        ap = adb.Aparelho(serial)
+
+        def rodar(progresso, cancelar):
+            rec = turbo.receita(ap, progresso)
+            ids = [e["id"] for e in rec["etapas"] if e["marcada"] and e["id"] != "aviso_calor"]
+            r = turbo.aplicar_receita(ap, ids, progresso, cancelar, medir=False)
+            r["titulos"] = {e["id"]: e["titulo"] for e in rec["etapas"]}
+            r["automatica"] = True
+            ok = sum(e["ok"] for e in r["etapas"])
+            _registrar_turbo(serial, f"Otimização automática ao conectar: {ok} de {len(r['etapas'])} etapa(s)")
+            return r
+        try:
+            nova_tarefa("turbo_receita", serial, rodar)
+        except HTTPException:
+            return
+        ultimos[serial] = time.time()
+        try:
+            arq.write_text(json.dumps(ultimos), encoding="utf-8")
+        except OSError:
+            pass
+
+    aparelhos.ao_conectar = auto_otimizar
+
+    # ---- memória por modelo, relatórios da otimização e otimizar ao conectar
+    @app.get("/api/compatibilidade")
+    def compatibilidade() -> dict[str, Any]:
+        from celscan.acoes import compat
+        return {"modelos": compat.tabela()}
+
+    @app.get("/api/turbo/relatorios")
+    def turbo_relatorios(serial: str | None = None) -> dict[str, Any]:
+        from celscan.relatorio import otimizacao_pdf
+        return {"relatorios": otimizacao_pdf.listar(serial)}
+
+    @app.get("/api/turbo/relatorio/{ident}.pdf")
+    def turbo_relatorio_pdf(ident: str) -> Response:
+        from celscan.relatorio import otimizacao_pdf
+        try:
+            d = otimizacao_pdf.ler(ident)
+        except (ValueError, OSError) as e:
+            raise HTTPException(404, "Relatório não encontrado.") from e
+        return Response(otimizacao_pdf.gerar(d), media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="otimizacao_{ident}.pdf"'})
+
     # ---- destravar app / reiniciar / devolver app de fábrica
     @app.post("/api/turbo/destravar-app")
     def turbo_destravar_app(p: PedidoPacoteSerial) -> dict[str, Any]:
@@ -1571,7 +1638,8 @@ def criar_app(token: str | None = None, observar: bool = True) -> FastAPI:
                     break
                 progresso({"etapa": "debloat", "descricao": "Desativando apps pré-instalados", "detalhe": pkg,
                            "atual": i, "total": len(p.pacotes), "estimativa_s": 2 * (len(p.pacotes) - i)})
-                feitos.append({"pacote": pkg, "ok": bool(otimizacao.desativar(ap, pkg))})
+                ok_, motivo = otimizacao.desativar_detalhado(ap, pkg)
+                feitos.append({"pacote": pkg, "ok": ok_, "motivo": motivo})
             con = db.conectar()
             ok = [f["pacote"] for f in feitos if f["ok"]]
             if ok:

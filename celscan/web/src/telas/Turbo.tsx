@@ -1,6 +1,6 @@
 import { Camera, Cpu, Flame, Gamepad2, Gauge, MemoryStick, Moon, Rocket, Settings2, SlidersHorizontal, Sparkles, Trash2, Wifi, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { api, type Dispositivo, type Tarefa } from "../api";
+import { api, urlApi, type Dispositivo, type Tarefa } from "../api";
 import { useApp } from "../estado";
 import Diagnostico, { PainelDebloat, PainelIPhone } from "./Diagnostico";
 import { PainelBlindagem } from "./Blindagem";
@@ -36,7 +36,7 @@ interface Rede {
   conectado: boolean; banda?: string; rssi_dbm?: number; sinal?: string; velocidade_mbps?: number; padrao?: string;
   ping_ms?: number; oscilacao_ms?: number; perda_pct?: number; dicas: string[];
 }
-interface Etapa { id: string; titulo: string; detalhe: string; marcada: boolean }
+interface Etapa { id: string; titulo: string; detalhe: string; marcada: boolean; recusada?: string }
 interface Config { chave: string; valor: string; bloqueada: boolean }
 
 const q = encodeURIComponent;
@@ -319,6 +319,7 @@ function PainelAppsSistema({ d }: { d: Dispositivo }) {
             <ul className="mt-1 space-y-1">{falhas.map((f) => <li key={f.nome}><b>{f.nome}</b>: <span className="text-fraco">{f.motivo}</span></li>)}</ul>
           </div>
         )}
+        <OutrosDeFabrica d={d} curados={new Set(dados.apps.map((a) => a.pacote))} aoMudar={carregar} />
         {fora.length > 0 && (
           <div className="mt-6">
             <p className="mb-2 text-sm font-semibold">Já removidos</p>
@@ -372,7 +373,7 @@ function PainelCalor({ d }: { d: Dispositivo }) {
 /* ---------------------------------------------------------------- receita */
 interface Analise { etapas: Etapa[]; problemas?: Problema[]; bons?: string[]; reiniciar?: boolean }
 interface EtapaFeita { id: string; ok: boolean; detalhe?: string }
-interface Aplicacao { etapas: EtapaFeita[]; antes_depois?: AntesDepois; depois?: { problemas: Problema[]; bons: string[] } }
+interface Aplicacao { etapas: EtapaFeita[]; antes_depois?: AntesDepois; depois?: { problemas: Problema[]; bons: string[] }; relatorio_id?: string; titulos?: Record<string, string>; automatica?: boolean }
 const GRAV: Record<string, [string, string]> = { critica: ["crítico", "text-perigo"], alta: ["alto", "text-perigo"], media: ["médio", "text-atencao"], baixa: ["baixo", "text-fraco"] };
 
 function ItemProblema({ p }: { p: Problema }) {
@@ -405,7 +406,7 @@ function PainelReceita({ d }: { d: Dispositivo }) {
   const aplicado = aplicacao?.estado === "concluida" && (aplicacao.criada ?? 0) > (analise?.criada ?? 0);
   const ad = aplicado ? aplicacao?.resultado?.antes_depois ?? null : null;
   const feito = aplicado ? aplicacao?.resultado ?? null : null;
-  const titulos = Object.fromEntries((etapas ?? []).map((e) => [e.id, e.titulo]));
+  const titulos: Record<string, string> = { ...(feito?.titulos ?? {}), ...Object.fromEntries((etapas ?? []).map((e) => [e.id, e.titulo])) };
   const depois = feito?.depois;
   const resolvidos = depois ? problemas.filter((p) => !depois.problemas.some((q) => q.id === p.id)) : [];
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
@@ -416,9 +417,23 @@ function PainelReceita({ d }: { d: Dispositivo }) {
     await rodar("montar", async () => { await api<Tarefa<Analise>>("/turbo/receita/analisar", { corpo: { serial: d.serial } }).then(esperar); });
   }
   async function reiniciarAgora() {
-    if (!window.confirm("Reiniciar o celular agora? Vários ajustes só valem depois disso.")) return;
-    await rodar("reiniciar", async () => { await api("/turbo/reiniciar", { corpo: { serial: d.serial } }); avisar({ tipo: "ok", texto: "Reiniciando. Ele volta para a lista em cerca de 1 minuto." }); });
+    if (!window.confirm("Reiniciar o celular agora? Vários ajustes só valem depois disso. Quando ele voltar, o CelScan analisa de novo sozinho.")) return;
+    await rodar("reiniciar", async () => {
+      await api("/turbo/reiniciar", { corpo: { serial: d.serial } });
+      try { localStorage.setItem(`celscan-reanalisar-${d.serial}`, String(Date.now())); } catch { /* sem armazenamento */ }
+      avisar({ tipo: "ok", texto: "Reiniciando. Quando ele voltar, a análise roda sozinha para conferir." });
+    });
   }
+  // voltou do reinício: analisa de novo sozinho (o "reiniciar" pendente some e os ajustes que dependiam disso aparecem)
+  useEffect(() => {
+    let marca: string | null = null;
+    try { marca = localStorage.getItem(`celscan-reanalisar-${d.serial}`); } catch { marca = null; }
+    if (!marca || d.estado !== "device" || analisando || otimizando) return;
+    if (Date.now() - Number(marca) > 30 * 60 * 1000) { try { localStorage.removeItem(`celscan-reanalisar-${d.serial}`); } catch { /* nada */ } return; }
+    if (Date.now() - Number(marca) < 20000) return; // ainda reiniciando
+    try { localStorage.removeItem(`celscan-reanalisar-${d.serial}`); } catch { /* nada */ }
+    montar();
+  }, [d.serial, d.estado]); // eslint-disable-line react-hooks/exhaustive-deps
   async function aplicar() {
     await rodar("aplicar", async () => {
       const t = await esperar(await api<Tarefa<Aplicacao>>("/turbo/receita", { corpo: { serial: d.serial, etapas: [...marcadas].filter((x) => x !== "aviso_calor") } }));
@@ -446,7 +461,10 @@ function PainelReceita({ d }: { d: Dispositivo }) {
       {feito && (
         <div className="mt-4 space-y-4 text-sm">
           <div>
-            <p className="font-semibold">O que foi feito</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">{feito.automatica ? "Otimização automática (ao conectar)" : "O que foi feito"}</p>
+              {feito.relatorio_id && <a className="text-sm text-destaque underline" href={urlApi(`/turbo/relatorio/${feito.relatorio_id}.pdf`)} download>Baixar relatório (PDF)</a>}
+            </div>
             <ul className="mt-2 space-y-1.5">
               {feito.etapas.map((e) => (
                 <li key={e.id} className="flex gap-2">
@@ -476,6 +494,7 @@ function PainelReceita({ d }: { d: Dispositivo }) {
           {etapas.map((e) => (
             <Marcador key={e.id} marcado={marcadas.has(e.id)} mudar={() => setMarcadas(alternar(marcadas, e.id))} desativado={e.id === "aviso_calor"}>
               <span className="font-medium">{e.titulo}</span><span className="block text-fraco">{e.detalhe}</span>
+              {e.recusada && <span className="block text-xs text-atencao">Este modelo recusou da última vez ({e.recusada}). Desmarcado.</span>}
             </Marcador>
           ))}
           <Botao variante="primario" onClick={aplicar} disabled={!!ocupado || otimizando || analisando || marcadas.size === 0}>
@@ -847,6 +866,109 @@ function PainelEditor({ d }: { d: Dispositivo }) {
 
 /* ---------------------------------------------------------------- tela */
 
+/* ---------------------------------------------------------------- outros apps de fábrica (lista da comunidade UAD) */
+interface ItemUad { pacote: string; grupo: string; descricao: string; nivel: string }
+
+function OutrosDeFabrica({ d, curados, aoMudar }: { d: Dispositivo; curados: Set<string>; aoMudar: () => void }) {
+  const { esperar, avisar } = useApp();
+  const { ocupado, rodar } = useAcao();
+  const [aberto, setAberto] = useState(false);
+  const [nivel, setNivel] = useState<"recomendado" | "avancado">("recomendado");
+  const [itens, setItens] = useState<ItemUad[] | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [falhas, setFalhas] = useState<{ pacote: string; motivo: string }[]>([]);
+
+  async function carregar(n = nivel) {
+    await rodar("carregar", async () => {
+      const r = await api<{ itens: ItemUad[] }>(`/debloat?serial=${q(d.serial)}&nivel=${n}`);
+      setItens(r.itens.filter((x) => !curados.has(x.pacote))); setSel(new Set());
+    });
+  }
+  useEffect(() => { if (aberto) carregar(); }, [aberto, nivel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function desativar() {
+    await rodar("desativar", async () => {
+      const t = await esperar(await api<Tarefa<{ pacote: string; ok: boolean; motivo: string }[]>>("/debloat", { corpo: { serial: d.serial, pacotes: [...sel] } }));
+      const lista = t.resultado ?? [];
+      const ok = lista.filter((x) => x.ok).length;
+      setFalhas(lista.filter((x) => !x.ok));
+      avisar({ tipo: ok === lista.length ? "ok" : "erro", texto: `${ok} de ${lista.length} app(s) desativados e conferidos.` });
+    });
+    await carregar(); aoMudar();
+  }
+
+  return (
+    <div className="mt-6 border-t border-linha pt-4">
+      <button className="text-sm font-semibold text-destaque" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
+        {aberto ? "▾" : "▸"} Outros apps de fábrica (lista da comunidade de debloat)
+      </button>
+      {aberto && (
+        <div className="mt-3 text-sm">
+          <p className="text-fraco">Apps pré-instalados que a lista pública UAD (Universal Android Debloater) considera seguros de desativar. Descrição em inglês, vinda da lista.</p>
+          <div className="mt-2 flex gap-2">
+            {(["recomendado", "avancado"] as const).map((n) => (
+              <button key={n} onClick={() => setNivel(n)} className={`rounded-full border px-3 py-1 ${nivel === n ? "border-ok bg-ok-suave text-ok" : "border-linha"}`}>{n === "recomendado" ? "Seguros" : "Seguros + avançados"}</button>
+            ))}
+          </div>
+          {!itens && <p className="mt-2 text-fraco">Lendo...</p>}
+          {itens && itens.length === 0 && <p className="mt-2 text-ok">Nenhum outro app de fábrica para tirar neste nível.</p>}
+          {itens && itens.length > 0 && (<>
+            <ul className="mt-2 max-h-96 divide-y divide-linha overflow-auto rounded-md border border-linha">
+              {itens.map((x) => (
+                <li key={x.pacote}><label className="flex cursor-pointer gap-2 p-2">
+                  <input type="checkbox" checked={sel.has(x.pacote)} onChange={() => setSel(alternar(sel, x.pacote))} />
+                  <span className="min-w-0"><span className="block font-mono text-xs">{x.pacote}{x.nivel === "avancado" ? " · avançado" : ""}</span>
+                    <span className="block text-fraco">{x.descricao || x.grupo}</span></span>
+                </label></li>
+              ))}
+            </ul>
+            <Botao className="mt-2" onClick={desativar} disabled={!!ocupado || sel.size === 0}>{ocupado === "desativar" ? "Desativando..." : `Desativar ${sel.size} app(s)`}</Botao>
+          </>)}
+          {falhas.length > 0 && <ul className="mt-2 text-sm">{falhas.map((f) => <li key={f.pacote}><span className="text-perigo">✗</span> {f.pacote}: <span className="text-fraco">{f.motivo}</span></li>)}</ul>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- o que cada modelo aceita */
+interface ModeloCompat { modelo: string; etapas: { id: string; ok: number; falhou: number; motivo: string; estado: string }[] }
+
+function PainelCompat() {
+  const [m, setM] = useState<ModeloCompat[] | null>(null);
+  useEffect(() => { api<{ modelos: ModeloCompat[] }>("/compatibilidade").then((r) => setM(r.modelos)).catch(() => setM([])); }, []);
+  return (
+    <Cartao className="p-5">
+      <Cabeca icone={<Gauge size={18} aria-hidden />} titulo="O que cada modelo aceita">
+        Montado com os celulares otimizados neste PC: cada etapa que funcionou ou foi recusada (e por quê). Etapa que um modelo sempre recusa vem desmarcada no próximo celular igual.
+      </Cabeca>
+      {m && m.length === 0 && <p className="mt-3 text-sm text-fraco">Ainda vazio: aparece depois da primeira otimização.</p>}
+      {m?.map((x) => (
+        <div key={x.modelo} className="mt-4 text-sm">
+          <p className="font-semibold">{x.modelo}</p>
+          <ul className="mt-1 grid gap-1 sm:grid-cols-2">
+            {x.etapas.map((e) => (
+              <li key={e.id} title={e.motivo}>
+                <span className={e.estado === "aceita" ? "text-ok" : e.estado === "recusa" ? "text-perigo" : "text-atencao"}>{e.estado === "aceita" ? "✓" : e.estado === "recusa" ? "✗" : "~"}</span>{" "}
+                {NOMES_ETAPAS[e.id] ?? e.id}{e.estado !== "aceita" && e.motivo ? <span className="text-fraco"> · {e.motivo}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Cartao>
+  );
+}
+
+const NOMES_ETAPAS: Record<string, string> = {
+  dexopt: "Manutenção antecipada (compilar pendentes)", sistema_leve: "Sistema mais leve", compilar_mais_usados: "Apps mais usados compilados",
+  faxina_marca: "Tirar apps inúteis da marca", camera: "Câmera mais rápida", economia_off: "Desligar modo economia", joyose: "Desativar Joyose",
+  destravar_video: "Destravar apps de vídeo", dns_anuncios: "Bloqueio de anúncios (DNS)", esquecidos: "Apps esquecidos dormindo",
+  fantasmas: "Fim dos processos fantasmas", mais_processos: "Mais apps abertos", menos_processos: "Menos apps escondidos",
+  xiaomi_interface_leve: "Interface leve (Xiaomi)", animacoes_rapidas: "Animações rápidas", congelador: "Congelador de apps",
+  armazenamento: "Armazenamento rápido", art_cleanup: "Faxina do ART", cache: "Limpeza de cache",
+};
+
 /* ---------------------------------------------------------------- destravar um app */
 const APPS_TRAVANDO: [string, string][] = [
   ["com.netflix.mediaclient", "Netflix"], ["com.google.android.youtube", "YouTube"], ["com.android.camera", "Câmera Xiaomi"],
@@ -966,6 +1088,7 @@ export default function Turbo() {
           <PainelRede d={d} />
         </>)}
         {secao === "tecnico" && (<>
+          <PainelCompat />
           <PainelCompilacao d={d} />
           <PainelDebloat d={d} />
           <PainelManutencao d={d} />

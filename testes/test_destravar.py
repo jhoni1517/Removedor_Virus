@@ -177,4 +177,5 @@ def test_receita_mostra_detalhe_de_cada_etapa_e_confere_no_fim(monkeypatch):
 
     r = turbo.aplicar_receita(Cel(), ["economia_off"])
     assert r["etapas"] == [{"id": "economia_off", "ok": True, "detalhe": "desligado"}]
-    assert r["depois"]["problemas"] == [{"id": "reiniciar"}] and chamadas == [1]
+    assert r["depois"]["problemas"] == [{"id": "reiniciar"}] and chamadas == [1, 1]
+    assert r["antes"]["problemas"] == [{"id": "reiniciar"}] and r["relatorio_id"]

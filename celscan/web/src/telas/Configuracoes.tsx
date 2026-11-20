@@ -65,7 +65,7 @@ function SomAoTerminar() {
   );
 }
 
-interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; dias_retorno: number; contato_loja: string; abusech_chave?: string | null }
+interface Config { chave_virustotal: string | null; offline: boolean; tema: string; pasta_dados: string; canal_atualizacao: string; usar_agente: boolean; agente_disponivel: boolean; auto_otimizar?: boolean; dias_retorno: number; contato_loja: string; abusech_chave?: string | null }
 
 
 interface ResumoAssin { baixadas: number; proprias: number; idade_h: number | null; tem_chave: boolean }
@@ -278,6 +278,18 @@ export default function Configuracoes() {
               onChange={(e) => salvar({ usar_agente: e.target.checked })} />
             <span>Usar na varredura para mostrar o nome e o ícone de todos os apps mais rápido. Ele é instalado
               só durante a análise (sem ícone, sem internet, só leitura) e removido no fim.</span>
+          </label>
+        </Cartao>
+      )}
+
+      {cfg && (
+        <Cartao className="p-5">
+          <h2 className="font-semibold">Otimizar sozinho ao conectar</h2>
+          <label className="mt-2 flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--destaque)]" checked={!!cfg.auto_otimizar}
+              onChange={(e) => salvar({ auto_otimizar: e.target.checked })} />
+            <span>Quando um celular conectar ao PC, o CelScan analisa e aplica as etapas recomendadas sozinho (no máximo
+              1 vez por dia por celular). O resultado e o relatório ficam na aba Otimizar e tudo desfaz no Histórico.</span>
           </label>
         </Cartao>
       )}

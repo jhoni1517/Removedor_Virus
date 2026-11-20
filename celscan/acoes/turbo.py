@@ -14,6 +14,7 @@ esquecidos dormindo, rede da partida, editor de configurações e a "receita sob
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import time
@@ -1117,7 +1118,16 @@ def receita(ap, progresso: Progresso = None) -> dict[str, Any]:
                 etapa(ident, *TITULOS_EXTRA[ident], marcada=p["marcar"])
                 por_id[ident] = etapas[-1]
     _passo(progresso, 4)
-    return {"ficha": f, "etapas": etapas, "problemas": diag["problemas"],
+    from celscan.acoes import compat
+
+    modelo = compat.chave(f.get("fabricante"), f.get("modelo"), f.get("android"))
+    recusa = compat.recusadas(modelo)
+    for e in etapas:
+        if e["id"] in recusa:
+            e["marcada"] = False
+            e["recusada"] = recusa[e["id"]]
+    return {"ficha": f, "etapas": etapas, "problemas": diag["problemas"], "bons": diag.get("bons", []),
+            "modelo": modelo,
             "reiniciar": any(e["marcada"] and e["id"] in REINICIAR for e in etapas)}
 
 
@@ -1161,12 +1171,20 @@ def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=No
     if desconhecidas:
         raise ValueError(f"etapa desconhecida: {', '.join(sorted(desconhecidas))}")
     antes = None
+    from celscan.acoes import destravar
+
+    try:  # o que estava errado ANTES, para o relatório (e para provar o que foi resolvido)
+        problemas_antes = destravar.diagnostico(ap)["problemas"]
+    except Exception:  # noqa: BLE001
+        problemas_antes = None
     if medir:
         try:
             antes = nota(ap, progresso)
         except AdbErro:
             antes = None
     r = _aplicar_etapas(ap, ids, progresso, cancelar)
+    if problemas_antes is not None:
+        r["antes"] = {"problemas": problemas_antes}
     if not (cancelar is not None and cancelar.is_set()):
         # prova de que funcionou: mede de novo e devolve o que ainda falta (o que foi consertado some da lista)
         from celscan.acoes import destravar
@@ -1188,7 +1206,37 @@ def aplicar_receita(ap, ids: list[str], progresso: Progresso = None, cancelar=No
             r["antes_depois"] = comparar_notas(antes, depois)
         except AdbErro:
             pass
+    _guardar(ap, r)
     return r
+
+
+def _modelo(ap) -> dict[str, str]:
+    try:
+        return {k: ap.sh(f"getprop {p}", timeout=15).strip() for k, p in (
+            ("fabricante", "ro.product.manufacturer"), ("modelo", "ro.product.model"),
+            ("android", "ro.build.version.release"))}
+    except AdbErro:
+        return {}
+
+
+def _guardar(ap, r: dict[str, Any]) -> None:
+    """Memória por modelo (o que este celular aceita) + relatório da otimização para baixar em PDF."""
+    from celscan.acoes import compat
+    from celscan.config import DIR
+
+    m = _modelo(ap)
+    modelo = compat.chave(m.get("fabricante"), m.get("modelo"), m.get("android"))
+    try:
+        compat.registrar(modelo, r.get("etapas") or [])
+        pasta = DIR / "otimizacoes"
+        pasta.mkdir(parents=True, exist_ok=True)
+        ident = f"{re.sub(r'[^A-Za-z0-9]', '', getattr(ap, 'serial', '') or 'x')[:24]}-{int(time.time())}"
+        (pasta / f"{ident}.json").write_text(json.dumps(
+            {"id": ident, "data": time.time(), "serial": getattr(ap, "serial", ""), "aparelho": m,
+             "modelo": modelo, **r}, ensure_ascii=False), encoding="utf-8")
+        r["relatorio_id"] = ident
+    except OSError as e:
+        LOGGER.info("receita: não guardou o relatório (%s)", e)
 
 
 NOMES_ETAPA = {
